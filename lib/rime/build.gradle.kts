@@ -35,11 +35,6 @@ generateDataDescriptor {
     symlinks.put("usr/share/rime-data/opencc", "usr/share/opencc")
 }
 
-aboutLibraries {
-    configPath = "lib/rime/licenses"
-}
-
 dependencies {
     implementation(project(":lib:fcitx5"))
-    implementation(project(":lib:plugin-base"))
 }
