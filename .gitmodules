@@ -13,6 +13,21 @@
 [submodule "lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons"]
 	path = lib/fcitx5-chinese-addons/src/main/cpp/fcitx5-chinese-addons
 	url = https://github.com/fcitx/fcitx5-chinese-addons.git
+[submodule "lib/rime/src/main/cpp/fcitx5-rime"]
+	path = lib/rime/src/main/cpp/fcitx5-rime
+	url = https://github.com/mokapsing/fcitx5-rime.git
+[submodule "lib/rime/src/main/cpp/rime-prelude"]
+	path = lib/rime/src/main/cpp/rime-prelude
+	url = https://github.com/rime/rime-prelude.git
+[submodule "lib/rime/src/main/cpp/rime-essay"]
+	path = lib/rime/src/main/cpp/rime-essay
+	url = https://github.com/rime/rime-essay.git
+[submodule "lib/rime/src/main/cpp/rime-luna-pinyin"]
+	path = lib/rime/src/main/cpp/rime-luna-pinyin
+	url = https://github.com/rime/rime-luna-pinyin.git
+[submodule "lib/rime/src/main/cpp/rime-stroke"]
+	path = lib/rime/src/main/cpp/rime-stroke
+	url = https://github.com/rime/rime-stroke.git
 [submodule "plugin/anthy/src/main/cpp/anthy-cmake"]
 	path = plugin/anthy/src/main/cpp/anthy-cmake
 	url = https://github.com/fcitx5-android/anthy-cmake.git
