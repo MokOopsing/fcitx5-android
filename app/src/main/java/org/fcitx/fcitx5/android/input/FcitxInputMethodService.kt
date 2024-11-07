@@ -727,12 +727,15 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
             // because onStartInputView will always be called after onStartInput,
             // editorInfo and capFlags should be up-to-date
             inputView?.startInput(info, capabilityFlags, restarting)
-        } else {
+        } /* else {
             // monitor cursor anchor only when needed, ie
             // InputView just becomes visible && using floating CandidatesView
             if (!restarting) {
                 currentInputConnection?.monitorCursorAnchor()
             }
+        } */
+        if (!restarting) {
+            currentInputConnection?.monitorCursorAnchor()
         }
     }
 

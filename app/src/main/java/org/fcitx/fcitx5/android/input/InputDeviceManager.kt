@@ -47,7 +47,9 @@ class InputDeviceManager {
             return
         }*/
         // monitor CursorAnchorInfo when switching to CandidatesView
-        service.currentInputConnection.monitorCursorAnchor(/* !useVirtualKeyboard */)
+        /* updates: always call monitorCursorAnchor, no need call it here
+         * service.currentInputConnection.monitorCursorAnchor(/* !useVirtualKeyboard */)
+         */
         service.postFcitxJob {
             setCandidatePagingMode(if (useVirtualKeyboard) 0 else 1)
         }
