@@ -14,7 +14,7 @@ import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.input.candidates.floating.FloatingCandidatesMode
 import org.fcitx.fcitx5.android.utils.monitorCursorAnchor
 
-class InputDeviceManager {
+class InputDeviceManager(private val onChange: (Boolean) -> Unit) {
 
     private var inputView: InputView? = null
     private var candidatesView: CandidatesView? = null
@@ -67,6 +67,7 @@ class InputDeviceManager {
             setCandidatePagingMode(if (useVirtualKeyboard) 0 else 1)
         }
         isVirtualKeyboard = useVirtualKeyboard
+        onChange(isVirtualKeyboard)
     }
 
     private var startedInputView = false
@@ -136,7 +137,7 @@ class InputDeviceManager {
             FloatingCandidatesMode.SystemDefault -> service.superEvaluateInputViewShown()
             FloatingCandidatesMode.InputDevice ->
                 // switch to virtual keyboard on touch screen events, otherwise preserve current mode
-                if (toolType == MotionEvent.TOOL_TYPE_FINGER) true else isVirtualKeyboard
+                if (toolType == MotionEvent.TOOL_TYPE_FINGER || toolType == MotionEvent.TOOL_TYPE_STYLUS) true else isVirtualKeyboard
             FloatingCandidatesMode.Disabled -> true
         }
         applyMode(service, useVirtualKeyboard)
