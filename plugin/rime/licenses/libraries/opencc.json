@@ -1,6 +1,10 @@
 {
     "uniqueId": "BYVoid/OpenCC",
+<<<<<<< HEAD
     "artifactVersion": "1.1.6",
+=======
+    "artifactVersion": "1.1.9",
+>>>>>>> c0acd028 (Update fcitx5 submodules and prebuilt)
     "description": "opensource project for conversions between Traditional Chinese, Simplified Chinese and Japanese Kanji (Shinjitai).",
     "name": "BYVoid/OpenCC",
     "website": "https://opencc.byvoid.com/",
