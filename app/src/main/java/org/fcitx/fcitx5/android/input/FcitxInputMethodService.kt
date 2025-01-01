@@ -492,28 +492,6 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         win.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
     }
 
-    private fun setCandidateViewDefaultPosition() {
-        val useVirtualKeyboard = super.onEvaluateInputViewShown()
-        val gapValue = 20f
-        if (useVirtualKeyboard) {
-            inputView?.keyboardView?.getLocationInWindow(inputViewLocation)
-            anchorPosition[0] = inputViewLocation[0].toFloat() + gapValue
-            anchorPosition[1] = inputViewLocation[1].toFloat() - gapValue
-            anchorPosition[2] = inputViewLocation[0].toFloat() + gapValue
-            anchorPosition[3] = inputViewLocation[1].toFloat() - gapValue
-            if (inputViewLocation[1] > 0) {
-                contentSize[1] = inputViewLocation[1].toFloat() - gapValue
-            }
-        } else {
-            anchorPosition[0] = 0f + gapValue
-            anchorPosition[1] = contentSize[1] - gapValue
-            anchorPosition[2] = 0f + gapValue
-            anchorPosition[3] = contentSize[1] - gapValue
-        }
-        //contentSize[0] = contentSize[0] + gapValue
-        candidatesView?.updateCursorAnchor(anchorPosition, contentSize)
-    }
-
     private var inputViewLocation = intArrayOf(0, 0)
 
     override fun onComputeInsets(outInsets: Insets) {
@@ -697,14 +675,22 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
             // editorInfo and capFlags should be up-to-date
             inputView?.startInput(info, capabilityFlags, restarting)
         } /* else {
-            // monitor cursor anchor only when needed, ie
-            // InputView just becomes visible && using floating CandidatesView
-            if (!restarting) {
-                currentInputConnection?.monitorCursorAnchor()
+            if (currentInputConnection?.monitorCursorAnchor() != true) {
+                if (!decorLocationUpdated) {
+                    updateDecorLocation()
+                }
+                // anchor CandidatesView to bottom-left corner in case InputConnection does not
+                // support monitoring CursorAnchorInfo
+                workaroundNullCursorAnchorInfo()
             }
         } */
-        if (!restarting) {
-            currentInputConnection?.monitorCursorAnchor()
+        if (currentInputConnection?.monitorCursorAnchor() != true) {
+            if (!decorLocationUpdated) {
+                updateDecorLocation()
+            }
+            // anchor CandidatesView to bottom-left corner in case InputConnection does not
+            // support monitoring CursorAnchorInfo
+            workaroundNullCursorAnchorInfo()
         }
     }
 
@@ -734,10 +720,39 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         decorView.getLocationOnScreen(decorLocationInt)
         decorLocation[0] = decorLocationInt[0].toFloat()
         decorLocation[1] = decorLocationInt[1].toFloat()
-        decorLocationUpdated = true
+        // contentSize and decorLocation can be completely wrong,
+        // when measuring right after the very first onStartInputView() of an IMS' lifecycle
+        if (contentSize[0] > 0 && contentSize[1] > 0) {
+            decorLocationUpdated = true
+        }
     }
 
     private val anchorPosition = floatArrayOf(0f, 0f, 0f, 0f)
+
+    /**
+     * anchor candidates view to bottom-left corner, only works if [decorLocationUpdated]
+     */
+    private fun workaroundNullCursorAnchorInfo() {
+        val useVirtualKeyboard = super.onEvaluateInputViewShown()
+        val gapValue = 20f
+        if (useVirtualKeyboard) {
+            inputView?.keyboardView?.getLocationInWindow(inputViewLocation)
+            anchorPosition[0] = inputViewLocation[0].toFloat() + gapValue
+            anchorPosition[1] = inputViewLocation[1].toFloat() - gapValue
+            anchorPosition[2] = inputViewLocation[0].toFloat() + gapValue
+            anchorPosition[3] = inputViewLocation[1].toFloat() - gapValue
+            if (inputViewLocation[1] > 0) {
+                contentSize[1] = inputViewLocation[1].toFloat() - gapValue
+            }
+        } else {
+            anchorPosition[0] = 0f + gapValue
+            anchorPosition[1] = contentSize[1] - gapValue
+            anchorPosition[2] = 0f + gapValue
+            anchorPosition[3] = contentSize[1] - gapValue
+        }
+        //contentSize[0] = contentSize[0] + gapValue
+        candidatesView?.updateCursorAnchor(anchorPosition, contentSize)
+    }
 
     override fun onUpdateCursorAnchorInfo(info: CursorAnchorInfo) {
         val bounds = info.getCharacterBounds(0)
@@ -760,7 +775,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
             updateDecorLocation()
         }
         if (anchorPosition.any(Float::isNaN)) {
-            setCandidateViewDefaultPosition()
+            workaroundNullCursorAnchorInfo()
             return
         }
         // params of `Matrix.mapPoints` must be [x0, y0, x1, y1]
