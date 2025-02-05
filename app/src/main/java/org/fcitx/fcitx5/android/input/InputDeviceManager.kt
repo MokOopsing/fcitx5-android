@@ -64,7 +64,7 @@ class InputDeviceManager(private val onChange: (Boolean) -> Unit) {
          * service.currentInputConnection.monitorCursorAnchor(/* !useVirtualKeyboard */)
          */
         service.postFcitxJob {
-            setCandidatePagingMode(if (useVirtualKeyboard) 0 else 1)
+            setCandidatePagingMode(/*if (useVirtualKeyboard) 0 else*/ 1)
         }
         isVirtualKeyboard = useVirtualKeyboard
         onChange(isVirtualKeyboard)
