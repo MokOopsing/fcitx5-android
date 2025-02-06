@@ -7,6 +7,10 @@ package org.fcitx.fcitx5.android.input.candidates.floating
 
 import android.annotation.SuppressLint
 import android.content.Context
+//import android.graphics.Paint
+//import android.graphics.drawable.ShapeDrawable
+//import android.graphics.drawable.shapes.RectShape
+//import android.graphics.Color
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
@@ -51,9 +55,20 @@ class PagedCandidatesUi(
                 0 -> UiHolder.Candidate(LabeledCandidateItemUi(ctx, theme, setupTextView))
                 else -> UiHolder.Pagination(PaginationUi(ctx, theme)).apply {
                     val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
-                    ui.root.layoutParams = FlexboxLayoutManager.LayoutParams(wrap, wrap).apply {
-                        flexGrow = 1f
+                    ui.root.layoutParams = FlexboxLayoutManager.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, wrap
+                    ).apply {
+                        flexGrow = 0f // 确保分页控件不会扩展，单独占一行
                     }
+                    /*ui.root.apply {
+                        // 创建一个边框
+                        val border = ShapeDrawable(RectShape()).apply {
+                            paint.color = Color.BLACK // 设置边框颜色
+                            paint.strokeWidth = 2f // 设置边框宽度
+                            paint.style = Paint.Style.STROKE // 仅绘制边框
+                        }
+                        background = border // 设置背景为边框
+                    }*/
                     ui.prevIcon.setOnClickListener {
                         onPrevPage.invoke()
                     }
@@ -76,8 +91,8 @@ class PagedCandidatesUi(
                 is UiHolder.Pagination -> {
                     holder.ui.update(data)
                     holder.ui.root.updateLayoutParams<FlexboxLayoutManager.LayoutParams> {
-                        width = if (isVertical) ViewGroup.LayoutParams.MATCH_PARENT else ViewGroup.LayoutParams.WRAP_CONTENT
-                        alignSelf = if (isVertical) AlignItems.STRETCH else AlignItems.CENTER
+                        width = ViewGroup.LayoutParams.MATCH_PARENT  // 确保分页控件填满一行
+                        alignSelf = AlignItems.STRETCH  // 垂直布局时确保它占满整行
                     }
                 }
             }

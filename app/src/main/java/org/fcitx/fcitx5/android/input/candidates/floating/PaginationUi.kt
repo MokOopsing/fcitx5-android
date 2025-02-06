@@ -15,10 +15,11 @@ import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.utils.styledFloat
 import splitties.dimensions.dp
 import splitties.resources.drawable
-import splitties.views.dsl.constraintlayout.before
+//import splitties.views.dsl.constraintlayout.before
 import splitties.views.dsl.constraintlayout.centerVertically
 import splitties.views.dsl.constraintlayout.constraintLayout
 import splitties.views.dsl.constraintlayout.endOfParent
+import splitties.views.dsl.constraintlayout.startOfParent
 import splitties.views.dsl.constraintlayout.lParams
 import splitties.views.dsl.core.Ui
 import splitties.views.dsl.core.add
@@ -40,7 +41,7 @@ class PaginationUi(override val ctx: Context, val theme: Theme) : Ui {
     private val disabledAlpha = styledFloat(android.R.attr.disabledAlpha)
 
     override val root = constraintLayout {
-        val w = dp(10)
+        val w = dp(60)
         val h = dp(20)
         add(nextIcon, lParams(w, h) {
             centerVertically()
@@ -48,7 +49,8 @@ class PaginationUi(override val ctx: Context, val theme: Theme) : Ui {
         })
         add(prevIcon, lParams(w, h) {
             centerVertically()
-            before(nextIcon)
+            //before(nextIcon)
+            startOfParent()
         })
     }
 
