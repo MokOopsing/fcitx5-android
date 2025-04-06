@@ -26,15 +26,8 @@ jobs:
 
       - name: Setup Android environment
         uses: android-actions/setup-android@v3
-
-      - name: Install Android NDK
-        run: |
-          sdkmanager --install "cmake;3.22.1"
-
-      - name: Install system dependencies
-        run: |
-          sudo apt update
-          sudo apt install extra-cmake-modules gettext
+        with:
+          packages: cmake;3.31.6
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4

@@ -30,11 +30,11 @@
 
               # Update versions here
               # This should match to build-logic/convention/src/main/kotlin/Versions.kt
-              cmakeVersion = "3.22.1";
-              buildToolsVersion = "34.0.0";
-              platformToolsVersion = "34.0.5";
-              platformVersion = "34";
-              ndkVersion = "25.2.9519653";
+              cmakeVersion = "3.31.6";
+              buildToolsVersion = "35.0.1";
+              platformToolsVersion = "35.0.2";
+              platformVersion = "35";
+              ndkVersion = "28.0.13004108";
 
               includeNDK = true;
               androidComposition = final.androidenv.composeAndroidPackages {
