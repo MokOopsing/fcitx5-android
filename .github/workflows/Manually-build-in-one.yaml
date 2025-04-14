@@ -1,0 +1,110 @@
+name: Manually-build-in-one
+
+on:
+  workflow_dispatch:  # 手动触发
+  repository_dispatch:  # 通过 repository_dispatch 触发
+    types: [trigger-by-prebuilder]
+
+jobs:
+  build_pull_request:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          #- ubuntu-22.04
+          - macos-13
+          # - windows-2022
+        abi:
+          #- armeabi-v7a
+          - arm64-v8a
+          #- x86
+          #- x86_64
+    env:
+      BUILD_ABI: ${{ matrix.abi }}
+    steps:
+      - name: Fetch source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Update prebuilt to latest commit
+        run: |
+          git -C lib/fcitx5/src/main/cpp/prebuilt fetch origin master && git -C lib/fcitx5/src/main/cpp/prebuilt reset --hard origin/master
+
+      - name: Regenerate symlinks pointing to submodule (Windows)
+        if: ${{ matrix.os == 'windows-2022' }}
+        run: |
+          Remove-Item -Recurse app/src/main/assets/usr/share, plugin/hangul/src/main/assets/usr/share/libhangul, plugin/chewing/src/main/assets/usr/share/libchewing, plugin/jyutping/src/main/assets/usr/share/libime
+          git checkout -- .
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Setup Android environment
+        uses: android-actions/setup-android@v3
+        with:
+          packages: cmake;3.22.1
+
+      - name: Install system dependencies (Ubuntu)
+        if: ${{ matrix.os == 'ubuntu-22.04' }}
+        run: |
+          sudo apt update
+          sudo apt install extra-cmake-modules gettext
+
+      - name: Install system dependencies (macOS)
+        if: ${{ matrix.os == 'macos-13' }}
+        run: |
+          brew install extra-cmake-modules
+
+      - name: Install system dependencies (Windows)
+        if: ${{ matrix.os == 'windows-2022' }}
+        run: |
+          C:/msys64/usr/bin/pacman -S --noconfirm mingw-w64-ucrt-x86_64-gettext mingw-w64-ucrt-x86_64-extra-cmake-modules
+          Add-Content $env:GITHUB_PATH "C:/msys64/ucrt64/bin"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build APK
+        run: |
+          ./gradlew :app:assembleRelease
+          ./gradlew :assembleReleasePlugins
+
+      - name: Move app and plugins to one dir
+        shell: bash
+        run: |
+          mkdir app-and-plugins
+          mv app/build/outputs/apk/release/* app-and-plugins/
+          find plugin/*/build/outputs/apk/release -type f -print0 | while IFS= read -r -d '' source_file; do
+            # 获取第二级目录名作为前缀 
+            prefix=$(basename "$(dirname "$(dirname "$(dirname "$(dirname "$(dirname "$source_file")")")")")")
+            # 获取文件名 
+            filename=$(basename "$source_file") 
+            # 构建目标文件路径，加上前缀
+            target_file="app-and-plugins/$prefix"_"$filename"
+            mv "$source_file" "$target_file"
+          done
+
+      - name: Sign app and plugins
+        uses: kevin-david/zipalign-sign-android-release@v1.1.1
+        #uses: rpavlik/sign-android-release@master
+        id: sign_apk
+        with:
+          releaseDirectory: app-and-plugins
+          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+          alias: ${{ secrets.KEY_ALIAS }}
+          keyPassword: ${{ secrets.KEY_PASSWORD }}
+          zipAlign: true
+        env:
+          BUILD_TOOLS_VERSION: "33.0.2"
+
+      - name: Upload app and plugins
+        uses: actions/upload-artifact@v4
+        with:
+          name: app&plugins-${{ matrix.os }}-${{ matrix.abi }}
+          path: app-and-plugins/*-signed.apk
