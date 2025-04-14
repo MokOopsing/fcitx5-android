@@ -198,12 +198,17 @@ class CandidatesView(
             topOfParent()
             startOfParent()
         })
+        preeditUi.root.clipToOutline = true // Enable outline clipping
+        preeditUi.root.outlineProvider = ViewOutlineProvider.BACKGROUND // Use background outline for clipping
+
         add(candidatesUi.root, lParams(matchConstraints, wrapContent) {
             matchConstraintMinWidth = wrapContent
             below(preeditUi.root)
             centerHorizontally()
             bottomOfParent()
         })
+        candidatesUi.root.clipToOutline = true // Enable outline clipping
+        candidatesUi.root.outlineProvider = ViewOutlineProvider.BACKGROUND // Use background outline for clipping
 
         isFocusable = false
         layoutParams = ViewGroup.LayoutParams(wrapContent, wrapContent)
