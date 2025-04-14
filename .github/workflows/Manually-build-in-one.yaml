@@ -47,7 +47,7 @@ jobs:
       - name: Setup Android environment
         uses: android-actions/setup-android@v3
         with:
-          packages: cmake;3.22.1
+          packages: cmake;3.31.6
 
       - name: Install system dependencies (Ubuntu)
         if: ${{ matrix.os == 'ubuntu-22.04' }}
