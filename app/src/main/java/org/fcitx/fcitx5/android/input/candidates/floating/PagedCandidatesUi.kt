@@ -7,12 +7,10 @@ package org.fcitx.fcitx5.android.input.candidates.floating
 
 import android.annotation.SuppressLint
 import android.content.Context
-//import android.graphics.Paint
-//import android.graphics.drawable.ShapeDrawable
-//import android.graphics.drawable.shapes.RectShape
-//import android.graphics.Color
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewGroup.LayoutParams.MATCH_PARENT
+import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.TextView
 import androidx.core.view.updateLayoutParams
 import androidx.recyclerview.widget.RecyclerView
@@ -54,21 +52,6 @@ class PagedCandidatesUi(
             return when (viewType) {
                 0 -> UiHolder.Candidate(LabeledCandidateItemUi(ctx, theme, setupTextView))
                 else -> UiHolder.Pagination(PaginationUi(ctx, theme)).apply {
-                    val wrap = ViewGroup.LayoutParams.WRAP_CONTENT
-                    ui.root.layoutParams = FlexboxLayoutManager.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT, wrap
-                    ).apply {
-                        flexGrow = 0f // 确保分页控件不会扩展，单独占一行
-                    }
-                    /*ui.root.apply {
-                        // 创建一个边框
-                        val border = ShapeDrawable(RectShape()).apply {
-                            paint.color = Color.BLACK // 设置边框颜色
-                            paint.strokeWidth = 2f // 设置边框宽度
-                            paint.style = Paint.Style.STROKE // 仅绘制边框
-                        }
-                        background = border // 设置背景为边框
-                    }*/
                     ui.prevIcon.setOnClickListener {
                         onPrevPage.invoke()
                     }
@@ -76,6 +59,9 @@ class PagedCandidatesUi(
                         onNextPage.invoke()
                     }
                 }
+            }.apply {
+                // assign default LayoutParams, otherwise updateLayoutParams won't work
+                ui.root.layoutParams = FlexboxLayoutManager.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
             }
         }
 
@@ -87,12 +73,16 @@ class PagedCandidatesUi(
                     holder.ui.root.setOnClickListener {
                         onCandidateClick.invoke(position)
                     }
+                    holder.ui.root.updateLayoutParams<FlexboxLayoutManager.LayoutParams> {
+                        width = if (isVertical) MATCH_PARENT else WRAP_CONTENT
+                    }
                 }
                 is UiHolder.Pagination -> {
                     holder.ui.update(data)
                     holder.ui.root.updateLayoutParams<FlexboxLayoutManager.LayoutParams> {
-                        width = ViewGroup.LayoutParams.MATCH_PARENT  // 确保分页控件填满一行
-                        alignSelf = AlignItems.STRETCH  // 垂直布局时确保它占满整行
+                        flexGrow = 1f
+                        width = if (isVertical) MATCH_PARENT else WRAP_CONTENT
+                        alignSelf = if (isVertical) AlignItems.STRETCH else AlignItems.CENTER
                     }
                 }
             }
