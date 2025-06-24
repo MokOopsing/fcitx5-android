@@ -147,10 +147,29 @@ class CommonKeyActionListener :
                             service.finishComposing()
                             service.postFcitxJob {
                                 reset()
-                                statusArea().firstOrNull { it.name == "fcitx-rime-im" }?.let {
-                                    //it.menu?.getOrNull(it.menu.size - 4)?.let {
-                                    it.menu?.find { targetAction -> targetAction.name == "fcitx-rime-next-schema" }?.let {
-                                        targetAction -> activateAction(targetAction.id)
+                                val rimeStatusArea = statusArea().firstOrNull { it.name == "fcitx-rime-im" }
+                                if (rimeStatusArea != null) {
+                                    // 如果找到 Rime 状态区域，尝试切换方案
+                                    rimeStatusArea.menu?.find { it.name == "fcitx-rime-next-schema" }?.let { targetAction ->
+                                        activateAction(targetAction.id)
+                                    } ?: run {
+                                        // 如果没找到切换选项，回落到 Enumerate 逻辑
+                                        if (enabledIme().size < 2) {
+                                            service.lifecycleScope.launch {
+                                                service.showDialog(AddMoreInputMethodsPrompt.build(context))
+                                            }
+                                        } else {
+                                            enumerateIme()
+                                        }
+                                    }
+                                } else {
+                                    // 如果没找到 Rime 状态区域，直接回落到 Enumerate 逻辑
+                                    if (enabledIme().size < 2) {
+                                        service.lifecycleScope.launch {
+                                            service.showDialog(AddMoreInputMethodsPrompt.build(context))
+                                        }
+                                    } else {
+                                        enumerateIme()
                                     }
                                 }
                             }
