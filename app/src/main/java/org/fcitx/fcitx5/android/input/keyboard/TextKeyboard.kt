@@ -17,6 +17,7 @@ import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
 import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.input.popup.PopupAction
+import org.fcitx.fcitx5.android.input.keyboard.KeyLayoutParam
 import splitties.views.imageResource
 import timber.log.Timber
 
@@ -24,65 +25,86 @@ import timber.log.Timber
 class TextKeyboard(
     context: Context,
     theme: Theme
-) : BaseKeyboard(context, theme, Layout) {
+) : BaseKeyboardFlex(context, theme, Layout) {
 
     enum class CapsState { None, Once, Lock }
 
     companion object {
         const val Name = "Text"
 
-        val Layout: List<List<KeyDef>> = listOf(
-            listOf(
-                AlphabetKey("Q", "手", "1"),
-                AlphabetKey("W", "田", "2"),
-                AlphabetKey("E", "水", "3"),
-                AlphabetKey("R", "口", "4"),
-                AlphabetKey("T", "廿", "5"),
-                AlphabetKey("Y", "卜", "6"),
-                AlphabetKey("U", "山", "7"),
-                AlphabetKey("I", "戈", "8"),
-                AlphabetKey("O", "人", "9"),
-                AlphabetKey("P", "心", "0")
-            ),
-            listOf(
-                AlphabetKey("A", "日", "@"),
-                AlphabetKey("S", "尸", "*"),
-                AlphabetKey("D", "木", "+"),
-                AlphabetKey("F", "火", "-"),
-                AlphabetKey("G", "土", "="),
-                AlphabetKey("H", "的", "/"),
-                AlphabetKey("J", "十", "#"),
-                AlphabetKey("K", "大", "("),
-                AlphabetKey("L", "中", ")")
-            ),
-            listOf(
-                CapsKey(),
-                AlphabetKey("Z", "重", "'"),
-                AlphabetKey("X", "止", ":"),
-                AlphabetKey("C", "金", "\""),
-                AlphabetKey("V", "女", "?"),
-                AlphabetKey("B", "月", "!"),
-                AlphabetKey("N", "弓", "~"),
-                AlphabetKey("M", "一", "\\"),
-                BackspaceKey()
-            ),
-            listOf(
-                LayoutSwitchKey("?123", ""),
-                CommaKey(0.1f, KeyDef.Appearance.Variant.Alternative),
-                LanguageKey(),
-                SpaceKey(),
-                SymbolKey(".", 0.1f, KeyDef.Appearance.Variant.Alternative),
-                ReturnKey()
-            )
+        val Layout: List<KeyDef> = listOf(
+            // 第一行（row = 0）
+            CapsKey(layoutParam = KeyLayoutParam(0, 0)),
+            SymbolKey("!", 0.1f, KeyDef.Appearance.Variant.Alternative, layoutParam = KeyLayoutParam(0, 1)),
+            AlphabetKey("Q", "手", "1", layoutParam = KeyLayoutParam(0, 2)),
+            AlphabetKey("W", "田", "2", layoutParam = KeyLayoutParam(0, 3)),
+            AlphabetKey("C", "金", "\"", layoutParam = KeyLayoutParam(0, 4)),
+            AlphabetKey("J", "十", "#", layoutParam = KeyLayoutParam(0, 5)),
+            SymbolKey("?", 0.1f, KeyDef.Appearance.Variant.Alternative, layoutParam = KeyLayoutParam(0, 6)),
+            BackspaceKey(layoutParam = KeyLayoutParam(0, 7)),
+
+            // 第二行（row = 1）
+            LanguageKey(layoutParam = KeyLayoutParam(1, 0)),
+            AlphabetKey("Y", "卜", "6", layoutParam = KeyLayoutParam(1, 1)),
+            AlphabetKey("O", "人", "9", layoutParam = KeyLayoutParam(1, 2)),
+            AlphabetKey("H", "的", "/", layoutParam = KeyLayoutParam(1, 3)),
+            AlphabetKey("E", "水", "3", layoutParam = KeyLayoutParam(1, 4)),
+            AlphabetKey("V", "女", "?", layoutParam = KeyLayoutParam(1, 5)),
+            AlphabetKey("U", "山", "7", layoutParam = KeyLayoutParam(1, 6)),
+            LanguageKey(layoutParam = KeyLayoutParam(1, 7)),
+
+            // 第三行（row = 2）
+            // Space 跨两行
+            SpaceKey(layoutParam = KeyLayoutParam(2, 0, rowSpan = 2, colSpan = 1)),
+            AlphabetKey("X", "止", ":", layoutParam = KeyLayoutParam(2, 1)),
+            AlphabetKey("R", "口", "4", layoutParam = KeyLayoutParam(2, 2)),
+            AlphabetKey("T", "廿", "5", layoutParam = KeyLayoutParam(2, 3)),
+            AlphabetKey("A", "日", "@", layoutParam = KeyLayoutParam(2, 4)),
+            AlphabetKey("L", "中", ")", layoutParam = KeyLayoutParam(2, 5)),
+            AlphabetKey("B", "月", "!", layoutParam = KeyLayoutParam(2, 6)),
+            SpaceKeySecond(layoutParam = KeyLayoutParam(2, 7, rowSpan = 2, colSpan = 1)),
+
+            // 第四行（row = 3）
+            // 第一列已被上方Space占用
+            AlphabetKey("F", "火", "-", layoutParam = KeyLayoutParam(3, 1)),
+            AlphabetKey("S", "尸", "*", layoutParam = KeyLayoutParam(3, 2)),
+            AlphabetKey("I", "戈", "8", layoutParam = KeyLayoutParam(3, 3)),
+            AlphabetKey("N", "弓", "~", layoutParam = KeyLayoutParam(3, 4)),
+            AlphabetKey("D", "木", "+", layoutParam = KeyLayoutParam(3, 5)),
+            AlphabetKey("Z", "重", "'", layoutParam = KeyLayoutParam(3, 6)),
+            // 第8列已被上方Space占用
+
+            // 第五行（row = 4）
+            LayoutSwitchKey("?123", "", layoutParam = KeyLayoutParam(4, 0)),
+            CommaKey(0.1f, KeyDef.Appearance.Variant.Alternative, layoutParam = KeyLayoutParam(4, 1)),
+            AlphabetKey("P", "心", "0", layoutParam = KeyLayoutParam(4, 2)),
+            AlphabetKey("M", "一", "\\", layoutParam = KeyLayoutParam(4, 3)),
+            AlphabetKey("G", "土", "=", layoutParam = KeyLayoutParam(4, 4)),
+            AlphabetKey("K", "大", "(", layoutParam = KeyLayoutParam(4, 5)),
+            SymbolKey(".", 0.1f, KeyDef.Appearance.Variant.Alternative, layoutParam = KeyLayoutParam(4, 6)),
+            ReturnKey(layoutParam = KeyLayoutParam(4, 7))
         )
     }
 
-    val caps: ImageKeyView by lazy { findViewById(R.id.button_caps) }
+    /*val caps: ImageKeyView by lazy { findViewById(R.id.button_caps) }
     val backspace: ImageKeyView by lazy { findViewById(R.id.button_backspace) }
     val quickphrase: ImageKeyView by lazy { findViewById(R.id.button_quickphrase) }
     val lang: ImageKeyView by lazy { findViewById(R.id.button_lang) }
+    val lang2: ImageKeyView by lazy { findViewById(R.id.button_lang_second) }
     val space: TextKeyView by lazy { findViewById(R.id.button_space) }
+    val space2: TextKeyView by lazy { findViewById(R.id.button_space_second) }
     val `return`: ImageKeyView by lazy { findViewById(R.id.button_return) }
+    */
+
+    // 原来的 lazy 属性改为可空变量
+    private var caps: ImageKeyView? = null
+    private var backspace: ImageKeyView? = null
+    private var quickphrase: ImageKeyView? = null
+    private var lang: ImageKeyView? = null
+    private var lang2: ImageKeyView? = null
+    private var space: TextKeyView? = null
+    private var space2: TextKeyView? = null
+    private var `return`: ImageKeyView? = null
 
     private val showLangSwitchKey = AppPrefs.getInstance().keyboard.showLangSwitchKey
 
@@ -156,8 +178,20 @@ class TextKeyboard(
         updateAlphabetKeys()
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        caps = findViewById(R.id.button_caps)
+        backspace = findViewById(R.id.button_backspace)
+        quickphrase = findViewById(R.id.button_quickphrase)
+        lang = findViewById(R.id.button_lang)
+        lang2 = findViewById(R.id.button_lang_second)
+        space = findViewById(R.id.button_space)
+        space2 = findViewById(R.id.button_space_second)
+        `return` = findViewById(R.id.button_return)
+    }
+
     override fun onReturnDrawableUpdate(returnDrawable: Int) {
-        `return`.img.imageResource = returnDrawable
+        `return`?.img?.imageResource = returnDrawable
     }
 
     override fun onPunctuationUpdate(mapping: Map<String, String>) {
@@ -174,7 +208,8 @@ class TextKeyboard(
             append(ime.displayName)
             ime.subMode.run { name.ifEmpty { label.ifEmpty { null } } }?.let { append(" $it") }
         }
-        space.mainText.text = spaceLable
+        space?.mainText?.text = spaceLable
+        space2?.mainText?.text = spaceLable
         curImeName = spaceLable
         updateAlphabetKeys()
     }
@@ -230,7 +265,7 @@ class TextKeyboard(
     }
 
     private fun updateCapsButtonIcon() {
-        caps.img.apply {
+        caps?.img?.apply {
             imageResource = when (capsState) {
                 CapsState.None -> R.drawable.ic_capslock_none
                 CapsState.Once -> R.drawable.ic_capslock_once
@@ -240,7 +275,8 @@ class TextKeyboard(
     }
 
     private fun updateLangSwitchKey(visible: Boolean) {
-        lang.visibility = if (visible) View.VISIBLE else View.GONE
+        lang?.visibility = if (visible) View.VISIBLE else View.GONE
+        lang2?.visibility = if (visible) View.VISIBLE else View.GONE
     }
 
     private fun updateAlphabetKeys() {

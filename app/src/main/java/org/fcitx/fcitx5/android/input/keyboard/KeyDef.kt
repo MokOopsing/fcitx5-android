@@ -8,10 +8,18 @@ import android.graphics.Typeface
 import androidx.annotation.DrawableRes
 import org.fcitx.fcitx5.android.data.InputFeedbacks
 
+data class KeyLayoutParam(
+    val row: Int,
+    val col: Int,
+    val rowSpan: Int = 1,
+    val colSpan: Int = 1
+)
+
 open class KeyDef(
     val appearance: Appearance,
     val behaviors: Set<Behavior>,
-    val popup: Array<Popup>? = null
+    val popup: Array<Popup>? = null,
+    val layoutParam: KeyLayoutParam // 新增
 ) {
     sealed class Appearance(
         val percentWidth: Float,

@@ -11,6 +11,7 @@ import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.input.keyboard.BaseKeyboard
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyDef
+import org.fcitx.fcitx5.android.input.keyboard.KeyLayoutParam
 
 @SuppressLint("ViewConstructor")
 class NumberRow(ctx: Context, theme: Theme) : BaseKeyboard(ctx, theme, Layout) {
@@ -28,7 +29,8 @@ class NumberRow(ctx: Context, theme: Theme) : BaseKeyboard(ctx, theme, Layout) {
                     setOf(
                         KeyDef.Behavior.Press(KeyAction.SymAction(KeySym(digit.codePointAt(0))))
                     ),
-                    arrayOf(KeyDef.Popup.Preview(digit, digit))
+                    arrayOf(KeyDef.Popup.Preview(digit, digit)),
+                    layoutParam = KeyLayoutParam(0, 0) // 新增
                 )
             }
         )

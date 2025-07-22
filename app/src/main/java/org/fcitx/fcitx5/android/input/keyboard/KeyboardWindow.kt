@@ -65,7 +65,7 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
 
     private lateinit var keyboardView: FrameLayout
 
-    private val keyboards: HashMap<String, BaseKeyboard> by lazy {
+    private val keyboards: HashMap<String, BaseKeyboardFlex> by lazy {
         hashMapOf(
             TextKeyboard.Name to TextKeyboard(context, theme),
             NumberKeyboard.Name to NumberKeyboard(context, theme)
@@ -74,7 +74,7 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     private var currentKeyboardName = ""
     private var lastSymbolType: String by AppPrefs.getInstance().internal.lastSymbolLayout
 
-    private val currentKeyboard: BaseKeyboard? get() = keyboards[currentKeyboardName]
+    private val currentKeyboard: BaseKeyboardFlex? get() = keyboards[currentKeyboardName]
 
     private val keyActionListener = KeyActionListener { it, source ->
         if (it is KeyAction.LayoutSwitchAction) {

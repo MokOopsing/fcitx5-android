@@ -14,6 +14,7 @@ import org.fcitx.fcitx5.android.core.KeySym
 import org.fcitx.fcitx5.android.data.InputFeedbacks
 import org.fcitx.fcitx5.android.input.keyboard.KeyDef.Appearance.Border
 import org.fcitx.fcitx5.android.input.keyboard.KeyDef.Appearance.Variant
+import org.fcitx.fcitx5.android.input.keyboard.KeyLayoutParam
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
 
 val NumLockState = KeyStates(KeyState.NumLock, KeyState.Virtual)
@@ -22,7 +23,8 @@ class SymbolKey(
     val symbol: String,
     percentWidth: Float = 0.1f,
     variant: Variant = Variant.Normal,
-    popup: Array<Popup>? = null
+    popup: Array<Popup>? = null,
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
 ) : KeyDef(
     Appearance.Text(
         keyCodeString = symbol,
@@ -37,7 +39,8 @@ class SymbolKey(
     popup ?: arrayOf(
         Popup.Preview(symbol, symbol),
         Popup.Keyboard(symbol)
-    )
+    ),
+    layoutParam // 传递
 )
 
 class AlphabetKey(
@@ -45,7 +48,8 @@ class AlphabetKey(
     val label: String,
     val punctuation: String,
     variant: Variant = Variant.Normal,
-    popup: Array<Popup>? = null
+    popup: Array<Popup>? = null,
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
 ) : KeyDef(
     Appearance.AltText(
         keyCodeString = character,
@@ -61,7 +65,8 @@ class AlphabetKey(
     popup ?: arrayOf(
         Popup.AltPreview(character, label, punctuation),
         Popup.Keyboard(character)
-    )
+    ),
+    layoutParam // 传递
 )
 
 class AlphabetDigitKey(
@@ -69,7 +74,8 @@ class AlphabetDigitKey(
     val label: String,
     altText: String,
     val sym: Int,
-    popup: Array<Popup>? = null
+    popup: Array<Popup>? = null,
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
 ) : KeyDef(
     Appearance.AltText(
         keyCodeString = character,
@@ -84,23 +90,28 @@ class AlphabetDigitKey(
     popup ?: arrayOf(
         Popup.AltPreview(character, label, altText),
         Popup.Keyboard(character)
-    )
+    ),
+    layoutParam // 传递
 ) {
     constructor(
         char: String,
         label: String,
         digit: Int,
-        popup: Array<Popup>? = null
+        popup: Array<Popup>? = null,
+        layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
     ) : this(
         char,
         label,
         digit.toString(),
         FcitxKeyMapping.FcitxKey_KP_0 + digit,
-        popup
+        popup,
+        layoutParam // 传递
     )
 }
 
-class CapsKey : KeyDef(
+class CapsKey(
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
+) : KeyDef(
     Appearance.Image(
         src = R.drawable.ic_capslock_none,
         viewId = R.id.button_caps,
@@ -111,14 +122,17 @@ class CapsKey : KeyDef(
         Behavior.Press(KeyAction.CapsAction(false)),
         Behavior.LongPress(KeyAction.CapsAction(true)),
         Behavior.DoubleTap(KeyAction.CapsAction(true))
-    )
+    ),
+    null,
+    layoutParam // 传递
 )
 
 class LayoutSwitchKey(
     displayText: String,
     val to: String = "",
     percentWidth: Float = 0.15f,
-    variant: Variant = Variant.Alternative
+    variant: Variant = Variant.Alternative,
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
 ) : KeyDef(
     Appearance.Text(
         keyCodeString = displayText,
@@ -131,12 +145,15 @@ class LayoutSwitchKey(
     ),
     setOf(
         Behavior.Press(KeyAction.LayoutSwitchAction(to))
-    )
+    ),
+    null,
+    layoutParam // 传递
 )
 
 class BackspaceKey(
     percentWidth: Float = 0.15f,
-    variant: Variant = Variant.Alternative
+    variant: Variant = Variant.Alternative,
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
 ) : KeyDef(
     Appearance.Image(
         src = R.drawable.ic_baseline_backspace_24,
@@ -148,10 +165,14 @@ class BackspaceKey(
     setOf(
         Behavior.Press(KeyAction.SymAction(KeySym(FcitxKeyMapping.FcitxKey_BackSpace))),
         Behavior.Repeat(KeyAction.SymAction(KeySym(FcitxKeyMapping.FcitxKey_BackSpace)))
-    )
+    ),
+    null,
+    layoutParam // 传递
 )
 
-class QuickPhraseKey : KeyDef(
+class QuickPhraseKey(
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
+) : KeyDef(
     Appearance.Image(
         src = R.drawable.ic_baseline_format_quote_24,
         variant = Variant.Alternative,
@@ -160,12 +181,15 @@ class QuickPhraseKey : KeyDef(
     setOf(
         Behavior.Press(KeyAction.QuickPhraseAction),
         Behavior.LongPress(KeyAction.UnicodeAction)
-    )
+    ),
+    null,
+    layoutParam // 传递
 )
 
 class CommaKey(
     percentWidth: Float,
     variant: Variant,
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
 ) : KeyDef(
     Appearance.ImageText(
         keyCodeString = ",",
@@ -199,10 +223,13 @@ class CommaKey(
                 )
             )
         )
-    )
+    ),
+    layoutParam // 传递
 )
 
-class LanguageKey : KeyDef(
+class LanguageKey(
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
+) : KeyDef(
     Appearance.Image(
         src = R.drawable.ic_baseline_language_24,
         variant = Variant.AltForeground,
@@ -211,10 +238,30 @@ class LanguageKey : KeyDef(
     setOf(
         Behavior.Press(KeyAction.LangSwitchAction),
         Behavior.LongPress(KeyAction.ShowInputMethodPickerAction)
-    )
+    ),
+    null,
+    layoutParam // 传递
 )
 
-class SpaceKey : KeyDef(
+class LanguageKeySecond(
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
+) : KeyDef(
+    Appearance.Image(
+        src = R.drawable.ic_baseline_language_24,
+        variant = Variant.AltForeground,
+        viewId = R.id.button_lang_second
+    ),
+    setOf(
+        Behavior.Press(KeyAction.LangSwitchAction),
+        Behavior.LongPress(KeyAction.ShowInputMethodPickerAction)
+    ),
+    null,
+    layoutParam // 传递
+)
+
+class SpaceKey(
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
+) : KeyDef(
     Appearance.Text(
         keyCodeString = " ",
         displayText = " ",
@@ -227,10 +274,35 @@ class SpaceKey : KeyDef(
     setOf(
         Behavior.Press(KeyAction.SymAction(KeySym(FcitxKeyMapping.FcitxKey_space))),
         Behavior.LongPress(KeyAction.SpaceLongPressAction)
-    )
+    ),
+    null,
+    layoutParam // 传递
 )
 
-class ReturnKey(percentWidth: Float = 0.15f) : KeyDef(
+class SpaceKeySecond(
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
+) : KeyDef(
+    Appearance.Text(
+        keyCodeString = " ",
+        displayText = " ",
+        textSize = 13f,
+        percentWidth = 0f,
+        border = Border.Special,
+        viewId = R.id.button_space_second,
+        soundEffect = InputFeedbacks.SoundEffect.SpaceBar
+    ),
+    setOf(
+        Behavior.Press(KeyAction.SymAction(KeySym(FcitxKeyMapping.FcitxKey_space))),
+        Behavior.LongPress(KeyAction.SpaceLongPressAction)
+    ),
+    null,
+    layoutParam // 传递
+)
+
+class ReturnKey(
+    percentWidth: Float = 0.15f,
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
+) : KeyDef(
     Appearance.Image(
         src = R.drawable.ic_baseline_keyboard_return_24,
         percentWidth = percentWidth,
@@ -252,6 +324,7 @@ class ReturnKey(percentWidth: Float = 0.15f) : KeyDef(
             )
         )
     ),
+    layoutParam // 传递
 )
 
 class ImageLayoutSwitchKey(
@@ -260,7 +333,8 @@ class ImageLayoutSwitchKey(
     to: String,
     percentWidth: Float = 0.1f,
     variant: Variant = Variant.AltForeground,
-    viewId: Int = -1
+    viewId: Int = -1,
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
 ) : KeyDef(
     Appearance.Image(
         src = icon,
@@ -270,7 +344,9 @@ class ImageLayoutSwitchKey(
     ),
     setOf(
         Behavior.Press(KeyAction.LayoutSwitchAction(to))
-    )
+    ),
+    null,
+    layoutParam // 传递
 )
 
 class ImagePickerSwitchKey(
@@ -279,7 +355,8 @@ class ImagePickerSwitchKey(
     to: PickerWindow.Key,
     percentWidth: Float = 0.1f,
     variant: Variant = Variant.AltForeground,
-    viewId: Int = -1
+    viewId: Int = -1,
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
 ) : KeyDef(
     Appearance.Image(
         src = icon,
@@ -289,7 +366,9 @@ class ImagePickerSwitchKey(
     ),
     setOf(
         Behavior.Press(KeyAction.PickerSwitchAction(to))
-    )
+    ),
+    null,
+    layoutParam // 传递
 )
 
 class TextPickerSwitchKey(
@@ -297,7 +376,8 @@ class TextPickerSwitchKey(
     to: PickerWindow.Key,
     percentWidth: Float = 0.1f,
     variant: Variant = Variant.AltForeground,
-    viewId: Int = -1
+    viewId: Int = -1,
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
 ) : KeyDef(
     Appearance.Text(
         keyCodeString = text,
@@ -310,10 +390,14 @@ class TextPickerSwitchKey(
     ),
     setOf(
         Behavior.Press(KeyAction.PickerSwitchAction(to))
-    )
+    ),
+    null,
+    layoutParam // 传递
 )
 
-class MiniSpaceKey : KeyDef(
+class MiniSpaceKey(
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
+) : KeyDef(
     Appearance.Image(
         src = R.drawable.ic_baseline_space_bar_24,
         percentWidth = 0.15f,
@@ -322,7 +406,9 @@ class MiniSpaceKey : KeyDef(
     ),
     setOf(
         Behavior.Press(KeyAction.SymAction(KeySym(FcitxKeyMapping.FcitxKey_space)))
-    )
+    ),
+    null,
+    layoutParam // 传递
 )
 
 class NumPadKey(
@@ -330,7 +416,8 @@ class NumPadKey(
     val sym: Int,
     textSize: Float = 16f,
     percentWidth: Float = 0.1f,
-    variant: Variant = Variant.Normal
+    variant: Variant = Variant.Normal,
+    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
 ) : KeyDef(
     Appearance.Text(
         keyCodeString = displayText,
@@ -341,5 +428,7 @@ class NumPadKey(
     ),
     setOf(
         Behavior.Press(KeyAction.SymAction(KeySym(sym), NumLockState))
-    )
+    ),
+    null,
+    layoutParam // 传递
 )

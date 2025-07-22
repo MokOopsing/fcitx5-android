@@ -50,7 +50,9 @@ class PickerLayout(context: Context, theme: Theme, switchKey: KeyDef) :
             ),
             setOf(
                 Behavior.Press(KeyAction.FcitxKeyAction(symbol))
-            )
+            ),
+            null,
+            layoutParam = KeyLayoutParam(0, 0) // 新增
         )
 
         val `return`: ImageKeyView by lazy { findViewById(R.id.button_return) }
