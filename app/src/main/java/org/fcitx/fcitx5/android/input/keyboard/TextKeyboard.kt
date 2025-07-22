@@ -36,51 +36,51 @@ class TextKeyboard(
             // 第一行（row = 0）
             CapsKey(layoutParam = KeyLayoutParam(0, 0)),
             SymbolKey("!", 0.1f, KeyDef.Appearance.Variant.Alternative, layoutParam = KeyLayoutParam(0, 1)),
-            AlphabetKey("Q", "手", "1", layoutParam = KeyLayoutParam(0, 2)),
-            AlphabetKey("W", "田", "2", layoutParam = KeyLayoutParam(0, 3)),
-            AlphabetKey("C", "金", "\"", layoutParam = KeyLayoutParam(0, 4)),
-            AlphabetKey("J", "十", "#", layoutParam = KeyLayoutParam(0, 5)),
+            AlphabetKey("W", "田", "1", layoutParam = KeyLayoutParam(0, 2)),
+            AlphabetKey("T", "廿", "2", layoutParam = KeyLayoutParam(0, 3)),
+            AlphabetKey("Y", "卜", "3", layoutParam = KeyLayoutParam(0, 4)),
+            AlphabetKey("O", "人", "#", layoutParam = KeyLayoutParam(0, 5)),
             SymbolKey("?", 0.1f, KeyDef.Appearance.Variant.Alternative, layoutParam = KeyLayoutParam(0, 6)),
             BackspaceKey(layoutParam = KeyLayoutParam(0, 7)),
 
             // 第二行（row = 1）
             LanguageKey(layoutParam = KeyLayoutParam(1, 0)),
-            AlphabetKey("Y", "卜", "6", layoutParam = KeyLayoutParam(1, 1)),
-            AlphabetKey("O", "人", "9", layoutParam = KeyLayoutParam(1, 2)),
-            AlphabetKey("H", "的", "/", layoutParam = KeyLayoutParam(1, 3)),
-            AlphabetKey("E", "水", "3", layoutParam = KeyLayoutParam(1, 4)),
-            AlphabetKey("V", "女", "?", layoutParam = KeyLayoutParam(1, 5)),
-            AlphabetKey("U", "山", "7", layoutParam = KeyLayoutParam(1, 6)),
+            AlphabetKey("Q", "手", "\"", layoutParam = KeyLayoutParam(1, 1)),
+            AlphabetKey("E", "水", "4", layoutParam = KeyLayoutParam(1, 2)),
+            AlphabetKey("R", "口", "5", layoutParam = KeyLayoutParam(1, 3)),
+            AlphabetKey("U", "山", "6", layoutParam = KeyLayoutParam(1, 4)),
+            AlphabetKey("I", "戈", "?", layoutParam = KeyLayoutParam(1, 5)),
+            AlphabetKey("P", "心", ":", layoutParam = KeyLayoutParam(1, 6)),
             LanguageKey(layoutParam = KeyLayoutParam(1, 7)),
 
             // 第三行（row = 2）
             // Space 跨两行
             SpaceKey(layoutParam = KeyLayoutParam(2, 0, rowSpan = 2, colSpan = 1)),
-            AlphabetKey("X", "止", ":", layoutParam = KeyLayoutParam(2, 1)),
-            AlphabetKey("R", "口", "4", layoutParam = KeyLayoutParam(2, 2)),
-            AlphabetKey("T", "廿", "5", layoutParam = KeyLayoutParam(2, 3)),
-            AlphabetKey("A", "日", "@", layoutParam = KeyLayoutParam(2, 4)),
-            AlphabetKey("L", "中", ")", layoutParam = KeyLayoutParam(2, 5)),
-            AlphabetKey("B", "月", "!", layoutParam = KeyLayoutParam(2, 6)),
-            SpaceKeySecond(layoutParam = KeyLayoutParam(2, 7, rowSpan = 2, colSpan = 1)),
+            AlphabetKey("A", "日", "@", layoutParam = KeyLayoutParam(2, 1)),
+            AlphabetKey("S", "尸", "7", layoutParam = KeyLayoutParam(2, 2)),
+            AlphabetKey("F", "火", "8", layoutParam = KeyLayoutParam(2, 3)),
+            AlphabetKey("J", "十", "9", layoutParam = KeyLayoutParam(2, 4)),
+            AlphabetKey("K", "大", ")", layoutParam = KeyLayoutParam(2, 5)),
+            AlphabetKey("L", "中", "!", layoutParam = KeyLayoutParam(2, 6)),
+            SpaceKey(viewId = R.id.button_space_second, layoutParam = KeyLayoutParam(2, 7, rowSpan = 2, colSpan = 1)),
 
             // 第四行（row = 3）
             // 第一列已被上方Space占用
-            AlphabetKey("F", "火", "-", layoutParam = KeyLayoutParam(3, 1)),
-            AlphabetKey("S", "尸", "*", layoutParam = KeyLayoutParam(3, 2)),
-            AlphabetKey("I", "戈", "8", layoutParam = KeyLayoutParam(3, 3)),
-            AlphabetKey("N", "弓", "~", layoutParam = KeyLayoutParam(3, 4)),
-            AlphabetKey("D", "木", "+", layoutParam = KeyLayoutParam(3, 5)),
-            AlphabetKey("Z", "重", "'", layoutParam = KeyLayoutParam(3, 6)),
+            AlphabetKey("Z", "重", "-", layoutParam = KeyLayoutParam(3, 1)),
+            AlphabetKey("X", "止", "*", layoutParam = KeyLayoutParam(3, 2)),
+            AlphabetKey("D", "木", "0", layoutParam = KeyLayoutParam(3, 3)),
+            AlphabetKey("H", "的", "~", layoutParam = KeyLayoutParam(3, 4)),
+            AlphabetKey("G", "土", "+", layoutParam = KeyLayoutParam(3, 5)),
+            AlphabetKey("M", "一", "'", layoutParam = KeyLayoutParam(3, 6)),
             // 第8列已被上方Space占用
 
             // 第五行（row = 4）
             LayoutSwitchKey("?123", "", layoutParam = KeyLayoutParam(4, 0)),
             CommaKey(0.1f, KeyDef.Appearance.Variant.Alternative, layoutParam = KeyLayoutParam(4, 1)),
-            AlphabetKey("P", "心", "0", layoutParam = KeyLayoutParam(4, 2)),
-            AlphabetKey("M", "一", "\\", layoutParam = KeyLayoutParam(4, 3)),
-            AlphabetKey("G", "土", "=", layoutParam = KeyLayoutParam(4, 4)),
-            AlphabetKey("K", "大", "(", layoutParam = KeyLayoutParam(4, 5)),
+            AlphabetKey("C", "金", "/", layoutParam = KeyLayoutParam(4, 2)),
+            AlphabetKey("V", "女", "\\", layoutParam = KeyLayoutParam(4, 3)),
+            AlphabetKey("B", "月", "=", layoutParam = KeyLayoutParam(4, 4)),
+            AlphabetKey("N", "弓", "(", layoutParam = KeyLayoutParam(4, 5)),
             SymbolKey(".", 0.1f, KeyDef.Appearance.Variant.Alternative, layoutParam = KeyLayoutParam(4, 6)),
             ReturnKey(layoutParam = KeyLayoutParam(4, 7))
         )
@@ -120,9 +120,7 @@ class TextKeyboard(
         showLangSwitchKey.registerOnChangeListener(showLangSwitchKeyListener)
     }
 
-    private val textKeys: List<TextKeyView> by lazy {
-        allViews.filterIsInstance(TextKeyView::class.java).toList()
-    }
+    private var textKeys: List<TextKeyView> = emptyList()
 
     private var capsState: CapsState = CapsState.None
 
@@ -180,6 +178,8 @@ class TextKeyboard(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        textKeys = (0 until childCount)
+            .mapNotNull { getChildAt(it) as? TextKeyView }
         caps = findViewById(R.id.button_caps)
         backspace = findViewById(R.id.button_backspace)
         quickphrase = findViewById(R.id.button_quickphrase)
@@ -198,7 +198,13 @@ class TextKeyboard(
         punctuationMapping = mapping
         updatePunctuationKeys()
     }
-    private val labelNeedIme: String = "ㄓ 魔仓"
+
+    private fun toVerticalText(str: String): String {
+        // 可根据需要过滤空格或特殊字符
+        return str.toCharArray().joinToString(separator = "\n")
+    }
+
+    private val labelNeedIme: String = "ㄓ魔仓"
     private var curImeName: String = "English"
     override fun onInputMethodUpdate(ime: InputMethodEntry) {
         if (capsState != CapsState.None) {
@@ -206,10 +212,11 @@ class TextKeyboard(
         }
         val spaceLable = buildString {
             append(ime.displayName)
-            ime.subMode.run { name.ifEmpty { label.ifEmpty { null } } }?.let { append(" $it") }
+            ime.subMode.run { name.ifEmpty { label.ifEmpty { null } } }?.let { append("$it") }
         }
-        space?.mainText?.text = spaceLable
-        space2?.mainText?.text = spaceLable
+        val spaceLableVertical = toVerticalText(spaceLable)
+        space?.mainText?.text = spaceLableVertical
+        space2?.mainText?.text = spaceLableVertical
         curImeName = spaceLable
         updateAlphabetKeys()
     }
@@ -280,15 +287,17 @@ class TextKeyboard(
     }
 
     private fun updateAlphabetKeys() {
-        textKeys.forEach {
-            if (it.def !is KeyDef.Appearance.AltText) return
-            if (capsState != CapsState.None || curImeName != labelNeedIme) {
-                it.mainText.text = it.def.keyCodeString.let { str ->
-                    if (str.length != 1 || !str[0].isLetter()) return@forEach
-                    if (keepLettersUppercase) str.uppercase() else transformAlphabet(str)
+        textKeys.forEach { keyView ->
+            val def = keyView.def
+            if (def is KeyDef.Appearance.AltText) {
+                if (capsState != CapsState.None || curImeName != labelNeedIme) {
+                    keyView.mainText.text = def.keyCodeString.let { str ->
+                        if (str.length != 1 || !str[0].isLetter()) return@let str
+                        if (keepLettersUppercase) str.uppercase() else transformAlphabet(str)
+                    }
+                } else {
+                    keyView.mainText.text = def.displayText.ifEmpty { def.keyCodeString }
                 }
-            } else {
-                it.mainText.text = it.def.displayText.ifEmpty { it.def.keyCodeString }
             }
         }
     }

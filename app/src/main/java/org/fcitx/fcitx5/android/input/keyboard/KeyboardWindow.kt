@@ -65,7 +65,7 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
 
     private lateinit var keyboardView: FrameLayout
 
-    private val keyboards: HashMap<String, BaseKeyboardFlex> by lazy {
+    private val keyboards: HashMap<String, View> by lazy {
         hashMapOf(
             TextKeyboard.Name to TextKeyboard(context, theme),
             NumberKeyboard.Name to NumberKeyboard(context, theme)
@@ -74,7 +74,7 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     private var currentKeyboardName = ""
     private var lastSymbolType: String by AppPrefs.getInstance().internal.lastSymbolLayout
 
-    private val currentKeyboard: BaseKeyboardFlex? get() = keyboards[currentKeyboardName]
+    private val currentKeyboard: View? get() = keyboards[currentKeyboardName]
 
     private val keyActionListener = KeyActionListener { it, source ->
         if (it is KeyAction.LayoutSwitchAction) {
@@ -97,22 +97,30 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
 
     private fun detachCurrentLayout() {
         currentKeyboard?.also {
-            it.onDetach()
+            (it as? BaseKeyboard)?.onDetach()
+            (it as? BaseKeyboardFlex)?.onDetach()
             keyboardView.removeView(it)
-            it.keyActionListener = null
-            it.popupActionListener = null
+            (it as? BaseKeyboard)?.keyActionListener = null
+            (it as? BaseKeyboardFlex)?.keyActionListener = null
+            (it as? BaseKeyboard)?.popupActionListener = null
+            (it as? BaseKeyboardFlex)?.popupActionListener = null
         }
     }
 
     private fun attachLayout(target: String) {
         currentKeyboardName = target
         currentKeyboard?.let {
-            it.keyActionListener = keyActionListener
-            it.popupActionListener = popupActionListener
+            (it as? BaseKeyboard)?.keyActionListener = keyActionListener
+            (it as? BaseKeyboardFlex)?.keyActionListener = keyActionListener
+            (it as? BaseKeyboard)?.popupActionListener = popupActionListener
+            (it as? BaseKeyboardFlex)?.popupActionListener = popupActionListener
             keyboardView.apply { add(it, lParams(matchParent, matchParent)) }
-            it.onAttach()
-            it.onReturnDrawableUpdate(returnKeyDrawable.resourceId)
-            it.onInputMethodUpdate(fcitx.runImmediately { inputMethodEntryCached })
+            (it as? BaseKeyboard)?.onAttach()
+            (it as? BaseKeyboardFlex)?.onAttach()
+            (it as? BaseKeyboard)?.onReturnDrawableUpdate(returnKeyDrawable.resourceId)
+            (it as? BaseKeyboardFlex)?.onReturnDrawableUpdate(returnKeyDrawable.resourceId)
+            (it as? BaseKeyboard)?.onInputMethodUpdate(fcitx.runImmediately { inputMethodEntryCached })
+            (it as? BaseKeyboardFlex)?.onInputMethodUpdate(fcitx.runImmediately { inputMethodEntryCached })
         }
     }
 
@@ -148,31 +156,40 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     }
 
     override fun onImeUpdate(ime: InputMethodEntry) {
-        currentKeyboard?.onInputMethodUpdate(ime)
+        (currentKeyboard as? BaseKeyboard)?.onInputMethodUpdate(ime)
+        (currentKeyboard as? BaseKeyboardFlex)?.onInputMethodUpdate(ime)
     }
 
     override fun onPunctuationUpdate(mapping: Map<String, String>) {
-        currentKeyboard?.onPunctuationUpdate(mapping)
+        (currentKeyboard as? BaseKeyboard)?.onPunctuationUpdate(mapping)
+        (currentKeyboard as? BaseKeyboardFlex)?.onPunctuationUpdate(mapping)
     }
 
     override fun onReturnKeyDrawableUpdate(resourceId: Int) {
-        currentKeyboard?.onReturnDrawableUpdate(resourceId)
+        (currentKeyboard as? BaseKeyboard)?.onReturnDrawableUpdate(resourceId)
+        (currentKeyboard as? BaseKeyboardFlex)?.onReturnDrawableUpdate(resourceId)
     }
 
     override fun onAttached() {
         currentKeyboard?.let {
-            it.keyActionListener = keyActionListener
-            it.popupActionListener = popupActionListener
-            it.onAttach()
+            (it as? BaseKeyboard)?.keyActionListener = keyActionListener
+            (it as? BaseKeyboardFlex)?.keyActionListener = keyActionListener
+            (it as? BaseKeyboard)?.popupActionListener = popupActionListener
+            (it as? BaseKeyboardFlex)?.popupActionListener = popupActionListener
+            (it as? BaseKeyboard)?.onAttach()
+            (it as? BaseKeyboardFlex)?.onAttach()
         }
         notifyBarLayoutChanged()
     }
 
     override fun onDetached() {
         currentKeyboard?.let {
-            it.onDetach()
-            it.keyActionListener = null
-            it.popupActionListener = null
+            (it as? BaseKeyboard)?.onDetach()
+            (it as? BaseKeyboardFlex)?.onDetach()
+            (it as? BaseKeyboard)?.keyActionListener = null
+            (it as? BaseKeyboardFlex)?.keyActionListener = null
+            (it as? BaseKeyboard)?.popupActionListener = null
+            (it as? BaseKeyboardFlex)?.popupActionListener = null
         }
         popup.dismissAll()
     }

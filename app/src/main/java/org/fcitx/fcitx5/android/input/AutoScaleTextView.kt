@@ -39,7 +39,7 @@ class AutoScaleTextView @JvmOverloads constructor(
         Proportional
     }
 
-    var scaleMode = Mode.None
+    var scaleMode = Mode.Proportional
 
     private lateinit var text: String
 
@@ -54,10 +54,7 @@ class AutoScaleTextView @JvmOverloads constructor(
     private var textScaleY = 1.0f
 
     override fun setText(charSequence: CharSequence?, bufferType: BufferType) {
-        // setText can be called in super constructor
         if (!::text.isInitialized || charSequence == null || !text.contentEquals(charSequence)) {
-            needsMeasureText = true
-            needsCalculateTransform = true
             text = charSequence?.toString() ?: ""
             requestLayout()
             invalidate()
@@ -69,18 +66,18 @@ class AutoScaleTextView @JvmOverloads constructor(
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val widthMode = MeasureSpec.getMode(widthMeasureSpec)
-        val widthSize = MeasureSpec.getSize(widthMeasureSpec)
-        val heightMode = MeasureSpec.getMode(heightMeasureSpec)
-        val heightSize = MeasureSpec.getSize(heightMeasureSpec)
-        val width = measureTextBounds().width() + paddingLeft + paddingRight
-        val height = ceil(fontMetrics.bottom - fontMetrics.top + paddingTop + paddingBottom).toInt()
-        val maxHeight = if (maxHeight >= 0) maxHeight else Int.MAX_VALUE
-        val maxWidth = if (maxWidth >= 0) maxWidth else Int.MAX_VALUE
-        setMeasuredDimension(
-            measure(widthMode, widthSize, min(max(width, minimumWidth), maxWidth)),
-            measure(heightMode, heightSize, min(max(height, minimumHeight), maxHeight))
-        )
+        val paint = paint
+        val lines = text.split('\n')
+        var maxWidth = 0f
+        val fontMetrics = paint.fontMetrics
+        val lineHeight = fontMetrics.bottom - fontMetrics.top
+        for (line in lines) {
+            maxWidth = maxOf(maxWidth, paint.measureText(line))
+        }
+        val totalHeight = (lineHeight * lines.size).toInt()
+        val width = resolveSizeAndState(maxWidth.toInt() + paddingLeft + paddingRight, widthMeasureSpec, 0)
+        val height = resolveSizeAndState(totalHeight + paddingTop + paddingBottom, heightMeasureSpec, 0)
+        setMeasuredDimension(width, height)
     }
 
     private fun measure(specMode: Int, specSize: Int, calculatedSize: Int): Int = when (specMode) {
@@ -159,17 +156,31 @@ class AutoScaleTextView @JvmOverloads constructor(
     }
 
     override fun onDraw(canvas: Canvas) {
-        if (needsCalculateTransform) {
-            calculateTransform(width, height)
-            needsCalculateTransform = false
-        }
         val paint = paint
         paint.color = currentTextColor
-        canvas.withSave {
-            translate(scrollX.toFloat(), scrollY.toFloat())
-            scale(textScaleX, textScaleY, 0f, translateY)
-            translate(translateX, translateY)
-            drawText(text, 0f, 0f, paint)
+        val lines = text.split('\n')
+        val fontMetrics = paint.fontMetrics
+        val lineHeight = fontMetrics.bottom - fontMetrics.top
+        val totalHeight = lineHeight * lines.size
+        val startY = (height - totalHeight) / 2f - fontMetrics.top
+
+        for ((i, line) in lines.withIndex()) {
+            var scaleX = 1.0f
+            val lineWidth = paint.measureText(line)
+            val contentWidth = width - paddingLeft - paddingRight
+            val x: Float
+            if (lineWidth > contentWidth && scaleMode != Mode.None) {
+                scaleX = contentWidth / lineWidth
+                x = paddingLeft.toFloat()
+            } else {
+                x = paddingLeft + (contentWidth - lineWidth * scaleX) / 2f
+            }
+            val y = startY + i * lineHeight
+            canvas.save()
+            canvas.translate(x, y)
+            canvas.scale(scaleX, 1.0f)
+            canvas.drawText(line, 0f, 0f, paint)
+            canvas.restore()
         }
     }
 

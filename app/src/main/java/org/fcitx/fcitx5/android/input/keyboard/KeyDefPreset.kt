@@ -243,23 +243,8 @@ class LanguageKey(
     layoutParam // 传递
 )
 
-class LanguageKeySecond(
-    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
-) : KeyDef(
-    Appearance.Image(
-        src = R.drawable.ic_baseline_language_24,
-        variant = Variant.AltForeground,
-        viewId = R.id.button_lang_second
-    ),
-    setOf(
-        Behavior.Press(KeyAction.LangSwitchAction),
-        Behavior.LongPress(KeyAction.ShowInputMethodPickerAction)
-    ),
-    null,
-    layoutParam // 传递
-)
-
 class SpaceKey(
+    viewId: Int = R.id.button_space,
     layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
 ) : KeyDef(
     Appearance.Text(
@@ -268,27 +253,7 @@ class SpaceKey(
         textSize = 13f,
         percentWidth = 0f,
         border = Border.Special,
-        viewId = R.id.button_space,
-        soundEffect = InputFeedbacks.SoundEffect.SpaceBar
-    ),
-    setOf(
-        Behavior.Press(KeyAction.SymAction(KeySym(FcitxKeyMapping.FcitxKey_space))),
-        Behavior.LongPress(KeyAction.SpaceLongPressAction)
-    ),
-    null,
-    layoutParam // 传递
-)
-
-class SpaceKeySecond(
-    layoutParam: KeyLayoutParam = KeyLayoutParam(0, 0)
-) : KeyDef(
-    Appearance.Text(
-        keyCodeString = " ",
-        displayText = " ",
-        textSize = 13f,
-        percentWidth = 0f,
-        border = Border.Special,
-        viewId = R.id.button_space_second,
+        viewId = viewId,
         soundEffect = InputFeedbacks.SoundEffect.SpaceBar
     ),
     setOf(

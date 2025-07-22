@@ -88,7 +88,7 @@ abstract class BaseKeyboardFlex(
     init {
         // 计算最大行列数
         rowCount = keyLayout.maxOf { it.layoutParam.row + it.layoutParam.rowSpan }
-        colCount = keyLayout.maxOf { it.layoutParam.col + it.layoutParam.colSpan }
+        //colCount = keyLayout.maxOf { it.layoutParam.col + it.layoutParam.colSpan }
 
         keyLayout.forEach { def ->
             val keyView = createKeyView(def)
