@@ -72,7 +72,7 @@ fcitxComponent {
         "fcitx5",
         "fcitx5-lua",
         "libime",
-        "fcitx5-chinese-addons"
+        "fcitx5-chinese-addons",
         "rime"
     )
     // exclude (delete immediately after install) tables that nobody would use
