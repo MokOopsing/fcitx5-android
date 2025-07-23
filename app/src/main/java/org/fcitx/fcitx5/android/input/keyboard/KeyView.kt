@@ -201,20 +201,20 @@ abstract class KeyView(ctx: Context, val theme: Theme, val def: KeyDef.Appearanc
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         if (bordered) return
         when (def.viewId) {
-            R.id.button_space -> {
+            R.id.button_space, R.id.button_space_second -> {
                 val bkgRadius = dp(3f)
                 val minHeight = dp(26)
                 val hInset = dp(10)
                 val vInset = if (h < minHeight) 0 else min((h - minHeight) / 2, dp(16))
-                appearanceView.background = insetRadiusDrawable(
-                    hInset, vInset, bkgRadius, theme.spaceBarColor
+                appearanceView.background = radiusDrawable(
+                    bkgRadius, theme.spaceBarColor
                 )
                 // InsetDrawable sets padding to container view; remove padding to prevent text from bing clipped
                 appearanceView.padding = 0
                 // apply press highlight for background area
                 setupPressHighlight(
-                    insetRadiusDrawable(
-                        hInset, vInset, bkgRadius,
+                    radiusDrawable(
+                        bkgRadius,
                         if (rippled) Color.WHITE else theme.keyPressHighlightColor
                     )
                 )
