@@ -2,6 +2,8 @@ plugins {
     id("org.fcitx.fcitx5.android.lib-convention")
     id("org.fcitx.fcitx5.android.native-lib-convention")
     id("org.fcitx.fcitx5.android.fcitx-headers")
+    id("org.fcitx.fcitx5.android.fcitx-component")
+    id("org.fcitx.fcitx5.android.data-descriptor")
 }
 
 android {
