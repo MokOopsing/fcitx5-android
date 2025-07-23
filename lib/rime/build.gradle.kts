@@ -29,5 +29,3 @@ generateDataDescriptor {
 
 dependencies {
     implementation(project(":lib:fcitx5"))
-    implementation(project(":lib:plugin-base"))
-}
