@@ -73,6 +73,7 @@ fcitxComponent {
         "fcitx5-lua",
         "libime",
         "fcitx5-chinese-addons"
+        "rime"
     )
     // exclude (delete immediately after install) tables that nobody would use
     excludeFiles = listOf("cangjie", "erbi", "qxm", "wanfeng").map {
