@@ -520,12 +520,6 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                 return
             }
         }
-        inputView?.keyboardView?.getLocationInWindow(inputViewLocation)
-        outInsets.apply {
-            contentTopInsets = inputViewLocation[1]
-            visibleTopInsets = inputViewLocation[1]
-            touchableInsets = Insets.TOUCHABLE_INSETS_VISIBLE
-        }
     }
 
     // always show InputView since we delegate CandidatesView's visibility to it
