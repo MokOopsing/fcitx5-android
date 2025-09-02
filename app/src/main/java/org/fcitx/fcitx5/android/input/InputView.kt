@@ -111,7 +111,40 @@ class InputView(
     private val emojiPicker = emojiPicker()
     private val emoticonPicker = emoticonPicker()
     private val floatingController by lazy { FloatingKeyboardController(this) }
-    private val floatingEnabled by lazy { AppPrefs.getInstance().keyboard.floatingKeyboard.getValue() }
+    private fun isFloatingEnabled(): Boolean {
+        val prefOn = AppPrefs.getInstance().keyboard.floatingKeyboard.getValue()
+        val orientation = resources.configuration.orientation
+        return prefOn && orientation == Configuration.ORIENTATION_LANDSCAPE
+    }
+
+    private var isKeyboardEmbedded = false
+
+    private fun attachEmbedded() {
+        if (isKeyboardEmbedded) return
+        add(keyboardView, lParams(matchParent, wrapContent) {
+            centerHorizontally()
+            bottomOfParent()
+        })
+        isKeyboardEmbedded = true
+    }
+
+    private fun detachEmbedded() {
+        if (!isKeyboardEmbedded) return
+        if (keyboardView.parent === this) removeView(keyboardView)
+        isKeyboardEmbedded = false
+    }
+
+    private fun applyFloatingState() {
+        if (isFloatingEnabled()) {
+            // switch to floating
+            detachEmbedded()
+            floatingController.showWith(keyboardView)
+        } else {
+            // switch to embedded
+            floatingController.dismiss()
+            attachEmbedded()
+        }
+    }
 
     private fun setupScope() {
         scope += this@InputView.wrapToUniqueComponent()
@@ -252,12 +285,7 @@ class InputView(
             above(keyboardView)
             centerHorizontally()
         }) */
-        if (!floatingEnabled) {
-            add(keyboardView, lParams(matchParent, wrapContent) {
-                centerHorizontally()
-                bottomOfParent()
-            })
-        }
+        applyFloatingState()
         add(popup.root, lParams(matchParent, matchParent) {
             centerVertically()
             centerHorizontally()
@@ -268,9 +296,13 @@ class InputView(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        if (floatingEnabled) {
-            floatingController.showWith(keyboardView)
-        }
+        applyFloatingState()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // size prefs already respond via listener; ensure placement is updated
+        applyFloatingState()
     }
 
     private fun updateKeyboardSize() {
