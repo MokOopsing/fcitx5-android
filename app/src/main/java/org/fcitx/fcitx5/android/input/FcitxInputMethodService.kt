@@ -52,6 +52,7 @@ import org.fcitx.fcitx5.android.core.FcitxKeyMapping
 import org.fcitx.fcitx5.android.core.FormattedText
 import org.fcitx.fcitx5.android.core.KeyStates
 import org.fcitx.fcitx5.android.core.KeySym
+import org.fcitx.fcitx5.android.core.ScancodeMapping
 import org.fcitx.fcitx5.android.core.SubtypeManager
 import org.fcitx.fcitx5.android.daemon.FcitxConnection
 import org.fcitx.fcitx5.android.daemon.FcitxDaemon
@@ -384,7 +385,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                 0,
                 metaState,
                 KeyCharacterMap.VIRTUAL_KEYBOARD,
-                0,
+                ScancodeMapping.keyCodeToScancode(keyEventCode),
                 KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE
             )
         )
@@ -400,7 +401,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                 0,
                 metaState,
                 KeyCharacterMap.VIRTUAL_KEYBOARD,
-                0,
+                ScancodeMapping.keyCodeToScancode(keyEventCode),
                 KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE
             )
         )
@@ -515,9 +516,6 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                 contentTopInsets = h
                 visibleTopInsets = h
                 touchableInsets = Insets.TOUCHABLE_INSETS_VISIBLE
-            }
-            if (!super.onEvaluateInputViewShown()) {
-                return
             }
         }
     }
@@ -738,9 +736,8 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
      * anchor candidates view to bottom-left corner, only works if [decorLocationUpdated]
      */
     private fun workaroundNullCursorAnchorInfo() {
-        val useVirtualKeyboard = super.onEvaluateInputViewShown()
         val gapValue = 20f
-        if (useVirtualKeyboard) {
+        if (inputDeviceMgr.isVirtualKeyboard) {
             inputView?.keyboardView?.getLocationInWindow(inputViewLocation)
             anchorPosition[0] = inputViewLocation[0].toFloat() + gapValue
             anchorPosition[1] = inputViewLocation[1].toFloat() - gapValue
@@ -790,7 +787,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         anchorPosition[1] -= yOffset
         anchorPosition[2] -= xOffset
         anchorPosition[3] -= yOffset
-        if (super.onEvaluateInputViewShown()) {
+        if (inputDeviceMgr.isVirtualKeyboard) {
             inputView?.keyboardView?.getLocationInWindow(inputViewLocation)
             if (inputViewLocation[1] > 0) {
                 contentSize[1] = inputViewLocation[1].toFloat()
