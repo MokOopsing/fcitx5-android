@@ -111,6 +111,7 @@ class InputView(
     private val emojiPicker = emojiPicker()
     private val emoticonPicker = emoticonPicker()
     private val floatingController by lazy { FloatingKeyboardController(this) }
+    private val floatingEnabled by lazy { AppPrefs.getInstance().keyboard.floatingKeyboard.getValue() }
 
     private fun setupScope() {
         scope += this@InputView.wrapToUniqueComponent()
@@ -251,9 +252,7 @@ class InputView(
             above(keyboardView)
             centerHorizontally()
         }) */
-        if (AppPrefs.getInstance().keyboard.floatingKeyboard.getValue()) {
-            floatingController.showWith(keyboardView)
-        } else {
+        if (!floatingEnabled) {
             add(keyboardView, lParams(matchParent, wrapContent) {
                 centerHorizontally()
                 bottomOfParent()
@@ -265,6 +264,13 @@ class InputView(
         })
 
         keyboardPrefs.registerOnChangeListener(onKeyboardSizeChangeListener)
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        if (floatingEnabled) {
+            floatingController.showWith(keyboardView)
+        }
     }
 
     private fun updateKeyboardSize() {
