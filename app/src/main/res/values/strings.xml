@@ -322,4 +322,9 @@
     <string name="emoji_skin_tone_type_5">🏾 Type-5</string>
     <string name="emoji_skin_tone_type_6">🏿 Type-6</string>
     <string name="hide_unsupported_emojis">Hide unsupported Emojis</string>
+    <string name="floating_keyboard_enable">Enable floating keyboard</string>
+    <string name="floating_keyboard_width_percent">Floating keyboard width</string>
+    <string name="floating_keyboard_height_percent">Floating keyboard height</string>
+    <string name="floating_keyboard_pos_x">Floating keyboard position X</string>
+    <string name="floating_keyboard_pos_y">Floating keyboard position Y</string>
 </resources>

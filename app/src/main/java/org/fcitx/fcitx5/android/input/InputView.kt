@@ -40,6 +40,7 @@ import org.fcitx.fcitx5.android.input.picker.symbolPicker
 import org.fcitx.fcitx5.android.input.popup.PopupComponent
 //import org.fcitx.fcitx5.android.input.preedit.PreeditComponent
 import org.fcitx.fcitx5.android.input.wm.InputWindowManager
+import org.fcitx.fcitx5.android.input.floating.FloatingKeyboardController
 import org.fcitx.fcitx5.android.utils.unset
 import org.mechdancer.dependency.DynamicScope
 import org.mechdancer.dependency.manager.wrapToUniqueComponent
@@ -109,6 +110,7 @@ class InputView(
     private val symbolPicker = symbolPicker()
     private val emojiPicker = emojiPicker()
     private val emoticonPicker = emoticonPicker()
+    private val floatingController by lazy { FloatingKeyboardController(this) }
 
     private fun setupScope() {
         scope += this@InputView.wrapToUniqueComponent()
@@ -249,10 +251,14 @@ class InputView(
             above(keyboardView)
             centerHorizontally()
         }) */
-        add(keyboardView, lParams(matchParent, wrapContent) {
-            centerHorizontally()
-            bottomOfParent()
-        })
+        if (AppPrefs.getInstance().keyboard.floatingKeyboard.getValue()) {
+            floatingController.showWith(keyboardView)
+        } else {
+            add(keyboardView, lParams(matchParent, wrapContent) {
+                centerHorizontally()
+                bottomOfParent()
+            })
+        }
         add(popup.root, lParams(matchParent, matchParent) {
             centerVertically()
             centerHorizontally()
@@ -353,6 +359,7 @@ class InputView(
     override fun onDetachedFromWindow() {
         keyboardPrefs.unregisterOnChangeListener(onKeyboardSizeChangeListener)
         // clear DynamicScope, implies that InputView should not be attached again after detached.
+        floatingController.dismiss()
         scope.clear()
         super.onDetachedFromWindow()
     }

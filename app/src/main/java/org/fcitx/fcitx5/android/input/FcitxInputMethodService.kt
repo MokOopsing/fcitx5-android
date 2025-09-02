@@ -126,6 +126,9 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         prefs.keyboard.expandKeypressArea,
         prefs.advanced.disableAnimation,
         prefs.advanced.ignoreSystemWindowInsets,
+        prefs.keyboard.floatingKeyboard,
+        prefs.keyboard.floatingWidthPercent,
+        prefs.keyboard.floatingHeightPercent,
     )
 
     private fun replaceInputView(theme: Theme): InputView {

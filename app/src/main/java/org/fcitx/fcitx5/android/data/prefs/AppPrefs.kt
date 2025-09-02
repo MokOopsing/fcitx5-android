@@ -262,6 +262,47 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             expandedCandidateGridSpanCountLandscape = secondary
         }
 
+        // Floating keyboard preferences
+        val floatingKeyboard = switch(
+            R.string.floating_keyboard_enable,
+            "floating_keyboard_enable",
+            false
+        )
+        val floatingWidthPercent = int(
+            R.string.floating_keyboard_width_percent,
+            "floating_keyboard_width_percent",
+            90,
+            40,
+            100,
+            "%",
+            1
+        )
+        val floatingHeightPercent = int(
+            R.string.floating_keyboard_height_percent,
+            "floating_keyboard_height_percent",
+            40,
+            20,
+            80,
+            "%",
+            1
+        )
+        val floatingPosX = int(
+            R.string.floating_keyboard_pos_x,
+            "floating_keyboard_pos_x",
+            0,
+            -10000,
+            10000,
+            "px"
+        )
+        val floatingPosY = int(
+            R.string.floating_keyboard_pos_y,
+            "floating_keyboard_pos_y",
+            0,
+            -10000,
+            10000,
+            "px"
+        )
+
     }
 
     inner class Candidates :
