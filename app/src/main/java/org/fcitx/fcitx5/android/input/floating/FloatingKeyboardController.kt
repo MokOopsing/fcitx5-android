@@ -11,6 +11,7 @@ import android.widget.PopupWindow
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
+import splitties.dimensions.dp
 import kotlin.math.max
 import kotlin.math.min
 
