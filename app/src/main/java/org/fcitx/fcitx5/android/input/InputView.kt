@@ -134,6 +134,12 @@ class InputView(
         isKeyboardEmbedded = false
     }
 
+    private fun applyEmbeddedState() {
+        if (!isFloatingEnabled()) {
+            attachEmbedded()
+        }
+    }
+
     private fun applyFloatingState() {
         if (isFloatingEnabled()) {
             // switch to floating
@@ -285,7 +291,7 @@ class InputView(
             above(keyboardView)
             centerHorizontally()
         }) */
-        applyFloatingState()
+        applyEmbeddedState()
         add(popup.root, lParams(matchParent, matchParent) {
             centerVertically()
             centerHorizontally()
