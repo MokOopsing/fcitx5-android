@@ -30,6 +30,8 @@ class FloatingKeyboardController(
 
     fun isEnabled(): Boolean = prefs.floatingKeyboard.getValue()
 
+    fun isShowing(): Boolean = popup?.isShowing == true
+
     fun showWith(content: View) {
         if (!isEnabled()) return
         if (popup?.isShowing == true) return
@@ -39,7 +41,16 @@ class FloatingKeyboardController(
         val container = FrameLayout(ctx).apply {
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
             addView(content)
-            setOnTouchListener(dragListener)
+            // Only handle drag on the container background, not on keyboard content
+            setOnTouchListener { _, event ->
+                // Let keyboard content handle its own touch events
+                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+                    lastX = event.rawX
+                    lastY = event.rawY
+                    return@setOnTouchListener false // Don't consume, let it pass through
+                }
+                false
+            }
             // Set lifecycle owner for the floating container
             setViewTreeLifecycleOwner(lifecycleOwner)
         }
@@ -47,8 +58,12 @@ class FloatingKeyboardController(
         val popup = PopupWindow(container, width, height, true).apply {
             animationStyle = 0
             isClippingEnabled = true
+            isFocusable = false // Don't steal focus
+            isOutsideTouchable = true // Allow touches outside to pass through
         }
         this.popup = popup
+        // Add drag handle for moving the popup
+        addDragHandle(container)
         // Position
         val defaultX = (dm.widthPixels - width) / 2
         val defaultY = dm.heightPixels - height
@@ -79,23 +94,29 @@ class FloatingKeyboardController(
         AppPrefs.getInstance().keyboard.floatingPosY.setValue(newY)
     }
 
-    @SuppressLint("ClickableViewAccessibility")
-    private val dragListener = View.OnTouchListener { v, event ->
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                lastX = event.rawX
-                lastY = event.rawY
-                true
+    // Add a separate drag handle view for moving the popup
+    private fun addDragHandle(container: FrameLayout) {
+        val dragHandle = View(ctx).apply {
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(20))
+            setOnTouchListener { _, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        lastX = event.rawX
+                        lastY = event.rawY
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val dx = (event.rawX - lastX).toInt()
+                        val dy = (event.rawY - lastY).toInt()
+                        if (dx != 0 || dy != 0) moveBy(dx, dy)
+                        lastX = event.rawX
+                        lastY = event.rawY
+                        true
+                    }
+                    else -> false
+                }
             }
-            MotionEvent.ACTION_MOVE -> {
-                val dx = (event.rawX - lastX).toInt()
-                val dy = (event.rawY - lastY).toInt()
-                if (dx != 0 || dy != 0) moveBy(dx, dy)
-                lastX = event.rawX
-                lastY = event.rawY
-                true
-            }
-            else -> false
         }
+        container.addView(dragHandle, 0) // Add at top
     }
 } 

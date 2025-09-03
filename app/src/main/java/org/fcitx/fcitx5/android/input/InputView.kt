@@ -152,6 +152,16 @@ class InputView(
         }
     }
 
+    private fun updateFloatingVisibility() {
+        if (isFloatingEnabled()) {
+            if (!floatingController.isShowing()) {
+                floatingController.showWith(keyboardView)
+            }
+        } else {
+            floatingController.dismiss()
+        }
+    }
+
     private fun setupScope() {
         scope += this@InputView.wrapToUniqueComponent()
         scope += service.wrapToUniqueComponent()
@@ -308,7 +318,7 @@ class InputView(
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         // size prefs already respond via listener; ensure placement is updated
-        applyFloatingState()
+        updateFloatingVisibility()
     }
 
     private fun updateKeyboardSize() {
