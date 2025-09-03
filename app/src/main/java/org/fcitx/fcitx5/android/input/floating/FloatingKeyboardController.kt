@@ -9,7 +9,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.PopupWindow
 import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import kotlin.math.max
 import kotlin.math.min
@@ -41,7 +41,7 @@ class FloatingKeyboardController(
             addView(content)
             setOnTouchListener(dragListener)
             // Set lifecycle owner for the floating container
-            ViewTreeLifecycleOwner.set(this, lifecycleOwner)
+            setViewTreeLifecycleOwner(lifecycleOwner)
         }
         this.container = container
         val popup = PopupWindow(container, width, height, true).apply {
