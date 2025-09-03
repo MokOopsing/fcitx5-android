@@ -8,11 +8,16 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.PopupWindow
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.ViewTreeLifecycleOwner
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import kotlin.math.max
 import kotlin.math.min
 
-class FloatingKeyboardController(private val anchorView: View) {
+class FloatingKeyboardController(
+    private val anchorView: View,
+    private val lifecycleOwner: LifecycleOwner
+) {
 
     private val ctx = anchorView.context
     private val prefs = AppPrefs.getInstance().keyboard
@@ -35,6 +40,8 @@ class FloatingKeyboardController(private val anchorView: View) {
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
             addView(content)
             setOnTouchListener(dragListener)
+            // Set lifecycle owner for the floating container
+            ViewTreeLifecycleOwner.set(this, lifecycleOwner)
         }
         this.container = container
         val popup = PopupWindow(container, width, height, true).apply {

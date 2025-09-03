@@ -110,7 +110,7 @@ class InputView(
     private val symbolPicker = symbolPicker()
     private val emojiPicker = emojiPicker()
     private val emoticonPicker = emoticonPicker()
-    private val floatingController by lazy { FloatingKeyboardController(this) }
+    private val floatingController by lazy { FloatingKeyboardController(this, service) }
     private fun isFloatingEnabled(): Boolean {
         val prefOn = AppPrefs.getInstance().keyboard.floatingKeyboard.getValue()
         val orientation = resources.configuration.orientation
