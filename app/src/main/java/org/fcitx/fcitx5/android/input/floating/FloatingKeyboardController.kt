@@ -1,7 +1,9 @@
 package org.fcitx.fcitx5.android.input.floating
 
 import android.annotation.SuppressLint
+import android.graphics.Color
 import android.graphics.Rect
+import android.graphics.drawable.ColorDrawable
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -42,26 +44,21 @@ class FloatingKeyboardController(
         val container = FrameLayout(ctx).apply {
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
             addView(content)
-            // Only handle drag on the container background, not on keyboard content
-            setOnTouchListener { _, event ->
-                // Let keyboard content handle its own touch events
-                if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-                    lastX = event.rawX
-                    lastY = event.rawY
-                    return@setOnTouchListener false // Don't consume, let it pass through
-                }
-                false
-            }
+            // Allow content to handle its own touch events; container does not consume
+            setOnTouchListener { _, _ -> false }
             // Set lifecycle owner for the floating container
             setViewTreeLifecycleOwner(lifecycleOwner)
         }
         this.container = container
-        val popup = PopupWindow(container, width, height, true).apply {
+        val popup = PopupWindow(container, width, height, false).apply {
             animationStyle = 0
             isClippingEnabled = true
             isFocusable = false // Don't steal focus
             isOutsideTouchable = true // Allow touches outside to pass through
+            setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            inputMethodMode = PopupWindow.INPUT_METHOD_NEEDED
         }
+        setTouchModalFalse(popup)
         this.popup = popup
         // Add drag handle for moving the popup
         addDragHandle(container)
@@ -99,6 +96,7 @@ class FloatingKeyboardController(
     private fun addDragHandle(container: FrameLayout) {
         val dragHandle = View(ctx).apply {
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(20))
+            setBackgroundColor(Color.TRANSPARENT)
             setOnTouchListener { _, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
@@ -119,5 +117,15 @@ class FloatingKeyboardController(
             }
         }
         container.addView(dragHandle, 0) // Add at top
+    }
+
+    private fun setTouchModalFalse(pw: PopupWindow) {
+        try {
+            val method = PopupWindow::class.java.getDeclaredMethod("setTouchModal", Boolean::class.javaPrimitiveType)
+            method.isAccessible = true
+            method.invoke(pw, false)
+        } catch (_: Throwable) {
+            // ignore best-effort
+        }
     }
 } 
