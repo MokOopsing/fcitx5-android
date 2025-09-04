@@ -1,7 +1,6 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
-    id("org.fcitx.fcitx5.android.native-app-convention")
 }
 
 android {
@@ -13,7 +12,7 @@ android {
 
         externalNativeBuild {
             cmake {
-                targets("rime")  // 确保和 CMakeLists.txt 里的 target 对应
+                targets("rime")
             }
         }
     }
