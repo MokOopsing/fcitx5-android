@@ -1,15 +1,23 @@
 cmake_minimum_required(VERSION 3.18)
-project(rime LANGUAGES CXX)
+project(rime-android LANGUAGES CXX)
 
-# Android 常用设置
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# 指定依赖库路径
-set(PREBUILT_DIR /path/to/prebuilt)
-set(ANDROID_ABI arm64-v8a)  # 可改成 armeabi-v7a 等
+# 传入预编译依赖路径和 ABI
+# 在 Gradle 里通过 -DANDROID_ABI 和 -DPREBUILT_DIR 传入
+if(NOT DEFINED PREBUILT_DIR)
+    message(FATAL_ERROR "You must set PREBUILT_DIR")
+endif()
 
-# Rime 依赖库
+# 声明 librime.a
+add_library(rime_static STATIC IMPORTED GLOBAL)
+set_target_properties(rime_static PROPERTIES
+    IMPORTED_LOCATION "${PREBUILT_DIR}/librime/${ANDROID_ABI}/lib/librime.a"
+    INTERFACE_INCLUDE_DIRECTORIES "${PREBUILT_DIR}/librime/${ANDROID_ABI}/include"
+)
+
+# Rime 依赖
 set(Rime_dependencies
     log
     "${PREBUILT_DIR}/glog/${ANDROID_ABI}/lib/libglog.a"
@@ -20,20 +28,6 @@ set(Rime_dependencies
     "${PREBUILT_DIR}/yaml-cpp/${ANDROID_ABI}/lib/libyaml-cpp.a"
 )
 
-# 包含头文件目录（注意要加所有依赖的 include）
-include_directories(
-    "${PREBUILT_DIR}/glog/${ANDROID_ABI}/include"
-    "${PREBUILT_DIR}/leveldb/${ANDROID_ABI}/include"
-    "${PREBUILT_DIR}/lua/${ANDROID_ABI}/include"
-    "${PREBUILT_DIR}/marisa/${ANDROID_ABI}/include"
-    "${PREBUILT_DIR}/opencc/${ANDROID_ABI}/include"
-    "${PREBUILT_DIR}/yaml-cpp/${ANDROID_ABI}/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src"  # librime 源码目录
-)
-
-# 源码文件（也可以用 file(GLOB_RECURSE ...)）
-file(GLOB_RECURSE RIME_SOURCES src/*.cc)
-
-# 构建动态库 librime.so
-add_library(rime SHARED ${RIME_SOURCES})
-target_link_libraries(rime ${Rime_dependencies})
+# 生成 librime.so
+add_library(rime SHARED wrapper.cc)
+target_link_libraries(rime PRIVATE rime_static ${Rime_dependencies})
