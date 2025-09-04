@@ -13,12 +13,9 @@ jobs:
         os:
           - macos-13
           #- ubuntu-22.04
-          #- windows-2022
         abi:
           - arm64-v8a
           #- armeabi-v7a
-          #- x86
-          #- x86_64
 
     env:
       BUILD_ABI: ${{ matrix.abi }}
@@ -51,9 +48,7 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Build librime.so
-        run: |
-          ./gradlew :plugin:rime:assembleRelease \
-            -Pcmake.abi=$BUILD_ABI
+        run: ./gradlew :plugin:rime:assembleRelease -Pcmake.abi=$BUILD_ABI
 
       - name: Collect outputs
         run: |
