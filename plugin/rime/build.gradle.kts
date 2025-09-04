@@ -8,31 +8,26 @@ android {
 
     defaultConfig {
         minSdk = 23
-        targetSdk = 34
+        // targetSdk 不再直接写在 library
+    }
 
-        externalNativeBuild {
-            cmake {
-                targets("rime")
-            }
+    buildTypes {
+        release {
+            isMinifyEnabled = false // library 里正确写法
         }
     }
 
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
+            targets("rime")
         }
     }
 
-    buildTypes {
-        release {
-            minifyEnabled = false
-        }
-    }
-
-    packaging {
-        jniLibs {
-            excludes += setOf("**/libc++_shared.so")
-        }
+    // lint 或 testOptions 可以设置 targetSdk
+    lint {
+        textReport = true
+        lintConfig = file("$projectDir/lint.xml")
     }
 }
 
