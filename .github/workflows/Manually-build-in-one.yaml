@@ -6,107 +6,62 @@ on:
     types: [trigger-by-prebuilder]
 
 jobs:
-  build_pull_request:
+  build_librime:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os:
-          #- ubuntu-22.04
           - macos-13
-          # - windows-2022
+          #- ubuntu-22.04
+          #- windows-2022
         abi:
-          #- armeabi-v7a
           - arm64-v8a
+          #- armeabi-v7a
           #- x86
           #- x86_64
+
     env:
       BUILD_ABI: ${{ matrix.abi }}
+      PREBUILT_DIR: ${{ github.workspace }}/lib/fcitx5/src/main/cpp/prebuilt
+
     steps:
-      - name: Fetch source code
+      - name: Checkout source
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Update prebuilt to latest commit
-        run: |
-          git -C lib/fcitx5/src/main/cpp/prebuilt fetch origin master && git -C lib/fcitx5/src/main/cpp/prebuilt reset --hard origin/master
-
-      - name: Regenerate symlinks pointing to submodule (Windows)
-        if: ${{ matrix.os == 'windows-2022' }}
-        run: |
-          Remove-Item -Recurse app/src/main/assets/usr/share, plugin/hangul/src/main/assets/usr/share/libhangul, plugin/chewing/src/main/assets/usr/share/libchewing, plugin/jyutping/src/main/assets/usr/share/libime
-          git checkout -- .
-
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: "temurin"
+          distribution: temurin
           java-version: "17"
 
-      - name: Setup Android environment
+      - name: Setup Android SDK/NDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android NDK
-        run: |
-          sdkmanager --install "cmake;3.31.6"
-
-      - name: Install system dependencies (Ubuntu)
-        if: ${{ matrix.os == 'ubuntu-22.04' }}
-        run: |
-          sudo apt update
-          sudo apt install extra-cmake-modules gettext
+      - name: Install Android CMake
+        run: sdkmanager --install "cmake;3.31.6"
 
       - name: Install system dependencies (macOS)
         if: ${{ matrix.os == 'macos-13' }}
-        run: |
-          brew install extra-cmake-modules
-
-      - name: Install system dependencies (Windows)
-        if: ${{ matrix.os == 'windows-2022' }}
-        run: |
-          C:/msys64/usr/bin/pacman -S --noconfirm mingw-w64-ucrt-x86_64-gettext mingw-w64-ucrt-x86_64-extra-cmake-modules
-          Add-Content $env:GITHUB_PATH "C:/msys64/ucrt64/bin"
+        run: brew install extra-cmake-modules
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build APK
+      - name: Build librime.so
         run: |
-          ./gradlew :app:assembleRelease
-          ./gradlew :assembleReleasePlugins
+          ./gradlew :plugin:rime:assembleRelease \
+            -Pcmake.abi=$BUILD_ABI
 
-      - name: Move app and plugins to one dir
-        shell: bash
+      - name: Collect outputs
         run: |
-          mkdir app-and-plugins
-          mv app/build/outputs/apk/release/* app-and-plugins/
-          find plugin/*/build/outputs/apk/release -type f -print0 | while IFS= read -r -d '' source_file; do
-            # 获取第二级目录名作为前缀 
-            prefix=$(basename "$(dirname "$(dirname "$(dirname "$(dirname "$(dirname "$source_file")")")")")")
-            # 获取文件名 
-            filename=$(basename "$source_file") 
-            # 构建目标文件路径，加上前缀
-            target_file="app-and-plugins/$prefix"_"$filename"
-            mv "$source_file" "$target_file"
-          done
+          mkdir -p output
+          find plugin/rime/build/intermediates/cxx/RelWithDebInfo -name "librime.so" -exec cp {} output/ \;
 
-      - name: Sign app and plugins
-        uses: kevin-david/zipalign-sign-android-release@v1.1.1
-        #uses: rpavlik/sign-android-release@master
-        id: sign_apk
-        with:
-          releaseDirectory: app-and-plugins
-          signingKeyBase64: ${{ secrets.SIGNING_KEY }}
-          keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
-          alias: ${{ secrets.KEY_ALIAS }}
-          keyPassword: ${{ secrets.KEY_PASSWORD }}
-          zipAlign: true
-        env:
-          BUILD_TOOLS_VERSION: "33.0.2"
-
-      - name: Upload app and plugins
+      - name: Upload librime.so
         uses: actions/upload-artifact@v4
         with:
-          name: app&plugins-${{ matrix.os }}-${{ matrix.abi }}
-          path: app-and-plugins/*-signed.apk
+          name: librime-${{ matrix.os }}-${{ matrix.abi }}
+          path: output/*.so
