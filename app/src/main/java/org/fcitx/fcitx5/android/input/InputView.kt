@@ -318,7 +318,7 @@ class InputView(
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         // size prefs already respond via listener; ensure placement is updated
-        updateFloatingVisibility()
+        applyFloatingState()
     }
 
     private fun updateKeyboardSize() {

@@ -44,6 +44,8 @@ class FloatingKeyboardController(
         val dm = ctx.resources.displayMetrics
         val width = dm.widthPixels * prefs.floatingWidthPercent.getValue() / 100
         val height = dm.heightPixels * prefs.floatingHeightPercent.getValue() / 100
+        // Ensure content has no parent before reparenting
+        (content.parent as? ViewGroup)?.removeView(content)
         val container = FrameLayout(ctx).apply {
             layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
             addView(content)
@@ -73,6 +75,7 @@ class FloatingKeyboardController(
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
             format = PixelFormat.TRANSLUCENT
             gravity = Gravity.TOP or Gravity.START
+            token = anchorView.windowToken
         }
         try {
             windowManager.addView(container, params)
