@@ -1,0 +1,67 @@
+name: Build-librime
+
+on:
+  workflow_dispatch: # 手动触发
+  repository_dispatch: # 外部触发
+    types: [trigger-build-librime]
+
+jobs:
+  build_librime:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - macos-13
+          #- ubuntu-22.04
+          #- windows-2022
+        abi:
+          - arm64-v8a
+          #- armeabi-v7a
+          #- x86
+          #- x86_64
+
+    env:
+      BUILD_ABI: ${{ matrix.abi }}
+      PREBUILT_DIR: ${{ github.workspace }}/lib/fcitx5/src/main/cpp/prebuilt
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK/NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android CMake
+        run: sdkmanager --install "cmake;3.31.6"
+
+      - name: Install system dependencies (macOS)
+        if: ${{ matrix.os == 'macos-13' }}
+        run: brew install extra-cmake-modules
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build librime.so
+        run: |
+          ./gradlew :plugin:rime:assembleRelease \
+            -Pcmake.abi=$BUILD_ABI
+
+      - name: Collect outputs
+        run: |
+          mkdir -p output
+          find plugin/rime/build/intermediates/cxx/RelWithDebInfo -name "librime.so" -exec cp {} output/ \;
+
+      - name: Upload librime.so
+        uses: actions/upload-artifact@v4
+        with:
+          name: librime-${{ matrix.os }}-${{ matrix.abi }}
+          path: output/*.so
