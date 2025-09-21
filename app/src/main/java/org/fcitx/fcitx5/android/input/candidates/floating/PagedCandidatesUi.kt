@@ -43,6 +43,13 @@ class PagedCandidatesUi(
     }
 
     private val candidatesAdapter = object : RecyclerView.Adapter<UiHolder>() {
+        init {
+            setHasStableIds(true)
+        }
+
+        override fun getItemId(position: Int): Long =
+            data.candidates[position].hashCode().toLong()
+
         override fun getItemCount() =
             data.candidates.size + (if (data.hasPrev || data.hasNext) 1 else 0)
 
@@ -102,6 +109,7 @@ class PagedCandidatesUi(
         adapter = candidatesAdapter
         layoutManager = candidatesLayoutManager
         overScrollMode = View.OVER_SCROLL_NEVER
+        itemAnimator = null
     }
 
     @SuppressLint("NotifyDataSetChanged")
