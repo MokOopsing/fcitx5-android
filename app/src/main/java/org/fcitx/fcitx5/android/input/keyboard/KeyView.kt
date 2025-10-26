@@ -55,6 +55,7 @@ abstract class KeyView(ctx: Context, val theme: Theme, val def: KeyDef.Appearanc
     CustomGestureView(ctx) {
 
     val bordered: Boolean
+    val borderStroke: Boolean
     val rippled: Boolean
     val radius: Float
     val hMargin: Int
@@ -67,6 +68,7 @@ abstract class KeyView(ctx: Context, val theme: Theme, val def: KeyDef.Appearanc
             calcRadius = calcRadius + prefs.bottomCornerRadiusAdjust.getValue()
         }
         bordered = prefs.keyBorder.getValue()
+        borderStroke = prefs.keyBorderStroke.getValue()
         rippled = prefs.keyRippleEffect.getValue()
         radius = dp(calcRadius.toFloat())
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -126,11 +128,14 @@ abstract class KeyView(ctx: Context, val theme: Theme, val def: KeyDef.Appearanc
                 Variant.Alternative -> theme.altKeyBackgroundColor
                 Variant.Accent -> theme.accentKeyBackgroundColor
             }
-            val shadowWidth = dp(1)
+            val borderOrShadowWidth = dp(1)
             // background: key border
-            appearanceView.background = borderedKeyBackgroundDrawable(
+            appearanceView.background = if (borderStroke) borderedKeyBackgroundDrawable(
                 bkgColor, theme.keyShadowColor,
-                radius, shadowWidth, hMargin, vMargin
+                radius, borderOrShadowWidth, hMargin, vMargin
+            ) else shadowedKeyBackgroundDrawable(
+                bkgColor, theme.keyShadowColor,
+                radius, borderOrShadowWidth, hMargin, vMargin
             )
             // foreground: press highlight or ripple
             setupPressHighlight()
@@ -151,6 +156,16 @@ abstract class KeyView(ctx: Context, val theme: Theme, val def: KeyDef.Appearanc
                 // ripple should be masked with an opaque color
                 mask ?: highlightMaskDrawable(Color.WHITE)
             )
+        } else if (bordered && borderStroke) {
+            StateListDrawable().apply {
+                addState(
+                    intArrayOf(android.R.attr.state_pressed),
+                    borderedKeyBackgroundDrawable(
+                        Color.TRANSPARENT, theme.keyShadowColor,
+                        radius, dp(2), hMargin, vMargin
+                    )
+                )
+            }
         } else {
             StateListDrawable().apply {
                 addState(
