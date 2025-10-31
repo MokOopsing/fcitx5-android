@@ -103,8 +103,8 @@
     <string name="reload_config">Перезагрузить конфигурацию</string>
     <string name="input_method_options">Параметры метода ввода</string>
     <string name="theme">Тема</string>
-    <string name="key_ripple_effect">Активироватьть эффект пульсации клавиш</string>
-    <string name="key_border">Активировать ограничение клавиш</string>
+    <string name="key_ripple_effect">Включить эффект пульсации клавиш</string>
+    <string name="key_border">Включить границы клавиш</string>
     <string name="brightness">Яркость</string>
     <string name="key_radius">Радиус клавиш</string>
     <string name="text_editing_button_radius">Радиус кнопки редактирования текста</string>
@@ -122,6 +122,7 @@
     <string name="punctuation_position">Позиция пунктуации</string>
     <string name="punctuation_pos_bottom">Внизу (только портрет)</string>
     <string name="punctuation_pos_top_right">В правом верхнем углу</string>
+    <string name="punctuation_pos_none">Нет</string>
     <string name="expand_toolbar_by_default">Развернуть панель инструментов по умолчанию</string>
     <string name="popup_on_key_press">Всплывающее окно при нажатии клавиши</string>
     <string name="disable_animation">Отключить анимацию</string>
@@ -272,6 +273,7 @@
     <string name="crop">Обрезать</string>
     <string name="candidates_window">Окно кандидатов</string>
     <string name="show_candidates_window">Показать окно кандидатов</string>
+    <string name="candidates_window_radius">Радиус окна кандидатов</string>
     <string name="follow_input_device">Зависит от устройства ввода</string>
     <string name="candidates_orientation">Ориентация списка кандидатов</string>
     <string name="automatic">Автоматическая</string>
@@ -305,4 +307,15 @@
     <string name="move_cursor_to_end">Переместить курсор к концу</string>
     <string name="open_input_method_settings">Открыть настройки метода ввода</string>
     <string name="delete_all">Удалить всё</string>
+    <string name="share">Поделиться</string>
+    <string name="emoji_and_symbols">Эмодзи и символы</string>
+    <string name="default_emoji_skin_tone">Модификатор оттенка кожи эмодзи по умолчанию</string>
+    <string name="emoji_skin_tone_none">Без модификатора</string>
+    <string name="emoji_skin_tone_type_1_2">🏻 Type-1-2</string>
+    <string name="emoji_skin_tone_type_3">🏼 Type-3</string>
+    <string name="emoji_skin_tone_type_4">🏽 Type-4</string>
+    <string name="emoji_skin_tone_type_5">🏾 Type-5</string>
+    <string name="emoji_skin_tone_type_6">🏿 Type-6</string>
+    <string name="hide_unsupported_emojis">Скрыть неподдерживаемые эмодзи</string>
+    <string name="key_border_stroke">Включить обводку для границы клавиши</string>
 </resources>
