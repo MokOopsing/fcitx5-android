@@ -7,10 +7,13 @@ package org.fcitx.fcitx5.android.input.keyboard
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
 import androidx.transition.Slide
+import androidx.transition.TransitionManager
+import androidx.transition.TransitionSet
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.CapabilityFlags
 import org.fcitx.fcitx5.android.core.InputMethodEntry
@@ -64,6 +67,8 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
         }
 
     private lateinit var keyboardView: FrameLayout
+    private var voiceOverlay: View? = null
+    private var voiceWave: org.fcitx.fcitx5.android.input.voice.WaveformView? = null
 
     private val keyboards: HashMap<String, BaseKeyboard> by lazy {
         hashMapOf(
@@ -169,6 +174,8 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     }
 
     override fun onDetached() {
+        // 清理语音覆盖层，避免窗口切换后残留
+        hideVoiceOverlay()
         currentKeyboard?.let {
             it.onDetach()
             it.keyActionListener = null
@@ -182,5 +189,61 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     // 2) currently keyboard window is attached and switchLayout was used
     private fun notifyBarLayoutChanged() {
         bar.onKeyboardLayoutSwitched(currentKeyboardName == NumberKeyboard.Name)
+    }
+
+    /**
+     * 显示“语音输入占位”覆盖层：覆盖键盘区域为纯色空白视图。
+     * - 不可点击/不可聚焦：不拦截触摸事件，空间格键仍可接收抬起事件以结束会话。
+     * - 过渡动画：参考数字布局切换，使用自底向上的 Slide + 100ms 动画。
+     */
+    fun showVoiceOverlay() {
+        if (voiceOverlay != null) return
+        // 选取与当前主题一致的背景色：优先使用键盘面色，其次为整体背景色
+        val bgColor = when (val t = theme) {
+            is org.fcitx.fcitx5.android.data.theme.Theme.Builtin -> t.keyboardColor
+            else -> theme.backgroundColor
+        }
+        val overlay = FrameLayout(context).apply {
+            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            setBackgroundColor(bgColor)
+            isClickable = false; isFocusable = false
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        val wave = org.fcitx.fcitx5.android.input.voice.WaveformView(context).apply {
+            // 使用主题强调前景色绘制波形
+            val lineColor = theme.genericActiveForegroundColor
+            setWaveformColor(lineColor)
+            visibility = View.VISIBLE
+            start()
+        }
+        overlay.addView(wave, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        val ts = TransitionSet().apply {
+            addTransition(Slide(Gravity.BOTTOM).apply { addTarget(overlay) })
+            duration = 100
+        }
+        TransitionManager.beginDelayedTransition(keyboardView, ts)
+        keyboardView.addView(overlay)
+        voiceOverlay = overlay
+        voiceWave = wave
+    }
+
+    /**
+     * 隐藏“语音输入占位”覆盖层。
+     */
+    fun hideVoiceOverlay() {
+        val overlay = voiceOverlay ?: return
+        try { voiceWave?.stop() } catch (_: Throwable) {}
+        val ts = TransitionSet().apply {
+            addTransition(Slide(Gravity.BOTTOM).apply { addTarget(overlay) })
+            duration = 100
+        }
+        TransitionManager.beginDelayedTransition(keyboardView, ts)
+        keyboardView.removeView(overlay)
+        voiceOverlay = null
+        voiceWave = null
+    }
+
+    fun updateVoiceOverlayAmplitude(amplitude: Float) {
+        voiceWave?.updateAmplitude(amplitude)
     }
 }

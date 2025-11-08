@@ -65,6 +65,8 @@ object AsrkbSpeechClient {
                                         service.lifecycleScope.launch {
                                             service.finishComposing()
                                             service.commitText(text)
+                                            // 会话完成：通知覆盖层隐藏
+                                            runCatching { VoiceOverlayUiBridge.onDone?.invoke() }
                                             unbind()
                                         }
                                         reply?.writeNoException(); true
@@ -75,10 +77,17 @@ object AsrkbSpeechClient {
                                         val codeVal = data.readInt()
                                         val msg = data.readString()
                                         toast(ctx, mapCallbackError(ctx, codeVal, msg))
+                                        // 出错时也隐藏覆盖层
+                                        runCatching { VoiceOverlayUiBridge.onDone?.invoke() }
                                         unbind()
                                         reply?.writeNoException(); true
                                     }
-                                    CB_onAmplitude -> { reply?.writeNoException(); true }
+                                    CB_onAmplitude -> {
+                                        data.enforceInterface(DESCRIPTOR_CB)
+                                        val _sid = data.readInt(); val amp = data.readFloat()
+                                        service.lifecycleScope.launch { runCatching { VoiceOverlayUiBridge.onAmplitude?.invoke(amp) } }
+                                        reply?.writeNoException(); true
+                                    }
                                     IBinder.INTERFACE_TRANSACTION -> { reply?.writeString(DESCRIPTOR_CB); true }
                                     else -> super.onTransact(code, data, reply, flags)
                                 }
