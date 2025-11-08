@@ -16,44 +16,68 @@ import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
-import com.brycewg.asrkb.aidl.SpeechConfig
 import org.fcitx.fcitx5.android.input.FcitxInputMethodService
 
 object AsrkbSpeechClient {
     private const val TAG = "AsrkbLink"
     private var bound = false
     private var connection: ServiceConnection? = null
+    private var remote: IBinder? = null
+    private var sessionId: Int = -1
+    private var currentState: Int = STATE_IDLE
+    private var holding: Boolean = false
+    private var ctxRef: Context? = null
 
-    fun startMockSession(service: FcitxInputMethodService) {
-        if (bound) return
+    fun startHoldSession(service: FcitxInputMethodService) {
+        if (bound && remote != null && sessionId > 0) return
         val ctx = service
+        ctxRef = ctx
+        holding = true
         val conn = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
                 try {
-                    val remote = binder ?: throw IllegalStateException("no binder")
+                    val b = binder ?: throw IllegalStateException("no binder")
+                    remote = b
                     // 准备回调 Binder：仅处理 onFinal，其余忽略
                     val cbBinder = object : Binder() {
                         override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
                             return try {
                                 when (code) {
-                                    CB_onState, CB_onPartial, CB_onAmplitude -> {
+                                    CB_onState -> {
+                                        data.enforceInterface(DESCRIPTOR_CB)
+                                        val _sid = data.readInt(); val s = data.readInt(); data.readString()
+                                        currentState = s
+                                        reply?.writeNoException(); true
+                                    }
+                                    CB_onPartial -> {
+                                        data.enforceInterface(DESCRIPTOR_CB)
+                                        val _sid = data.readInt(); val text = data.readString() ?: ""
+                                        service.lifecycleScope.launch {
+                                            service.currentInputConnection?.setComposingText(text, 1)
+                                        }
                                         reply?.writeNoException(); true
                                     }
                                     CB_onFinal -> {
                                         data.enforceInterface(DESCRIPTOR_CB)
-                                        val sid = data.readInt()
+                                        val _sid = data.readInt()
                                         val text = data.readString() ?: ""
-                                        service.lifecycleScope.launch { service.commitText(text) }
+                                        service.lifecycleScope.launch {
+                                            service.finishComposing()
+                                            service.commitText(text)
+                                            unbind()
+                                        }
                                         reply?.writeNoException(); true
                                     }
                                     CB_onError -> {
                                         data.enforceInterface(DESCRIPTOR_CB)
-                                        val sid = data.readInt()
+                                        val _sid = data.readInt()
                                         val codeVal = data.readInt()
                                         val msg = data.readString()
                                         toast(ctx, "语音服务错误: $codeVal")
+                                        unbind()
                                         reply?.writeNoException(); true
                                     }
+                                    CB_onAmplitude -> { reply?.writeNoException(); true }
                                     IBinder.INTERFACE_TRANSACTION -> { reply?.writeString(DESCRIPTOR_CB); true }
                                     else -> super.onTransact(code, data, reply, flags)
                                 }
@@ -64,36 +88,32 @@ object AsrkbSpeechClient {
                         }
                     }
 
-                    // 调用 startSession(config, callback) via Binder transact
-                    val cfg = SpeechConfig(vendorId = "mock")
                     val data = Parcel.obtain()
                     val reply = Parcel.obtain()
                     var sid = -999
                     try {
                         data.writeInterfaceToken(DESCRIPTOR_SVC)
-                        // write config as Parcelable (presence flag + parcel)
-                        data.writeInt(1)
-                        cfg.writeToParcel(data, 0)
+                        // 不发送配置（presence=0）：完全遵循言犀当前设置（含流式/非流式）
+                        data.writeInt(0)
                         // write callback binder
                         data.writeStrongBinder(cbBinder)
-                        remote.transact(TRANSACTION_startSession, data, reply, 0)
+                        b.transact(TRANSACTION_startSession, data, reply, 0)
                         reply.readException()
                         sid = reply.readInt()
                     } finally {
                         try { data.recycle() } catch (_: Throwable) {}
                         try { reply.recycle() } catch (_: Throwable) {}
                     }
-                    if (sid <= 0) { toast(ctx, "无法启动会话: $sid"); unbind(ctx) }
+                    if (sid <= 0) { toast(ctx, "无法启动会话: $sid"); unbind() }
+                    else { sessionId = sid; currentState = STATE_RECORDING }
                 } catch (t: Throwable) {
                     Log.w(TAG, "bind/start failed", t)
                     toast(ctx, "无法连接言犀服务")
-                    unbind(ctx)
+                    unbind()
                 }
             }
 
-            override fun onServiceDisconnected(name: ComponentName?) {
-                unbind(ctx)
-            }
+            override fun onServiceDisconnected(name: ComponentName?) { unbind() }
         }
         connection = conn
         // 依次尝试 Pro 包与开源包
@@ -110,15 +130,24 @@ object AsrkbSpeechClient {
                 Log.d(TAG, "bind attempt failed: ${c.packageName}", t)
             }
         }
-        if (!bound) {
-            toast(ctx, "未找到言犀服务（Pro/开源）")
-            unbind(ctx)
+        if (!bound) { toast(ctx, "未找到言犀服务（Pro/开源）"); unbind() }
+    }
+
+    fun stopHoldSession() {
+        if (!holding) return
+        holding = false
+        when (currentState) {
+            STATE_RECORDING -> stopSession()
+            STATE_PROCESSING -> cancelSession()
+            else -> cancelSession()
         }
     }
 
     // 与服务端保持一致的接口描述符与事务号
     private const val DESCRIPTOR_SVC = "com.brycewg.asrkb.aidl.IExternalSpeechService"
     private const val TRANSACTION_startSession = IBinder.FIRST_CALL_TRANSACTION + 0
+    private const val TRANSACTION_stopSession = IBinder.FIRST_CALL_TRANSACTION + 1
+    private const val TRANSACTION_cancelSession = IBinder.FIRST_CALL_TRANSACTION + 2
 
     private const val DESCRIPTOR_CB = "com.brycewg.asrkb.aidl.ISpeechCallback"
     private const val CB_onState = IBinder.FIRST_CALL_TRANSACTION + 0
@@ -127,11 +156,49 @@ object AsrkbSpeechClient {
     private const val CB_onError = IBinder.FIRST_CALL_TRANSACTION + 3
     private const val CB_onAmplitude = IBinder.FIRST_CALL_TRANSACTION + 4
 
-    private fun unbind(ctx: Context) {
-        if (!bound) return
-        try { ctx.unbindService(connection!!) } catch (_: Throwable) {}
+    private const val STATE_IDLE = 0
+    private const val STATE_RECORDING = 1
+    private const val STATE_PROCESSING = 2
+    private const val STATE_ERROR = 3
+
+    private fun unbind() {
+        val ctx = ctxRef
+        try { if (bound && connection != null && ctx != null) ctx.unbindService(connection!!) } catch (_: Throwable) {}
         bound = false
         connection = null
+        remote = null
+        sessionId = -1
+        currentState = STATE_IDLE
+        holding = false
+        ctxRef = null
+    }
+
+    private fun stopSession() {
+        val b = remote ?: return
+        if (sessionId <= 0) return
+        val data = Parcel.obtain(); val reply = Parcel.obtain()
+        try {
+            data.writeInterfaceToken(DESCRIPTOR_SVC)
+            data.writeInt(sessionId)
+            b.transact(TRANSACTION_stopSession, data, reply, 0)
+            reply.readException()
+        } catch (t: Throwable) {
+            Log.w(TAG, "stopSession failed", t)
+        } finally { try { data.recycle() } catch (_: Throwable) {}; try { reply.recycle() } catch (_: Throwable) {} }
+    }
+
+    private fun cancelSession() {
+        val b = remote ?: return
+        if (sessionId <= 0) return
+        val data = Parcel.obtain(); val reply = Parcel.obtain()
+        try {
+            data.writeInterfaceToken(DESCRIPTOR_SVC)
+            data.writeInt(sessionId)
+            b.transact(TRANSACTION_cancelSession, data, reply, 0)
+            reply.readException()
+        } catch (t: Throwable) {
+            Log.w(TAG, "cancelSession failed", t)
+        } finally { try { data.recycle() } catch (_: Throwable) {}; try { reply.recycle() } catch (_: Throwable) {} }
     }
 
     private fun toast(ctx: Context, msg: String) {

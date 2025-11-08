@@ -225,7 +225,6 @@ class CommonKeyActionListener :
                             toggleIme()
                         }
                         SpaceLongPressBehavior.ShowPicker -> showInputMethodPicker()
-
                         SpaceLongPressBehavior.SimulateShiftKey -> service.postFcitxJob {
                             simulateShift()
                         }
@@ -250,10 +249,12 @@ class CommonKeyActionListener :
 
                         }
                         SpaceLongPressBehavior.VoiceInput -> {
-                            org.fcitx.fcitx5.android.link.AsrkbSpeechClient.startMockSession(service)
+                            org.fcitx.fcitx5.android.link.AsrkbSpeechClient.startHoldSession(service)
                         }
                     }
                 }
+                is KeyAction.StopVoiceInputAction ->
+                    org.fcitx.fcitx5.android.link.AsrkbSpeechClient.stopHoldSession()
                 else -> {}
             }
         }

@@ -179,6 +179,11 @@ abstract class BaseKeyboard(
                                 true
                             }
                         }
+                        GestureType.Up -> {
+                            // 抬起时通知停止语音输入（若存在按住开始的会话）
+                            onAction(KeyAction.StopVoiceInputAction)
+                            false
+                        }
                         else -> false
                     }
                 }
