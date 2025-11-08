@@ -247,6 +247,10 @@ class CommonKeyActionListener :
                                     }
                                 }
                             }
+
+                        }
+                        SpaceLongPressBehavior.VoiceInput -> {
+                            org.fcitx.fcitx5.android.link.AsrkbSpeechClient.startMockSession(service)
                         }
                     }
                 }

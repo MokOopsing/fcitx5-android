@@ -14,6 +14,6 @@ enum class SpaceLongPressBehavior(override val stringRes: Int) : ManagedPreferen
     ShowPicker(R.string.space_behavior_picker),
     SimulateShiftKey(R.string.space_behavior_simulate_shift),
     ToggleRimeAscii(R.string.space_behavior_toggle_ascii),
-    SwitchRimeSchema(R.string.space_behavior_switch_schema);
-
+    SwitchRimeSchema(R.string.space_behavior_switch_schema),
+    VoiceInput(R.string.space_behavior_voice_input);
 }
