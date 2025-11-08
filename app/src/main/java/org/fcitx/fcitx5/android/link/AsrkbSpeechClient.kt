@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import org.fcitx.fcitx5.android.input.FcitxInputMethodService
+import org.fcitx.fcitx5.android.R
 
 object AsrkbSpeechClient {
     private const val TAG = "AsrkbLink"
@@ -73,7 +74,7 @@ object AsrkbSpeechClient {
                                         val _sid = data.readInt()
                                         val codeVal = data.readInt()
                                         val msg = data.readString()
-                                        toast(ctx, "语音服务错误: $codeVal")
+                                        toast(ctx, mapCallbackError(ctx, codeVal, msg))
                                         unbind()
                                         reply?.writeNoException(); true
                                     }
@@ -104,7 +105,10 @@ object AsrkbSpeechClient {
                         try { data.recycle() } catch (_: Throwable) {}
                         try { reply.recycle() } catch (_: Throwable) {}
                     }
-                    if (sid <= 0) { toast(ctx, "无法启动会话: $sid"); unbind() }
+                    if (sid <= 0) {
+                        toast(ctx, mapStartError(ctx, sid))
+                        unbind()
+                    }
                     else { sessionId = sid; currentState = STATE_RECORDING }
                 } catch (t: Throwable) {
                     Log.w(TAG, "bind/start failed", t)
@@ -207,5 +211,22 @@ object AsrkbSpeechClient {
                 Toast.makeText(ctx, msg, Toast.LENGTH_SHORT).show()
             }
         } catch (_: Throwable) { }
+    }
+
+    private fun mapStartError(ctx: Context, code: Int): String {
+        return when (code) {
+            -2 -> ctx.getString(R.string.asrkb_err_busy)
+            -3 -> ctx.getString(R.string.asrkb_err_feature_disabled)
+            -4 -> ctx.getString(R.string.asrkb_err_mic_permission)
+            else -> ctx.getString(R.string.asrkb_err_start_failed_with_code, code)
+        }
+    }
+
+    private fun mapCallbackError(ctx: Context, code: Int, msg: String?): String {
+        return when (code) {
+            401 -> ctx.getString(R.string.asrkb_err_mic_permission)
+            403 -> ctx.getString(R.string.asrkb_err_feature_disabled)
+            else -> ctx.getString(R.string.asrkb_err_service_error_with_code, code)
+        }
     }
 }
