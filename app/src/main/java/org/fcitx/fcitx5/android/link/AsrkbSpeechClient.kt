@@ -28,6 +28,8 @@ object AsrkbSpeechClient {
     private var currentState: Int = STATE_IDLE
     private var holding: Boolean = false
     private var ctxRef: Context? = null
+    private var audioJob: kotlinx.coroutines.Job? = null
+    private var audioRecord: android.media.AudioRecord? = null
 
     fun startHoldSession(service: FcitxInputMethodService) {
         if (bound && remote != null && sessionId > 0) return
@@ -103,11 +105,10 @@ object AsrkbSpeechClient {
                     var sid = -999
                     try {
                         data.writeInterfaceToken(DESCRIPTOR_SVC)
-                        // 不发送配置（presence=0）：完全遵循言犀当前设置（含流式/非流式）
+                        // 推送PCM模式：presence=0 不传配置，服务端按当前设置决定走流/非流
                         data.writeInt(0)
-                        // write callback binder
                         data.writeStrongBinder(cbBinder)
-                        b.transact(TRANSACTION_startSession, data, reply, 0)
+                        b.transact(TRANSACTION_startPcmSession, data, reply, 0)
                         reply.readException()
                         sid = reply.readInt()
                     } finally {
@@ -117,8 +118,10 @@ object AsrkbSpeechClient {
                     if (sid <= 0) {
                         toast(ctx, mapStartError(ctx, sid))
                         unbind()
+                    } else {
+                        sessionId = sid; currentState = STATE_RECORDING
+                        startAudioStreaming(service)
                     }
-                    else { sessionId = sid; currentState = STATE_RECORDING }
                 } catch (t: Throwable) {
                     Log.w(TAG, "bind/start failed", t)
                     toast(ctx, "无法连接言犀服务")
@@ -161,6 +164,9 @@ object AsrkbSpeechClient {
     private const val TRANSACTION_startSession = IBinder.FIRST_CALL_TRANSACTION + 0
     private const val TRANSACTION_stopSession = IBinder.FIRST_CALL_TRANSACTION + 1
     private const val TRANSACTION_cancelSession = IBinder.FIRST_CALL_TRANSACTION + 2
+    private const val TRANSACTION_startPcmSession = IBinder.FIRST_CALL_TRANSACTION + 6
+    private const val TRANSACTION_writePcm = IBinder.FIRST_CALL_TRANSACTION + 7
+    private const val TRANSACTION_finishPcm = IBinder.FIRST_CALL_TRANSACTION + 8
 
     private const val DESCRIPTOR_CB = "com.brycewg.asrkb.aidl.ISpeechCallback"
     private const val CB_onState = IBinder.FIRST_CALL_TRANSACTION + 0
@@ -189,11 +195,12 @@ object AsrkbSpeechClient {
     private fun stopSession() {
         val b = remote ?: return
         if (sessionId <= 0) return
+        stopAudioStreaming()
         val data = Parcel.obtain(); val reply = Parcel.obtain()
         try {
             data.writeInterfaceToken(DESCRIPTOR_SVC)
             data.writeInt(sessionId)
-            b.transact(TRANSACTION_stopSession, data, reply, 0)
+            b.transact(TRANSACTION_finishPcm, data, reply, 0)
             reply.readException()
         } catch (t: Throwable) {
             Log.w(TAG, "stopSession failed", t)
@@ -203,6 +210,7 @@ object AsrkbSpeechClient {
     private fun cancelSession() {
         val b = remote ?: return
         if (sessionId <= 0) return
+        stopAudioStreaming()
         val data = Parcel.obtain(); val reply = Parcel.obtain()
         try {
             data.writeInterfaceToken(DESCRIPTOR_SVC)
@@ -211,6 +219,67 @@ object AsrkbSpeechClient {
             reply.readException()
         } catch (t: Throwable) {
             Log.w(TAG, "cancelSession failed", t)
+        } finally { try { data.recycle() } catch (_: Throwable) {}; try { reply.recycle() } catch (_: Throwable) {} }
+    }
+
+    private fun startAudioStreaming(service: FcitxInputMethodService) {
+        stopAudioStreaming()
+        audioJob = service.lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val sr = 16000
+            val ch = android.media.AudioFormat.CHANNEL_IN_MONO
+            val fmt = android.media.AudioFormat.ENCODING_PCM_16BIT
+            val minBuf = android.media.AudioRecord.getMinBufferSize(sr, ch, fmt)
+            val bytesPerSample = 2
+            val chunkBytes = (sr * 200 / 1000) * bytesPerSample
+            val bufSize = kotlin.math.max(minBuf, chunkBytes * 2)
+            var rec = android.media.AudioRecord(
+                android.media.MediaRecorder.AudioSource.VOICE_RECOGNITION,
+                sr, ch, fmt, bufSize
+            )
+            audioRecord = rec
+            try { rec.startRecording() } catch (t: Throwable) {
+                Log.w(TAG, "AudioRecord start failed, fallback MIC", t)
+                try { rec.release() } catch (_: Throwable) {}
+                rec = android.media.AudioRecord(
+                    android.media.MediaRecorder.AudioSource.MIC,
+                    sr, ch, fmt, bufSize
+                )
+                audioRecord = rec
+                try { rec.startRecording() } catch (e: Throwable) { Log.e(TAG, "AudioRecord MIC failed", e); return@launch }
+            }
+
+            val chunk = ByteArray(chunkBytes)
+            while (true) {
+                if (sessionId <= 0 || remote == null) break
+                val n = try { audioRecord?.read(chunk, 0, chunk.size) ?: -1 } catch (t: Throwable) { -1 }
+                if (n <= 0) break
+                writePcmFrame(chunk, n, sr, 1)
+            }
+        }
+    }
+
+    private fun stopAudioStreaming() {
+        try { audioJob?.cancel() } catch (_: Throwable) {}
+        audioJob = null
+        try { audioRecord?.stop() } catch (_: Throwable) {}
+        try { audioRecord?.release() } catch (_: Throwable) {}
+        audioRecord = null
+    }
+
+    private fun writePcmFrame(buf: ByteArray, len: Int, sr: Int, ch: Int) {
+        val b = remote ?: return
+        if (sessionId <= 0) return
+        val data = Parcel.obtain(); val reply = Parcel.obtain()
+        try {
+            data.writeInterfaceToken(DESCRIPTOR_SVC)
+            data.writeInt(sessionId)
+            if (len == buf.size) data.writeByteArray(buf) else data.writeByteArray(buf.copyOf(len))
+            data.writeInt(sr)
+            data.writeInt(ch)
+            b.transact(TRANSACTION_writePcm, data, reply, 0)
+            reply.readException()
+        } catch (t: Throwable) {
+            Log.w(TAG, "writePcm transact failed", t)
         } finally { try { data.recycle() } catch (_: Throwable) {}; try { reply.recycle() } catch (_: Throwable) {} }
     }
 
@@ -226,14 +295,16 @@ object AsrkbSpeechClient {
         return when (code) {
             -2 -> ctx.getString(R.string.asrkb_err_busy)
             -3 -> ctx.getString(R.string.asrkb_err_feature_disabled)
-            -4 -> ctx.getString(R.string.asrkb_err_mic_permission)
+            // -4（麦克风权限）已不再由服务端触发；保底用通用提示
+            -4 -> ctx.getString(R.string.asrkb_err_start_failed_with_code, code)
             else -> ctx.getString(R.string.asrkb_err_start_failed_with_code, code)
         }
     }
 
     private fun mapCallbackError(ctx: Context, code: Int, msg: String?): String {
         return when (code) {
-            401 -> ctx.getString(R.string.asrkb_err_mic_permission)
+            // 401（麦克风权限）不再用于推送PCM模式；保底用通用服务错误提示
+            401 -> ctx.getString(R.string.asrkb_err_service_error_with_code, code)
             403 -> ctx.getString(R.string.asrkb_err_feature_disabled)
             else -> ctx.getString(R.string.asrkb_err_service_error_with_code, code)
         }
