@@ -81,7 +81,6 @@ class InputDeviceManager(private val onChange: (Boolean) -> Unit) {
 
     private var startedInputView = false
     private var isNullInputType = true
-    private var hasKeyDown = false
 
     private var candidatesViewMode by AppPrefs.getInstance().candidates.mode
 
@@ -108,7 +107,6 @@ class InputDeviceManager(private val onChange: (Boolean) -> Unit) {
      * @return should force show input views on hardware key down
      */
     fun evaluateOnKeyDown(e: KeyEvent, service: FcitxInputMethodService): Boolean {
-        hasKeyDown = true
         if (startedInputView) {
             // filter out back/home/volume buttons and combination keys
             if (e.unicodeChar != 0) {
@@ -159,14 +157,13 @@ class InputDeviceManager(private val onChange: (Boolean) -> Unit) {
     }
 
     /**
-     * @return should force show inputView for [CandidatesView] when input method changes
+     * @return should force show inputView for [CandidatesView] when input method switched by user
      */
     fun evaluateOnInputMethodChange(): Boolean {
-        return if (isVirtualKeyboard || startedInputView) false else hasKeyDown
+        return !isVirtualKeyboard && !startedInputView
     }
 
     fun onFinishInputView() {
         startedInputView = false
-        hasKeyDown = false
     }
 }
