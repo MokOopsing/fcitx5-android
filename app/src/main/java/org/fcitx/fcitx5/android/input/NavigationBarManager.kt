@@ -118,4 +118,8 @@ class NavigationBarManager {
             v.requestApplyInsets()
         }
     }
+
+    fun resetInputViewInsets(v: BaseInputView) {
+        v.setOnApplyWindowInsetsListener(emptyOnApplyWindowInsetsListener)
+    }
 }

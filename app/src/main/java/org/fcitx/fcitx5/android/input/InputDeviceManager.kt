@@ -5,6 +5,7 @@
 
 package org.fcitx.fcitx5.android.input
 
+import android.content.res.Configuration
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -28,7 +29,6 @@ class InputDeviceManager(private val onChange: (Boolean) -> Unit) {
         } else {
             iv.visibility = View.GONE
         }
-        setupCandidatesViewEvents(false)
     }
 
     private fun setupCandidatesViewEvents(isVirtual: Boolean) {
@@ -36,16 +36,16 @@ class InputDeviceManager(private val onChange: (Boolean) -> Unit) {
         cv.handleEvents = !isVirtual
         // hide CandidatesView when entering virtual keyboard mode,
         // but preserve the visibility when entering physical keyboard mode (in case it's empty)
-        /* if (isVirtual) {
+        if (isVirtual) {
             cv.visibility = View.GONE
         } else {
             cv.refreshWithCachedEvents()
-        } */
+        }
     }
 
     private fun setupViewEvents(isVirtual: Boolean) {
         setupInputViewEvents(isVirtual)
-        setupCandidatesViewEvents(false)
+        setupCandidatesViewEvents(isVirtual)
     }
 
     var isVirtualKeyboard = true
@@ -65,15 +65,14 @@ class InputDeviceManager(private val onChange: (Boolean) -> Unit) {
     }
 
     private fun applyMode(service: FcitxInputMethodService, useVirtualKeyboard: Boolean) {
-        /*if (useVirtualKeyboard == isVirtualKeyboard) {
+        if (useVirtualKeyboard == isVirtualKeyboard) {
             return
-        }*/
+        }
         // monitor CursorAnchorInfo when switching to CandidatesView
-        /* updates: always call monitorCursorAnchor, no need call it here
-         * service.currentInputConnection.monitorCursorAnchor(/* !useVirtualKeyboard */)
-         */
+        /* updates: always call monitorCursorAnchor, no need call it here */
+        service.currentInputConnection.monitorCursorAnchor(!useVirtualKeyboard)
         service.postFcitxJob {
-            setCandidatePagingMode(/*if (useVirtualKeyboard) 0 else*/ 1)
+            setCandidatePagingMode(if (useVirtualKeyboard) 0 else 1)
         }
         isVirtualKeyboard = useVirtualKeyboard
         onChange(isVirtualKeyboard)

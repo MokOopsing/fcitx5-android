@@ -77,6 +77,7 @@ import splitties.dimensions.dp
 import splitties.resources.styledColor
 import timber.log.Timber
 import kotlin.math.max
+import android.content.Context
 
 class FcitxInputMethodService : LifecycleInputMethodService() {
 
@@ -128,6 +129,8 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     private val prefs = AppPrefs.getInstance()
     private val inlineSuggestions by prefs.keyboard.inlineSuggestions
     private val ignoreSystemCursor by prefs.advanced.ignoreSystemCursor
+    private val isLandscape: Boolean
+        get() = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     private val recreateInputViewPrefs: Array<ManagedPreference<*>> = arrayOf(
         prefs.keyboard.expandKeypressArea,
@@ -139,7 +142,11 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         val newInputView = InputView(this, fcitx, theme)
         setInputView(newInputView)
         inputDeviceMgr.setInputView(newInputView)
-        navbarMgr.setupInputView(newInputView)
+        if(!isLandscape) {
+            navbarMgr.setupInputView(newInputView)
+        } else {
+            navbarMgr.resetInputViewInsets(newInputView)
+        }
         inputView = newInputView
         return newInputView
     }
@@ -542,27 +549,58 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     }
 
     override fun onConfigureWindow(win: Window, isFullscreen: Boolean, isCandidatesOnly: Boolean) {
-        win.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        if (isLandscape && inputDeviceMgr.isVirtualKeyboard) {
+            // 横屏时悬浮键盘，宽高为屏幕的70%和40%
+            val dm = resources.displayMetrics
+            val width = (dm.widthPixels * 0.4).toInt()
+            val height = (dm.heightPixels * 0.7).toInt()
+            win.setLayout(width, height)
+            win.setGravity(android.view.Gravity.TOP or android.view.Gravity.START)
+            // 读取保存的位置
+            val prefs = getSharedPreferences("floating_keyboard", Context.MODE_PRIVATE)
+            val x = prefs.getInt("float_x", (dm.widthPixels - width) / 2)
+            val y = prefs.getInt("float_y", (dm.heightPixels - height) / 2)
+            val params = win.attributes
+            params.x = x
+            params.y = y
+            win.attributes = params
+        } else {
+            // 纵屏时保持原有行为
+            win.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        }
     }
 
     private var inputViewLocation = intArrayOf(0, 0)
 
     override fun onComputeInsets(outInsets: Insets) {
-        if (inputDeviceMgr.isVirtualKeyboard) {
-            inputView?.keyboardView?.getLocationInWindow(inputViewLocation)
+        // 计算导航栏高度调整后的高度
+        fun navigationAdjustedHeight(): Int {
+            val navHeight = decorView.findViewById<View>(android.R.id.navigationBarBackground)?.height ?: 0
+            val h = decorView.height
+            Timber.i("in onComputeInsets decorView.height is ${decorView.height}, navHeight is $navHeight")
+            return decorView.height - navHeight
+        }
+
+        // 更新 Insets 的通用函数
+        fun setInsets(top: Int, touchable: Int) {
+            Timber.i("in onComputeInsets setInsets top is $top, touchable is $touchable")
             outInsets.apply {
-                contentTopInsets = inputViewLocation[1]
-                visibleTopInsets = inputViewLocation[1]
-                touchableInsets = Insets.TOUCHABLE_INSETS_VISIBLE
+                contentTopInsets = top
+                visibleTopInsets = top
+                touchableInsets = touchable
+            }
+        }
+
+        if (inputDeviceMgr.isVirtualKeyboard) {
+            if (isLandscape) {
+                setInsets(navigationAdjustedHeight(), Insets.TOUCHABLE_INSETS_FRAME)
+            } else {
+                inputView?.keyboardView?.getLocationInWindow(inputViewLocation)
+                Timber.i("in onComputeInsets inputViewLocation is ${inputViewLocation.contentToString()}")
+                setInsets(inputViewLocation[1], Insets.TOUCHABLE_INSETS_VISIBLE)
             }
         } else {
-            val n = decorView.findViewById<View>(android.R.id.navigationBarBackground)?.height ?: 0
-            val h = decorView.height - n
-            outInsets.apply {
-                contentTopInsets = h
-                visibleTopInsets = h
-                touchableInsets = Insets.TOUCHABLE_INSETS_VISIBLE
-            }
+            setInsets(navigationAdjustedHeight(), Insets.TOUCHABLE_INSETS_VISIBLE)
         }
     }
 
@@ -715,7 +753,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
             // because onStartInputView will always be called after onStartInput,
             // editorInfo and capFlags should be up-to-date
             inputView?.startInput(info, capabilityFlags, restarting)
-        } /* else {
+        } else {
             if (currentInputConnection?.monitorCursorAnchor() != true) {
                 if (!decorLocationUpdated) {
                     updateDecorLocation()
@@ -724,14 +762,6 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                 // support monitoring CursorAnchorInfo
                 workaroundNullCursorAnchorInfo()
             }
-        } */
-        if (currentInputConnection?.monitorCursorAnchor() != true) {
-            if (!decorLocationUpdated) {
-                updateDecorLocation()
-            }
-            // anchor CandidatesView to bottom-left corner in case InputConnection does not
-            // support monitoring CursorAnchorInfo
-            workaroundNullCursorAnchorInfo()
         }
     }
 
@@ -775,22 +805,10 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
      */
     private fun workaroundNullCursorAnchorInfo() {
         val gapValue = 20f
-        if (inputDeviceMgr.isVirtualKeyboard) {
-            inputView?.keyboardView?.getLocationInWindow(inputViewLocation)
-            anchorPosition[0] = inputViewLocation[0].toFloat() + gapValue
-            anchorPosition[1] = inputViewLocation[1].toFloat() - gapValue
-            anchorPosition[2] = inputViewLocation[0].toFloat() + gapValue
-            anchorPosition[3] = inputViewLocation[1].toFloat() - gapValue
-            if (inputViewLocation[1] > 0) {
-                contentSize[1] = inputViewLocation[1].toFloat() - gapValue
-            }
-        } else {
-            anchorPosition[0] = 0f + gapValue
-            anchorPosition[1] = contentSize[1] - gapValue
-            anchorPosition[2] = 0f + gapValue
-            anchorPosition[3] = contentSize[1] - gapValue
-        }
-        //contentSize[0] = contentSize[0] + gapValue
+        anchorPosition[0] = 0f
+        anchorPosition[1] = contentSize[1]
+        anchorPosition[2] = 0f
+        anchorPosition[3] = contentSize[1]
         candidatesView?.updateCursorAnchor(anchorPosition, contentSize)
     }
 
@@ -815,6 +833,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
             updateDecorLocation()
         }
         if (anchorPosition.any(Float::isNaN)) {
+            // anchor candidates view to bottom-left corner in case CursorAnchorInfo is invalid
             workaroundNullCursorAnchorInfo()
             return
         }
@@ -825,21 +844,6 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         anchorPosition[1] -= yOffset
         anchorPosition[2] -= xOffset
         anchorPosition[3] -= yOffset
-        if (inputDeviceMgr.isVirtualKeyboard) {
-            inputView?.keyboardView?.getLocationInWindow(inputViewLocation)
-            if (inputViewLocation[1] > 0) {
-                contentSize[1] = inputViewLocation[1].toFloat()
-                if (anchorPosition[1] > contentSize[1]) { //when in chatgpt online web 
-                    val gapValue = 20f
-                    anchorPosition[0] = inputViewLocation[0].toFloat() + gapValue
-                    anchorPosition[1] = inputViewLocation[1].toFloat() - gapValue
-                    anchorPosition[2] = inputViewLocation[0].toFloat() + gapValue
-                    anchorPosition[3] = inputViewLocation[1].toFloat() - gapValue
-                    contentSize[1] = inputViewLocation[1].toFloat() - gapValue
-                    //contentSize[0] = contentSize[0] + gapValue
-                }
-            }
-        }
         candidatesView?.updateCursorAnchor(anchorPosition, contentSize)
     }
 

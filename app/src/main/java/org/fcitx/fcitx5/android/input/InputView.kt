@@ -38,7 +38,7 @@ import org.fcitx.fcitx5.android.input.picker.emojiPicker
 import org.fcitx.fcitx5.android.input.picker.emoticonPicker
 import org.fcitx.fcitx5.android.input.picker.symbolPicker
 import org.fcitx.fcitx5.android.input.popup.PopupComponent
-//import org.fcitx.fcitx5.android.input.preedit.PreeditComponent
+import org.fcitx.fcitx5.android.input.preedit.PreeditComponent
 import org.fcitx.fcitx5.android.input.wm.InputWindowManager
 import org.fcitx.fcitx5.android.utils.unset
 import org.mechdancer.dependency.DynamicScope
@@ -64,6 +64,18 @@ import splitties.views.dsl.core.view
 import splitties.views.dsl.core.withTheme
 import splitties.views.dsl.core.wrapContent
 import splitties.views.imageDrawable
+
+import android.content.Context
+import android.content.SharedPreferences
+import android.graphics.drawable.GradientDrawable
+import android.view.MotionEvent
+import android.graphics.Outline
+import android.view.ViewOutlineProvider
+
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import androidx.core.graphics.ColorUtils
+import timber.log.Timber
 
 @SuppressLint("ViewConstructor")
 class InputView(
@@ -100,7 +112,7 @@ class InputView(
     private val punctuation = PunctuationComponent()
     private val returnKeyDrawable = ReturnKeyDrawableComponent()
     private val preeditEmptyState = PreeditEmptyStateComponent()
-    //private val preedit = PreeditComponent()
+    private val preedit = PreeditComponent()
     private val commonKeyActionListener = CommonKeyActionListener()
     private val windowManager = InputWindowManager()
     private val kawaiiBar = KawaiiBarComponent()
@@ -121,7 +133,7 @@ class InputView(
         scope += punctuation
         scope += returnKeyDrawable
         scope += preeditEmptyState
-        //scope += preedit
+        scope += preedit
         scope += commonKeyActionListener
         scope += windowManager
         scope += kawaiiBar
@@ -151,11 +163,11 @@ class InputView(
 
     private val keyboardHeightPx: Int
         get() {
-            val percent = when (resources.configuration.orientation) {
-                Configuration.ORIENTATION_LANDSCAPE -> keyboardHeightPercentLandscape
-                else -> keyboardHeightPercent
-            }.getValue()
-            return resources.displayMetrics.heightPixels * percent / 100
+            val basePercent = when (resources.configuration.orientation) {
+                Configuration.ORIENTATION_LANDSCAPE -> keyboardHeightPercentLandscape.getValue() * 0.7f
+                else -> keyboardHeightPercent.getValue().toFloat()
+            }
+            return (resources.displayMetrics.heightPixels * basePercent / 100f).toInt()
         }
 
     private val keyboardSidePaddingPx: Int
@@ -184,6 +196,17 @@ class InputView(
     }
 
     val keyboardView: View
+
+    private val dragBarView = view(::View) {
+        setOnClickListener(placeholderOnClickListener)
+    }
+    private var lastTouchY = 0f
+    private var lastTouchX = 0f
+    private var windowOffsetY = 0
+    private var windowOffsetX = 0
+
+    private val prefs: SharedPreferences
+        get() = context.getSharedPreferences("floating_keyboard", Context.MODE_PRIVATE)
 
     init {
         // MUST call before any operation
@@ -245,20 +268,111 @@ class InputView(
 
         updateKeyboardSize()
 
-        /* add(preedit.ui.root, lParams(matchParent, wrapContent) {
+        add(preedit.ui.root, lParams(matchParent, wrapContent) {
             above(keyboardView)
             centerHorizontally()
-        }) */
-        add(keyboardView, lParams(matchParent, wrapContent) {
-            centerHorizontally()
-            bottomOfParent()
         })
+        if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            add(keyboardView, lParams(matchParent, wrapContent) {
+                centerHorizontally()
+                above(dragBarView) // 键盘在拖动条上方
+            })
+            add(dragBarView, lParams(matchParent, dp(24)) {
+                bottomOfParent()
+                centerHorizontally()
+            })
+        } else {
+            add(keyboardView, lParams(matchParent, wrapContent) {
+                centerHorizontally()
+                bottomOfParent()
+            })
+        }
         add(popup.root, lParams(matchParent, matchParent) {
             centerVertically()
             centerHorizontally()
         })
+        if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            val baseDrawable = theme.backgroundDrawable(keyBorder)
+            var color = 0xFFFFFFFF.toInt() // 默认白色
+            when (baseDrawable) {
+                is ColorDrawable -> color = baseDrawable.color
+                is GradientDrawable -> baseDrawable.color?.getColorForState(intArrayOf(), color)?.let { color = it }
+            }
+            // 给颜色加透明度，例如 80%
+            val fillColor = (color and 0x00FFFFFF) or (0xCC shl 24) // CC = 204 = 80% 可见
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                cornerRadius = dp(8).toFloat()
+                setColor(fillColor)         // 半透明填充
+                setStroke(dp(1), color)     // 边框用原主题色
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                clipToOutline = true
+            }
+            // dragBarView 背景，比 color 深一些
+            val darkerColor = ColorUtils.blendARGB(color, 0x000000, 0.2f)
+            // 这里 0.2f 表示 20% 混合黑色，越大越深
 
+            dragBarView.background = GradientDrawable().apply {
+                shape = GradientDrawable.RECTANGLE
+                setColor(darkerColor)
+            }
+
+            dragBarView.setOnTouchListener { v, e -> handleDragBarTouch(v, e) }
+        } else {
+            dragBarView.visibility = GONE
+            dragBarView.background = null
+            dragBarView.setOnTouchListener(null)
+            background = null
+        }
         keyboardPrefs.registerOnChangeListener(onKeyboardSizeChangeListener)
+    }
+
+    private fun handleDragBarTouch(view: View, event: MotionEvent): Boolean {
+        val win = service.window.window ?: return false
+        val params = win.attributes
+        val dm = resources.displayMetrics
+        val insets = win.decorView.rootWindowInsets
+        val systemBottom = insets?.getInsets(WindowInsets.Type.systemGestures())?.bottom ?: 0
+        val minBottomMargin = systemBottom.coerceAtLeast(dp(75))
+
+        when (event.action) {
+            MotionEvent.ACTION_DOWN -> {
+                lastTouchY = event.rawY
+                lastTouchX = event.rawX
+                windowOffsetY = params.y
+                windowOffsetX = params.x
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                val dy = (event.rawY - lastTouchY).toInt()
+                val dx = (event.rawX - lastTouchX).toInt()
+
+                var newY = windowOffsetY + dy
+                var newX = windowOffsetX + dx
+
+                val maxX = (dm.widthPixels - win.decorView.width).coerceAtLeast(0)
+                val maxBottomY = (dm.heightPixels - win.decorView.height - minBottomMargin).coerceAtLeast(0)
+                Timber.i("in handleDragBarTouch dm.heightPixels is ${dm.heightPixels}, decorView.height is ${win.decorView.height}, minBottomMargin is ${minBottomMargin}, maxBottomY is $maxBottomY")
+
+                newX = newX.coerceIn(0, maxX)
+                newY = newY.coerceIn(0, maxBottomY)
+
+                params.y = newY
+                params.x = newX
+                win.attributes = params
+                return true
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                prefs.edit()
+                    .putInt("float_x", params.x)
+                    .putInt("float_y", params.y)
+                    .apply()
+                win.setLayout(params.width, params.height)
+                return true
+            }
+        }
+        return false
     }
 
     private fun updateKeyboardSize() {
