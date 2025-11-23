@@ -162,6 +162,13 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             "space_long_press_behavior",
             SpaceLongPressBehavior.ToggleRimeAscii
         )
+        
+        val voiceInputTapToStop = switch(
+            R.string.voice_input_tap_to_stop,
+            "voice_input_tap_to_stop",
+            false
+        ) { spaceKeyLongPressBehavior.getValue() == SpaceLongPressBehavior.VoiceInput }
+        
         val spaceSwipeMoveCursor =
             switch(R.string.space_swipe_move_cursor, "space_swipe_move_cursor", true)
         val showLangSwitchKey =

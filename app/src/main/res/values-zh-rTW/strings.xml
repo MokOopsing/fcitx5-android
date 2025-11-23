@@ -228,6 +228,7 @@
     <string name="main_program">主程式</string>
     <string name="edit_theme">編輯主題</string>
     <string name="show_voice_input_button">顯示語音輸入鍵</string>
+    <string name="voice_input_tap_to_stop">使用點按控制語音輸入</string>
     <string name="fcitx_daemon">Fcitx 常駐程式</string>
     <string name="restarting_fcitx">重新啟動 Fcitx</string>
     <string name="plugin_needs_reload">偵測到有外掛程式變化，點此重新載入</string>

@@ -221,6 +221,7 @@
     <string name="main_program">メインプログラム</string>
     <string name="edit_theme">テーマを編集</string>
     <string name="show_voice_input_button">音声入力ボタンを表示する</string>
+    <string name="voice_input_tap_to_stop">タップで音声入力を終了する</string>
     <string name="fcitx_daemon">Fcitxデーモン</string>
     <string name="restarting_fcitx">Fcitxを再起動中</string>
     <string name="plugin_needs_reload">プラグインの変更を除去しました。ここをクリックして再読み込みします</string>

@@ -170,6 +170,8 @@ object AsrkbSpeechClient {
         }
     }
 
+    fun isHolding(): Boolean = holding
+
     // 与服务端保持一致的接口描述符与事务号
     private const val DESCRIPTOR_SVC = "com.brycewg.asrkb.aidl.IExternalSpeechService"
     private const val TRANSACTION_startSession = IBinder.FIRST_CALL_TRANSACTION + 0
