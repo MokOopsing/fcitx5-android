@@ -11,6 +11,7 @@ import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import androidx.transition.Slide
 import androidx.transition.TransitionManager
 import androidx.transition.TransitionSet
@@ -210,8 +211,15 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
         val wave = org.fcitx.fcitx5.android.input.voice.WaveformView(context).apply {
-            // 使用主题强调前景色绘制波形
-            val lineColor = theme.genericActiveForegroundColor
+            // Use a higher-contrast foreground color so the waveform stays visible on light backgrounds
+            val candidateColors = listOf(
+                theme.genericActiveForegroundColor,
+                theme.accentKeyBackgroundColor,
+                theme.keyTextColor
+            )
+            val lineColor = candidateColors.firstOrNull {
+                ColorUtils.calculateContrast(it, bgColor) >= 2.5
+            } ?: theme.genericActiveForegroundColor
             setWaveformColor(lineColor)
             visibility = View.VISIBLE
             start()
