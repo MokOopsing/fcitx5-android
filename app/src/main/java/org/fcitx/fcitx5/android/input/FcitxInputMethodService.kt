@@ -567,11 +567,16 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     override fun onComputeInsets(outInsets: Insets) {
         if (inputDeviceMgr.isVirtualKeyboard) {
             if (isLandscapeFloatingMode()) {
+                // 横屏浮动模式：键盘不占用应用空间，完全透明悬浮
+                val n = decorView.findViewById<View>(android.R.id.navigationBarBackground)?.height ?: 0
+                val h = decorView.height - n
                 outInsets.apply {
-                    contentTopInsets = 0
-                    visibleTopInsets = 0
+                    contentTopInsets = h
+                    visibleTopInsets = h
                     touchableInsets = Insets.TOUCHABLE_INSETS_VISIBLE
                 }
+                // 设置键盘透明度
+                inputView?.alpha = 0.7f
                 return
             } else {
                 inputView?.keyboardView?.getLocationInWindow(inputViewLocation)
@@ -580,6 +585,8 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                     visibleTopInsets = inputViewLocation[1]
                     touchableInsets = Insets.TOUCHABLE_INSETS_VISIBLE
                 }
+                // 竖屏模式恢复完全不透明
+                inputView?.alpha = 1.0f
             }
         } else {
             val n = decorView.findViewById<View>(android.R.id.navigationBarBackground)?.height ?: 0
@@ -589,6 +596,8 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                 visibleTopInsets = h
                 touchableInsets = Insets.TOUCHABLE_INSETS_VISIBLE
             }
+            // 物理键盘模式恢复完全不透明
+            inputView?.alpha = 1.0f
         }
     }
 
