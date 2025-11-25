@@ -570,11 +570,24 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                 // 横屏浮动模式：键盘不占用应用空间，完全透明悬浮
                 val n = decorView.findViewById<View>(android.R.id.navigationBarBackground)?.height ?: 0
                 val h = decorView.height - n
-                outInsets.apply {
-                    contentTopInsets = h
-                    visibleTopInsets = h
-                    touchableInsets = Insets.TOUCHABLE_INSETS_VISIBLE
+                outInsets.contentTopInsets = h
+                outInsets.visibleTopInsets = h
+                // 计算 inputView 在 window 内的位置（或 screen，根据需要）
+                inputView?.let { v ->
+                    val loc = IntArray(2)
+                    v.getLocationInWindow(loc) // 或 getLocationOnScreen，根据场景对齐
+                    val left = loc[0]
+                    val top = loc[1]
+                    val right = left + v.width
+                    val bottom = top + v.height
+
+                    outInsets.apply {
+                        touchableInsets = Insets.TOUCHABLE_INSETS_REGION
+                        touchableRegion.set(left, top, right, bottom)
+                    }
                 }
+                // 设置键盘透明度
+                inputView?.alpha = 0.7f
                 return
             } else {
                 inputView?.keyboardView?.getLocationInWindow(inputViewLocation)
@@ -583,6 +596,8 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                     visibleTopInsets = inputViewLocation[1]
                     touchableInsets = Insets.TOUCHABLE_INSETS_VISIBLE
                 }
+                // 竖屏模式恢复完全不透明
+                inputView?.alpha = 1.0f
             }
         } else {
             val n = decorView.findViewById<View>(android.R.id.navigationBarBackground)?.height ?: 0
@@ -592,6 +607,8 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                 visibleTopInsets = h
                 touchableInsets = Insets.TOUCHABLE_INSETS_VISIBLE
             }
+            // 物理键盘模式恢复完全不透明
+            inputView?.alpha = 1.0f
         }
     }
 
