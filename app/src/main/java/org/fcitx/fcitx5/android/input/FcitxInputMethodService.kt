@@ -587,7 +587,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                     }
                 }
                 // 设置键盘透明度
-                inputView?.alpha = 0.7f
+                inputView?.alpha = 0.5f
                 return
             } else {
                 inputView?.keyboardView?.getLocationInWindow(inputViewLocation)

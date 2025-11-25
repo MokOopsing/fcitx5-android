@@ -10,6 +10,7 @@ import android.content.res.Configuration
 import android.os.Build
 import android.view.View
 import android.view.View.OnClickListener
+import android.view.MotionEvent
 import android.view.WindowInsets
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InlineSuggestionsResponse
@@ -130,6 +131,10 @@ class InputView(
     }
 
     private val keyboardPrefs = AppPrefs.getInstance().keyboard
+
+    private var activeTouchCount = 0
+    private var alphaRestoreRunnable: Runnable? = null
+    private val ALPHA_RESTORE_DELAY_MS = 200L  // 延迟 200ms 后恢复半透明
 
     private val focusChangeResetKeyboard by keyboardPrefs.focusChangeResetKeyboard
 
@@ -253,12 +258,59 @@ class InputView(
             centerHorizontally()
             bottomOfParent()
         })
+        // 当用户按下键盘时设置为不透明，抬起/取消时在横屏悬浮模式下恢复半透明
+        keyboardView.setOnTouchListener { _, ev ->
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    activeTouchCount = 1
+                    this@InputView.alpha = 1.0f
+                    // 取消之前的延迟恢复任务
+                    alphaRestoreRunnable?.let { handler.removeCallbacks(it) }
+                    alphaRestoreRunnable = null
+                }
+                MotionEvent.ACTION_POINTER_DOWN -> {
+                    activeTouchCount += 1
+                    this@InputView.alpha = 1.0f
+                    // 取消之前的延迟恢复任务
+                    alphaRestoreRunnable?.let { handler.removeCallbacks(it) }
+                    alphaRestoreRunnable = null
+                }
+                MotionEvent.ACTION_POINTER_UP -> {
+                    activeTouchCount = (activeTouchCount - 1).coerceAtLeast(0)
+                    if (activeTouchCount == 0 && resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                        scheduleAlphaRestore()
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    activeTouchCount = 0
+                    if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                        scheduleAlphaRestore()
+                    } else {
+                        this@InputView.alpha = 1.0f
+                    }
+                }
+            }
+            // do not consume touch, let normal keyboard handling proceed
+            false
+        }
         add(popup.root, lParams(matchParent, matchParent) {
             centerVertically()
             centerHorizontally()
         })
 
         keyboardPrefs.registerOnChangeListener(onKeyboardSizeChangeListener)
+    }
+
+    private fun scheduleAlphaRestore() {
+        // 取消已存在的恢复任务
+        alphaRestoreRunnable?.let { handler.removeCallbacks(it) }
+        alphaRestoreRunnable = Runnable {
+            if (activeTouchCount == 0) {
+                this@InputView.alpha = 0.5f
+            }
+            alphaRestoreRunnable = null
+        }
+        handler.postDelayed(alphaRestoreRunnable!!, ALPHA_RESTORE_DELAY_MS)
     }
 
     private fun updateKeyboardSize() {
