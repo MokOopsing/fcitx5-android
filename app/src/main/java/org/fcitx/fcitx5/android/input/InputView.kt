@@ -135,6 +135,8 @@ class InputView(
     private var activeTouchCount = 0
     private var alphaRestoreRunnable: Runnable? = null
     private val ALPHA_RESTORE_DELAY_MS = 200L  // 延迟 200ms 后恢复半透明
+    private val LANDSCAPE_FLOATING_ALPHA = 0.5f  // 横屏悬浮透明度
+    private val NORMAL_ALPHA = 1.0f  // 正常（不透明）
 
     private val focusChangeResetKeyboard by keyboardPrefs.focusChangeResetKeyboard
 
@@ -258,7 +260,10 @@ class InputView(
             centerHorizontally()
             bottomOfParent()
         })
-        // 当用户按下键盘时设置为不透明，抬起/取消时在横屏悬浮模式下恢复半透明
+        // 初始化透明度：根据当前方向设置初始值
+        updateAlphaForCurrentMode()
+        
+        // 当用户按下键盘时设置为不透明，抬起/取消时恢复对应模式下的透明度
         keyboardView.setOnTouchListener { _, ev ->
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
@@ -283,11 +288,7 @@ class InputView(
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     activeTouchCount = 0
-                    if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                        scheduleAlphaRestore()
-                    } else {
-                        this@InputView.alpha = 1.0f
-                    }
+                    scheduleAlphaRestore()
                 }
             }
             // do not consume touch, let normal keyboard handling proceed
@@ -301,12 +302,21 @@ class InputView(
         keyboardPrefs.registerOnChangeListener(onKeyboardSizeChangeListener)
     }
 
+    private fun updateAlphaForCurrentMode() {
+        val targetAlpha = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            LANDSCAPE_FLOATING_ALPHA
+        } else {
+            NORMAL_ALPHA
+        }
+        this@InputView.alpha = targetAlpha
+    }
+
     private fun scheduleAlphaRestore() {
         // 取消已存在的恢复任务
         alphaRestoreRunnable?.let { handler.removeCallbacks(it) }
         alphaRestoreRunnable = Runnable {
             if (activeTouchCount == 0) {
-                this@InputView.alpha = 0.5f
+                updateAlphaForCurrentMode()
             }
             alphaRestoreRunnable = null
         }
