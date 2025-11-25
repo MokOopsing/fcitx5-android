@@ -264,7 +264,8 @@ class InputView(
         updateAlphaForCurrentMode()
         
         // 当用户按下键盘时设置为不透明，抬起/取消时恢复对应模式下的透明度
-        keyboardView.setOnTouchListener { _, ev ->
+        // 监听实际的窗口容器（windowManager.view），因为键盘布局是通过 KeyboardWindow 添加到该容器中的
+        windowManager.view.setOnTouchListener { _, ev ->
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     activeTouchCount = 1
