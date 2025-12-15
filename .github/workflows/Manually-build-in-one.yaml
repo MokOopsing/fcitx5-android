@@ -92,7 +92,7 @@ jobs:
           done
 
       - name: Sign app and plugins
-        uses: kevin-david/zipalign-sign-android-release@v1.1.1
+        uses: kevin-david/zipalign-sign-android-release@v2
         #uses: rpavlik/sign-android-release@master
         id: sign_apk
         with:
@@ -103,7 +103,7 @@ jobs:
           keyPassword: ${{ secrets.KEY_PASSWORD }}
           zipAlign: true
         env:
-          BUILD_TOOLS_VERSION: "33.0.2"
+          BUILD_TOOLS_VERSION: "35.0.0"
 
       - name: Upload app and plugins
         uses: actions/upload-artifact@v4
