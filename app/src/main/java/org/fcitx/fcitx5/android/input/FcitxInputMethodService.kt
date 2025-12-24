@@ -106,7 +106,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         postFcitxJob {
             setCandidatePagingMode(/*if (isVirtualKeyboard) 0 else*/ 1)
         }
-        currentInputConnection?.monitorCursorAnchor(!isVirtualKeyboard)
+        //currentInputConnection?.monitorCursorAnchor(!isVirtualKeyboard)
         window.window?.let {
             navbarMgr.evaluate(it, isVirtualKeyboard)
         }
@@ -664,6 +664,9 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         }
         if (firstBindInput) {
             firstBindInput = false
+            postFcitxJob {
+                setCandidatePagingMode(/*if (isVirtualKeyboard) 0 else*/ 1)
+            }
             // only use input method from subtype for the first `onBindInput`, because
             // 1. fcitx has `ShareInputState` option, thus reading input method from subtype
             //    everytime would ruin `ShareInputState=Program`
