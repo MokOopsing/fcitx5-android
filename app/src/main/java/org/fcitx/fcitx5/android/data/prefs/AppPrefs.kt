@@ -144,6 +144,34 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             switch(R.string.show_voice_input_button, "show_voice_input_button", false)
         val expandKeypressArea =
             switch(R.string.expand_keypress_area, "expand_keypress_area", false)
+        
+        // blank ratio used when the keyboard is split. since splits are
+        // only allowed in landscape orientation, only a single value is
+        // needed.
+        val splitKeyboardBlankRatio: ManagedPreference.PInt
+        val splitKeyboardThreshold: ManagedPreference.PFloat
+
+        init {
+            splitKeyboardBlankRatio = int(
+                R.string.split_keyboard_blank_ratio,
+                "split_keyboard_blank_ratio",
+                30,
+                0,
+                60,
+                "%"
+            )
+        }
+
+        init {
+            splitKeyboardThreshold = float(
+                R.string.split_keyboard_threshold,
+                "split_keyboard_threshold",
+                1.5f,
+                1.0f,
+                4.0f,
+                "x"
+            )
+        }
         val swipeSymbolDirection = enumList(
             R.string.swipe_symbol_behavior,
             "swipe_symbol_behavior",

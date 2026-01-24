@@ -99,6 +99,9 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     private val expandToolbarByDefault by prefs.keyboard.expandToolbarByDefault
     private val toolbarNumRowOnPassword by prefs.keyboard.toolbarNumRowOnPassword
     private val showVoiceInputButton by prefs.keyboard.showVoiceInputButton
+    
+    private val themePrefs = ThemeManager.prefs
+    private val keyboardPrefs = prefs.keyboard
 
     private var clipboardTimeoutJob: Job? = null
 
@@ -150,6 +153,10 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
                 else -> {}
             }
         }
+
+    private var keyboardWidth = 0
+    private var keyboardHeight = 0
+    private var buttonsUiRef: org.fcitx.fcitx5.android.input.bar.ui.idle.ButtonsBarUi? = null
 
     private fun launchClipboardTimeoutJob() {
         clipboardTimeoutJob?.cancel()
@@ -248,10 +255,12 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
                 clipboardButton.setOnClickListener {
                     windowManager.attachWindow(ClipboardWindow())
                 }
+                // split keyboard button now reflects automatic split availability; no manual toggle
                 moreButton.setOnClickListener {
                     windowManager.attachWindow(StatusAreaWindow())
                 }
             }
+            buttonsUiRef = buttonsUi
             clipboardUi.suggestionView.apply {
                 setOnClickListener {
                     ClipboardManager.lastEntry?.let {
@@ -318,6 +327,11 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
         }
         candidateUi.expandButton.setIcon(R.drawable.ic_baseline_expand_more_24)
         candidateUi.expandButton.contentDescription = context.getString(R.string.expand_candidates_list)
+    }
+
+    fun onKeyboardSizeChanged(width: Int, height: Int) {
+        keyboardWidth = width
+        keyboardHeight = height
     }
 
     // set expand candidate button to close expand candidate

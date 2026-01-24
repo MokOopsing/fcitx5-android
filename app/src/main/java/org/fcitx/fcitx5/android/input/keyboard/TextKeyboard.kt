@@ -77,12 +77,12 @@ class TextKeyboard(
         )
     }
 
-    val caps: ImageKeyView by lazy { findViewById(R.id.button_caps) }
-    val backspace: ImageKeyView by lazy { findViewById(R.id.button_backspace) }
-    val quickphrase: ImageKeyView by lazy { findViewById(R.id.button_quickphrase) }
-    val lang: ImageKeyView by lazy { findViewById(R.id.button_lang) }
-    val space: TextKeyView by lazy { findViewById(R.id.button_space) }
-    val `return`: ImageKeyView by lazy { findViewById(R.id.button_return) }
+    val caps: ImageKeyView get() = findViewById(R.id.button_caps)
+    val backspace: ImageKeyView get() = findViewById(R.id.button_backspace)
+    val quickphrase: ImageKeyView get() = findViewById(R.id.button_quickphrase)
+    val lang: ImageKeyView get() = findViewById(R.id.button_lang)
+    val space: TextKeyView get() = findViewById(R.id.button_space)
+    val `return`: ImageKeyView get() = findViewById(R.id.button_return)
 
     private val showLangSwitchKey = AppPrefs.getInstance().keyboard.showLangSwitchKey
 
@@ -98,9 +98,8 @@ class TextKeyboard(
         showLangSwitchKey.registerOnChangeListener(showLangSwitchKeyListener)
     }
 
-    private val textKeys: List<TextKeyView> by lazy {
-        allViews.filterIsInstance(TextKeyView::class.java).toList()
-    }
+    private val textKeys: List<TextKeyView>
+        get() = allViews.filterIsInstance(TextKeyView::class.java).toList()
 
     private var capsState: CapsState = CapsState.None
 
@@ -151,6 +150,7 @@ class TextKeyboard(
     }
 
     override fun onAttach() {
+        super.onAttach()
         capsState = CapsState.None
         updateCapsButtonIcon()
         updateAlphabetKeys()
@@ -167,6 +167,7 @@ class TextKeyboard(
     private val labelNeedIme: String = "ㄓ 魔仓"
     private var curImeName: String = "English"
     override fun onInputMethodUpdate(ime: InputMethodEntry) {
+        super.onInputMethodUpdate(ime)
         if (capsState != CapsState.None) {
             switchCapsState()
         }
@@ -241,6 +242,13 @@ class TextKeyboard(
 
     private fun updateLangSwitchKey(visible: Boolean) {
         lang.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
+    override fun onKeyboardLayoutRebuilt() {
+        updateCapsButtonIcon()
+        updateAlphabetKeys()
+        updatePunctuationKeys()
+        updateLangSwitchKey(showLangSwitchKey.getValue())
     }
 
     private fun updateAlphabetKeys() {

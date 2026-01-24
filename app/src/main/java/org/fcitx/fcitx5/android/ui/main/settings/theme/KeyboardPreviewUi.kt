@@ -54,6 +54,7 @@ class KeyboardPreviewUi(override val ctx: Context, val theme: Theme) : Ui {
     private val keyboardSidePaddingLandscape by keyboardPrefs.keyboardSidePaddingLandscape
     private val keyboardBottomPadding by keyboardPrefs.keyboardBottomPadding
     private val keyboardBottomPaddingLandscape by keyboardPrefs.keyboardBottomPaddingLandscape
+    private val splitThresholdPref = keyboardPrefs.splitKeyboardThreshold
 
     private val keyboardSidePaddingPx: Int
         get() {
@@ -78,6 +79,9 @@ class KeyboardPreviewUi(override val ctx: Context, val theme: Theme) : Ui {
 
     private val navbarBkgChangeListener = ManagedPreference.OnChangeListener<Any> { _, _ ->
         recalculateSize()
+    }
+    private val splitThresholdListener = ManagedPreference.OnChangeListener<Float> { _, _ ->
+        refreshSplitLayout()
     }
 
     private val bkg = imageView {
@@ -110,6 +114,7 @@ class KeyboardPreviewUi(override val ctx: Context, val theme: Theme) : Ui {
             recalculateSize()
             onSizeMeasured?.invoke(intrinsicWidth, intrinsicHeight)
             navbarBackground.registerOnChangeListener(navbarBkgChangeListener)
+            splitThresholdPref.registerOnChangeListener(splitThresholdListener)
         }
 
         override fun onConfigurationChanged(newConfig: Configuration?) {
@@ -118,6 +123,7 @@ class KeyboardPreviewUi(override val ctx: Context, val theme: Theme) : Ui {
 
         override fun onDetachedFromWindow() {
             navbarBackground.unregisterOnChangeListener(navbarBkgChangeListener)
+            splitThresholdPref.unregisterOnChangeListener(splitThresholdListener)
             super.onDetachedFromWindow()
         }
     }
@@ -193,6 +199,16 @@ class KeyboardPreviewUi(override val ctx: Context, val theme: Theme) : Ui {
                 below(fakeKawaiiBar)
                 centerHorizontally(keyboardSidePaddingPx)
             })
+        }
+        refreshSplitLayout()
+    }
+
+    private fun refreshSplitLayout() {
+        if (this::fakeKeyboardWindow.isInitialized) {
+            fakeKeyboardWindow.post {
+                fakeKeyboardWindow.refreshLayoutForPrefs()
+                fakeKeyboardWindow.requestLayout()
+            }
         }
     }
 }

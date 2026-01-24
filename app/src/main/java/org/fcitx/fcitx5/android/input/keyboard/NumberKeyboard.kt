@@ -31,6 +31,8 @@ class NumberKeyboard(
         )
     )*/
 
+    override val supportsSplitLayout: Boolean = false
+
     companion object {
         const val Name = "Number"
 
