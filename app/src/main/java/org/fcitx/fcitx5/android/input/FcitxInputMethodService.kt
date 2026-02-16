@@ -523,13 +523,24 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     override fun onConfigurationChanged(newConfig: Configuration) {
         postFcitxJob { reset() }
         /**
+         * skip keyboard|keyboardHidden changes, because we have [inputDeviceMgr]
          * skip uiMode (system light/dark mode) changes, because we have [onThemeChangeListener]
          * to replace InputView(s) when needed
          * [android.inputmethodservice.InputMethodService.onConfigurationChanged] would call
          * resetStateForNewConfiguration() which calls initViews() causes InputView(s) to be replaced again
          * https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-15.0.0_r36/core/java/android/inputmethodservice/InputMethodService.java#1984
          */
-        if (lastKnownConfig.diff(newConfig) != ActivityInfo.CONFIG_UI_MODE) {
+        val f = ActivityInfo.CONFIG_KEYBOARD or
+                ActivityInfo.CONFIG_KEYBOARD_HIDDEN or
+                ActivityInfo.CONFIG_UI_MODE
+        val diff = lastKnownConfig.diff(newConfig)
+        Timber.d("onConfigurationChanged diff=$diff")
+        /**
+         * perform `super.onConfigurationChanged` only when `newConfig` diff fall outside "skipped" flags
+         * we have to calculate the mask ourselves because nobody knows how `handledConfigChanges` works
+         * https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-15.0.0_r36/core/java/android/inputmethodservice/InputMethodService.java#1876
+         */
+        if (diff and f != diff) {
             super.onConfigurationChanged(newConfig)
         }
         lastKnownConfig = newConfig
@@ -636,12 +647,11 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     }
 
     // Added in API level 14, deprecated in 29
+    // it's needed because editors still use it even on API 36
     @Suppress("DEPRECATION", "OVERRIDE_DEPRECATION")
     override fun onViewClicked(focusChanged: Boolean) {
         super.onViewClicked(focusChanged)
-        if (Build.VERSION.SDK_INT < 34) {
-            inputDeviceMgr.evaluateOnViewClicked(this)
-        }
+        inputDeviceMgr.evaluateOnViewClicked(this)
     }
 
     @RequiresApi(34)
