@@ -20,6 +20,9 @@ import android.util.LruCache
 import android.util.Size
 import android.view.KeyCharacterMap
 import android.view.KeyEvent
+import android.graphics.Rect
+import android.graphics.Region
+import android.inputmethodservice.InputMethodService.Insets
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
@@ -586,13 +589,65 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
 
     private var inputViewLocation = intArrayOf(0, 0)
 
+    override fun onEvaluateFullscreenMode(): Boolean {
+        // Always return false to prevent "Extract View" mode which hides the app.
+        // We handle full screen window size manually via onConfigureWindow.
+        return false 
+    }
+
     override fun onComputeInsets(outInsets: Insets) {
+        val inputView = this.inputView
+        if (inputView?.isFloating == true) {
+            // Floating mode: allow app to be full screen (insets.contentTopInsets = screen height)
+            // But we need to handle touches.
+             outInsets.contentTopInsets = inputView.height
+             outInsets.visibleTopInsets = inputView.height
+             
+             outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_REGION
+             inputView.getFloatingKeyboardRegion(outInsets.touchableRegion)
+             return
+        }
+
         if (inputDeviceMgr.isVirtualKeyboard) {
-            inputView?.keyboardView?.getLocationInWindow(inputViewLocation)
-            outInsets.apply {
-                contentTopInsets = inputViewLocation[1]
-                visibleTopInsets = inputViewLocation[1]
-                touchableInsets = Insets.TOUCHABLE_INSETS_VISIBLE
+            val location = IntArray(2)
+            inputView?.keyboardView?.getLocationInWindow(location)
+            val top = location[1]
+            
+            // In fixed mode, use TOUCHABLE_INSETS_REGION to explicitly define touchable area
+            // to avoid any ambiguity about full screen blocking.
+            outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_REGION
+            val rect = Rect()
+            inputView?.keyboardView?.getGlobalVisibleRect(rect)
+            
+            // Convert to window coords
+            val windowLoc = IntArray(2)
+            inputView?.getLocationInWindow(windowLoc)
+            // Global rect is screen coords.
+            // We want window coords.
+            // If window is full screen, screen coords ~= window coords (minus system bars if not fullscreen).
+            // But usually getLocationInWindow gives us what we want relative to window (0,0).
+            
+            // Let's rely on view dimensions and location in window.
+            rect.set(0, 0, inputView?.keyboardView?.width ?: 0, inputView?.keyboardView?.height ?: 0)
+            rect.offset(location[0], location[1])
+            
+            // If we have candidates view (usually inside inputView but above keyboardView?), 
+            // we should include it.
+            // But for now let's just make keyboard touchable. 
+            // The "covers app" complaint suggests too much is touchable.
+            // So restricting to keyboardView is safer.
+            
+            outInsets.touchableRegion.set(rect)
+            
+            // Also set contentTopInsets to where the keyboard starts
+            if (top > 0) {
+                 outInsets.contentTopInsets = top
+                 outInsets.visibleTopInsets = top
+            } else {
+                 // Fallback
+                 val h = decorView.height
+                 outInsets.contentTopInsets = h
+                 outInsets.visibleTopInsets = h
             }
         } else {
             val n = decorView.findViewById<View>(android.R.id.navigationBarBackground)?.height ?: 0
@@ -611,7 +666,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
 
     fun superEvaluateInputViewShown() = super.onEvaluateInputViewShown()
 
-    override fun onEvaluateFullscreenMode() = false
+    // override fun onEvaluateFullscreenMode() = false // Removed duplicate
 
     private fun forwardKeyEvent(event: KeyEvent): Boolean {
         // reason to use a self increment index rather than timestamp:

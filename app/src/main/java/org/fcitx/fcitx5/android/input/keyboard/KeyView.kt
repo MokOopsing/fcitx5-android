@@ -84,6 +84,10 @@ abstract class KeyView(ctx: Context, val theme: Theme, val def: KeyDef.Appearanc
             if (!boundsValid) updateBounds()
         }
 
+    fun invalidateCachedBounds() {
+        boundsValid = false
+    }
+
     /**
      * KeyView content left margin, in percentage of parent width
      */
@@ -189,6 +193,10 @@ abstract class KeyView(ctx: Context, val theme: Theme, val def: KeyDef.Appearanc
         boundsValid = true
     }
 
+    open fun setTextScale(scale: Float) {
+        // default implementation does nothing
+    }
+
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         boundsValid = false
         if (layoutMarginLeft != 0f || layoutMarginRight != 0f) {
@@ -277,6 +285,12 @@ open class TextKeyView(ctx: Context, theme: Theme, def: KeyDef.Appearance.Text) 
             })
         }
     }
+
+    override fun setTextScale(scale: Float) {
+        if (def is KeyDef.Appearance.Text) {
+            mainText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, def.textSize * scale)
+        }
+    }
 }
 
 @SuppressLint("ViewConstructor")
@@ -304,6 +318,12 @@ class AltTextKeyView(ctx: Context, theme: Theme, def: KeyDef.Appearance.AltText)
             add(altText, lParams(wrapContent, wrapContent))
         }
         applyLayout(resources.configuration.orientation)
+    }
+
+    override fun setTextScale(scale: Float) {
+        super.setTextScale(scale)
+        // TODO hardcoded alt text size: 10.666667f
+        altText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 10.666667f * scale)
     }
 
     private fun applyTopRightAltTextPosition() {

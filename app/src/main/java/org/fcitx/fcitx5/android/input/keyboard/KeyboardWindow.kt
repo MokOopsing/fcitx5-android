@@ -183,4 +183,12 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     private fun notifyBarLayoutChanged() {
         bar.onKeyboardLayoutSwitched(currentKeyboardName == NumberKeyboard.Name)
     }
+
+    fun updateBounds() {
+        currentKeyboard?.updateBounds()
+    }
+
+    fun setTextScale(scale: Float) {
+        keyboards.values.forEach { it.setTextScale(scale) }
+    }
 }

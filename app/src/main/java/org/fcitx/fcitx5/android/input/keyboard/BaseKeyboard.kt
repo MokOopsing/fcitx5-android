@@ -146,6 +146,18 @@ abstract class BaseKeyboard(
         spaceSwipeMoveCursor.registerOnChangeListener(spaceSwipeChangeListener)
     }
 
+    private var currentTextScale = 1.0f
+
+    fun setTextScale(scale: Float) {
+        if (currentTextScale == scale) return
+        currentTextScale = scale
+        keyRows.forEach { row ->
+            row.children.forEach { child ->
+                (child as? KeyView)?.setTextScale(scale)
+            }
+        }
+    }
+
     private fun createKeyView(def: KeyDef): KeyView {
         return when (def.appearance) {
             is KeyDef.Appearance.AltText -> AltTextKeyView(context, theme, def.appearance)
@@ -153,6 +165,7 @@ abstract class BaseKeyboard(
             is KeyDef.Appearance.Text -> TextKeyView(context, theme, def.appearance)
             is KeyDef.Appearance.Image -> ImageKeyView(context, theme, def.appearance)
         }.apply {
+            setTextScale(currentTextScale)
             soundEffect = when (def) {
                 is SpaceKey -> InputFeedbacks.SoundEffect.SpaceBar
                 is MiniSpaceKey -> InputFeedbacks.SoundEffect.SpaceBar
@@ -355,13 +368,23 @@ abstract class BaseKeyboard(
         bounds.set(x, y, x + width, y + height)
     }
 
+    fun updateBounds() {
+        val (x, y) = intArrayOf(0, 0).also { getLocationInWindow(it) }
+        bounds.set(x, y, x + width, y + height)
+        if (::keyRows.isInitialized) {
+            keyRows.forEach { row ->
+                row.children.forEach {
+                    (it as? KeyView)?.invalidateCachedBounds()
+                }
+            }
+        }
+    }
+
     private fun findTargetChild(x: Float, y: Float): View? {
         val y0 = y.roundToInt()
-        // assume all rows have equal height
-        val row = keyRows.getOrNull(y0 * keyRows.size / bounds.height()) ?: return null
         val x1 = x.roundToInt() + bounds.left
         val y1 = y0 + bounds.top
-        return row.children.find {
+        return keyRows.asSequence().flatMap { it.children }.find {
             if (it !is KeyView) false else it.bounds.contains(x1, y1)
         }
     }

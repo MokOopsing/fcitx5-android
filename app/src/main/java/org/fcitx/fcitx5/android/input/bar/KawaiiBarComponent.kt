@@ -90,6 +90,8 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     private val commonKeyActionListener: CommonKeyActionListener by manager.must()
     private val popup: PopupComponent by manager.must()
 
+    var onFloatingToggleListener: (() -> Unit)? = null
+
     private val prefs = AppPrefs.getInstance()
 
     private val clipboardSuggestion = prefs.clipboard.clipboardSuggestion
@@ -243,6 +245,9 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
                 }
                 moreButton.setOnClickListener {
                     windowManager.attachWindow(StatusAreaWindow())
+                }
+                floatingButton.setOnClickListener {
+                    onFloatingToggleListener?.invoke()
                 }
             }
             clipboardUi.suggestionView.apply {
