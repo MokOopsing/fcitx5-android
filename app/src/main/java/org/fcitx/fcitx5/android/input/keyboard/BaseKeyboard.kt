@@ -369,11 +369,9 @@ abstract class BaseKeyboard(
     fun updateBounds() {
         val (x, y) = intArrayOf(0, 0).also { getLocationInWindow(it) }
         bounds.set(x, y, x + width, y + height)
-        if (::keyRows.isInitialized) {
-            keyRows.forEach { row ->
-                row.children.forEach {
-                    (it as? KeyView)?.invalidateCachedBounds()
-                }
+        keyRows.forEach { row ->
+            row.children.forEach {
+                (it as? KeyView)?.invalidateCachedBounds()
             }
         }
     }
