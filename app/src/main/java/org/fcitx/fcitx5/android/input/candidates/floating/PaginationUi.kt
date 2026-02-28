@@ -7,7 +7,6 @@ package org.fcitx.fcitx5.android.input.candidates.floating
 
 import android.content.Context
 import android.content.res.ColorStateList
-import android.view.View
 import android.widget.ImageView
 import androidx.annotation.DrawableRes
 import org.fcitx.fcitx5.android.R
@@ -16,13 +15,10 @@ import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.utils.styledFloat
 import splitties.dimensions.dp
 import splitties.resources.drawable
-//import splitties.views.dsl.constraintlayout.before
+import splitties.views.dsl.constraintlayout.before
 import splitties.views.dsl.constraintlayout.centerVertically
 import splitties.views.dsl.constraintlayout.constraintLayout
 import splitties.views.dsl.constraintlayout.endOfParent
-import splitties.views.dsl.constraintlayout.endToStartOf
-import splitties.views.dsl.constraintlayout.startOfParent
-import splitties.views.dsl.constraintlayout.startToEndOf
 import splitties.views.dsl.constraintlayout.lParams
 import splitties.views.dsl.core.Ui
 import splitties.views.dsl.core.add
@@ -44,28 +40,15 @@ class PaginationUi(override val ctx: Context, val theme: Theme) : Ui {
     private val disabledAlpha = styledFloat(android.R.attr.disabledAlpha)
 
     override val root = constraintLayout {
-        val w = dp(60)
+        val w = dp(10)
         val h = dp(20)
-        val spacerMinW = dp(10)
-
-        val spacer = View(ctx).apply {
-            minimumWidth = spacerMinW
-        }
-
         add(nextIcon, lParams(w, h) {
             centerVertically()
             endOfParent()
         })
-        add(spacer, lParams(0, h) {
-            centerVertically()
-            startToEndOf(prevIcon)
-            endToStartOf(nextIcon)
-            horizontalWeight = 1f // 占据剩余空间
-        })
         add(prevIcon, lParams(w, h) {
             centerVertically()
-            //before(nextIcon)
-            startOfParent()
+            before(nextIcon)
         })
     }
 

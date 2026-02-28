@@ -26,12 +26,12 @@ class InputDeviceManager(private val onChange: (Boolean) -> Unit) {
 
     private fun setupCandidatesViewEvents(isVirtual: Boolean) {
         val cv = candidatesView ?: return
-        cv.handleEvents = true //!isVirtual
+        cv.handleEvents = !isVirtual
         // hide CandidatesView when entering virtual keyboard mode,
         // but preserve the visibility when entering physical keyboard mode (in case it's empty)
-        /* if (isVirtual) {
+        if (isVirtual) {
             cv.visibility = View.GONE
-        } */
+        }
     }
 
     private fun setupViewEvents(isVirtual: Boolean) {

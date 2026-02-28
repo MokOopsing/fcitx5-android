@@ -68,11 +68,7 @@ class PagedCandidatesUi(
                 }
             }.apply {
                 // assign default LayoutParams, otherwise updateLayoutParams won't work
-                ui.root.layoutParams = FlexboxLayoutManager.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
-                ).apply {
-                    flexGrow = 0f // 确保分页控件不会扩展，单独占一行
-                }
+                ui.root.layoutParams = FlexboxLayoutManager.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
             }
         }
 
@@ -92,8 +88,8 @@ class PagedCandidatesUi(
                     holder.ui.update(data)
                     holder.ui.root.updateLayoutParams<FlexboxLayoutManager.LayoutParams> {
                         flexGrow = 1f
-                        width = ViewGroup.LayoutParams.MATCH_PARENT  // 确保分页控件填满一行Add commentMore actions
-                        alignSelf = AlignItems.STRETCH  // 垂直布局时确保它占满整行
+                        width = if (isVertical) MATCH_PARENT else WRAP_CONTENT
+                        alignSelf = if (isVertical) AlignItems.STRETCH else AlignItems.CENTER
                     }
                 }
             }

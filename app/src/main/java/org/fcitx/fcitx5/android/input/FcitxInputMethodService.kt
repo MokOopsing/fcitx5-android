@@ -104,9 +104,9 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     private val navbarMgr = NavigationBarManager()
     private val inputDeviceMgr = InputDeviceManager { isVirtualKeyboard ->
         postFcitxJob {
-            setCandidatePagingMode(/*if (isVirtualKeyboard) 0 else*/ 1)
+            setCandidatePagingMode(if (isVirtualKeyboard) 0 else 1)
         }
-        //currentInputConnection?.monitorCursorAnchor(!isVirtualKeyboard)
+        currentInputConnection?.monitorCursorAnchor(!isVirtualKeyboard)
         window.window?.let {
             navbarMgr.evaluate(it, isVirtualKeyboard)
         }
@@ -672,9 +672,6 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         }
         if (firstBindInput) {
             firstBindInput = false
-            postFcitxJob {
-                setCandidatePagingMode(/*if (isVirtualKeyboard) 0 else*/ 1)
-            }
             // only use input method from subtype for the first `onBindInput`, because
             // 1. fcitx has `ShareInputState` option, thus reading input method from subtype
             //    everytime would ruin `ShareInputState=Program`
@@ -756,7 +753,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
             // because onStartInputView will always be called after onStartInput,
             // editorInfo and capFlags should be up-to-date
             inputView?.startInput(info, capabilityFlags, restarting)
-        } /* else {
+        } else {
             if (currentInputConnection?.monitorCursorAnchor() != true) {
                 if (!decorLocationUpdated) {
                     updateDecorLocation()
@@ -765,14 +762,6 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                 // support monitoring CursorAnchorInfo
                 workaroundNullCursorAnchorInfo()
             }
-        } */
-        if (currentInputConnection?.monitorCursorAnchor() != true) {
-            if (!decorLocationUpdated) {
-                updateDecorLocation()
-            }
-            // anchor CandidatesView to bottom-left corner in case InputConnection does not
-            // support monitoring CursorAnchorInfo
-            workaroundNullCursorAnchorInfo()
         }
     }
 
@@ -815,23 +804,10 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
      * anchor candidates view to bottom-left corner, only works if [decorLocationUpdated]
      */
     private fun workaroundNullCursorAnchorInfo() {
-        val gapValue = 20f
-        if (inputDeviceMgr.isVirtualKeyboard) {
-            inputView?.keyboardView?.getLocationInWindow(inputViewLocation)
-            anchorPosition[0] = inputViewLocation[0].toFloat() + gapValue
-            anchorPosition[1] = inputViewLocation[1].toFloat() - gapValue
-            anchorPosition[2] = inputViewLocation[0].toFloat() + gapValue
-            anchorPosition[3] = inputViewLocation[1].toFloat() - gapValue
-            if (inputViewLocation[1] > 0) {
-                contentSize[1] = inputViewLocation[1].toFloat() - gapValue
-            }
-        } else {
-            anchorPosition[0] = 0f + gapValue
-            anchorPosition[1] = contentSize[1] - gapValue
-            anchorPosition[2] = 0f + gapValue
-            anchorPosition[3] = contentSize[1] - gapValue
-        }
-        //contentSize[0] = contentSize[0] + gapValue
+        anchorPosition[0] = 0f
+        anchorPosition[1] = contentSize[1]
+        anchorPosition[2] = 0f
+        anchorPosition[3] = contentSize[1]
         candidatesView?.updateCursorAnchor(anchorPosition, contentSize)
     }
 
@@ -856,6 +832,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
             updateDecorLocation()
         }
         if (anchorPosition.any(Float::isNaN)) {
+            // anchor candidates view to bottom-left corner in case CursorAnchorInfo is invalid
             workaroundNullCursorAnchorInfo()
             return
         }
@@ -866,21 +843,6 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         anchorPosition[1] -= yOffset
         anchorPosition[2] -= xOffset
         anchorPosition[3] -= yOffset
-        if (inputDeviceMgr.isVirtualKeyboard) {
-            inputView?.keyboardView?.getLocationInWindow(inputViewLocation)
-            if (inputViewLocation[1] > 0) {
-                contentSize[1] = inputViewLocation[1].toFloat()
-                if (anchorPosition[1] > contentSize[1]) { //when in chatgpt online web 
-                    val gapValue = 20f
-                    anchorPosition[0] = inputViewLocation[0].toFloat() + gapValue
-                    anchorPosition[1] = inputViewLocation[1].toFloat() - gapValue
-                    anchorPosition[2] = inputViewLocation[0].toFloat() + gapValue
-                    anchorPosition[3] = inputViewLocation[1].toFloat() - gapValue
-                    contentSize[1] = inputViewLocation[1].toFloat() - gapValue
-                    //contentSize[0] = contentSize[0] + gapValue
-                }
-            }
-        }
         candidatesView?.updateCursorAnchor(anchorPosition, contentSize)
     }
 
