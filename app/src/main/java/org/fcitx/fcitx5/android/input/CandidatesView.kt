@@ -181,9 +181,18 @@ class CandidatesView(
         shouldUpdatePosition = false
     }
 
-    fun updateCursorAnchor(@Size(4) anchor: FloatArray, @Size(2) parent: FloatArray) {
-        val (horizontal, bottom, _, top) = anchor
+    fun updateCursorAnchor(
+        @Size(4) anchor: FloatArray,
+        @Size(2) parent: FloatArray,
+        useParentBottomFallback: Boolean
+    ) {
+        val (horizontal, anchorBottom, _, top) = anchor
         val (parentWidth, parentHeight) = parent
+        val bottom = if (useParentBottomFallback) {
+            parentHeight - bottomInsets
+        } else {
+            anchorBottom
+        }
         anchorPosition[0] = horizontal
         anchorPosition[1] = bottom
         anchorPosition[2] = top

@@ -821,6 +821,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
      */
     private fun workaroundNullCursorAnchorInfo() {
         val gapValue = 20f
+        var useFallback = false
         if (inputDeviceMgr.isVirtualKeyboard) {
             inputView?.keyboardView?.getLocationInWindow(inputViewLocation)
             anchorPosition[0] = inputViewLocation[0].toFloat() + gapValue
@@ -835,9 +836,10 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
             anchorPosition[1] = contentSize[1] - gapValue
             anchorPosition[2] = 0f + gapValue
             anchorPosition[3] = contentSize[1] - gapValue
+            useFallback = true
         }
         //contentSize[0] = contentSize[0] + gapValue
-        candidatesView?.updateCursorAnchor(anchorPosition, contentSize)
+        candidatesView?.updateCursorAnchor(anchorPosition, contentSize, useFallback)
     }
 
     override fun onUpdateCursorAnchorInfo(info: CursorAnchorInfo) {
@@ -886,7 +888,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                 }
             }
         }
-        candidatesView?.updateCursorAnchor(anchorPosition, contentSize)
+        candidatesView?.updateCursorAnchor(anchorPosition, contentSize, false)
     }
 
     private fun handleCursorUpdate(newSelStart: Int, newSelEnd: Int, updateIndex: Int) {
