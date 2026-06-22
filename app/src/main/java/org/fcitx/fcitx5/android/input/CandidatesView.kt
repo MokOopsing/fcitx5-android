@@ -24,6 +24,7 @@ import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.input.candidates.floating.PagedCandidatesUi
 import org.fcitx.fcitx5.android.input.preedit.PreeditUi
 import splitties.dimensions.dp
+import timber.log.Timber
 import splitties.views.dsl.constraintlayout.below
 import splitties.views.dsl.constraintlayout.bottomOfParent
 import splitties.views.dsl.constraintlayout.centerHorizontally
@@ -88,6 +89,10 @@ class CandidatesView(
 
     private val touchEventReceiverWindow = TouchEventReceiverWindow(this)
 
+    companion object {
+        private const val TAG = "CandidatesView"
+    }
+
     private val setupTextView: TextView.() -> Unit = {
         textSize = fontSize.toFloat()
         val v = dp(itemPaddingVertical)
@@ -113,14 +118,20 @@ class CandidatesView(
     override fun handleFcitxEvent(it: FcitxEvent<*>) {
         when (it) {
             is FcitxEvent.InputPanelEvent -> {
+                Timber.d("$TAG handleFcitxEvent InputPanelEvent preedit=%s auxUpLength=%s auxDownLength=%s",
+                    it.data.preedit, it.data.auxUp.length, it.data.auxDown.length)
                 inputPanel = it.data
                 updateUi()
             }
             is FcitxEvent.PagedCandidateEvent -> {
+                Timber.d("$TAG handleFcitxEvent PagedCandidateEvent candidates=%s cursorIndex=%s hasPrev=%s hasNext=%s",
+                    it.data.candidates.size, it.data.cursorIndex, it.data.hasPrev, it.data.hasNext)
                 paged = it.data
                 updateUi()
             }
-            else -> {}
+            else -> {
+                Timber.d("$TAG handleFcitxEvent ignored event %s", it::class.simpleName)
+            }
         }
     }
 
@@ -132,10 +143,18 @@ class CandidatesView(
     }
 
     private fun updateUi() {
+        val visible = evaluateVisibility()
+        Timber.d("$TAG updateUi visible=%s preedit=%s candidates=%s auxUpLength=%s auxDownLength=%s orientation=%s",
+            visible,
+            inputPanel.preedit.isNotEmpty(),
+            paged.candidates.size,
+            inputPanel.auxUp.length,
+            inputPanel.auxDown.length,
+            orientation)
         preeditUi.update(inputPanel)
         preeditUi.root.visibility = if (preeditUi.visible) VISIBLE else GONE
         candidatesUi.update(paged, orientation)
-        if (evaluateVisibility()) {
+        if (visible) {
             visibility = VISIBLE
         } else {
             // RecyclerView won't update its items when ancestor view is GONE
@@ -146,13 +165,16 @@ class CandidatesView(
     private var bottomInsets = 0
 
     private fun updatePosition() {
+        Timber.d("$TAG updatePosition start visibility=%s parentSize=%s anchorPosition=%s bottomInsets=%s",
+            visibility == VISIBLE, parentSize.joinToString(), anchorPosition.joinToString(), bottomInsets)
         if (visibility != VISIBLE) {
             // skip unnecessary updates
             return
         }
         val (parentWidth, parentHeight) = parentSize
         if (parentWidth <= 0 || parentHeight <= 0) {
-            // panic, bail
+            Timber.d("$TAG updatePosition invalid parent size parentWidth=%s parentHeight=%s",
+                parentWidth, parentHeight)
             translationX = 0f
             translationY = 0f
             return
@@ -177,6 +199,8 @@ class CandidatesView(
         ) top - selfHeight else bottom
         translationX = tX
         translationY = tY
+        Timber.d("$TAG updatePosition result tX=%s tY=%s size=%sx%s bottomLimit=%s bottomSpace=%s",
+            tX, tY, w, h, bottomLimit, bottomSpace)
         // update touchEventReceiverWindow's position after CandidatesView's
         touchEventReceiverWindow.showAt(tX.roundToInt(), tY.roundToInt(), w, h)
         shouldUpdatePosition = false
@@ -187,6 +211,8 @@ class CandidatesView(
         @Size(2) parent: FloatArray,
         useParentBottomFallback: Boolean
     ) {
+        Timber.d("$TAG updateCursorAnchor anchor=%s parent=%s useParentBottomFallback=%s bottomInsets=%s",
+            anchor.joinToString(), parent.joinToString(), useParentBottomFallback, bottomInsets)
         val (horizontal, anchorBottom, _, top) = anchor
         val (parentWidth, parentHeight) = parent
         val bottom = if (useParentBottomFallback) {
