@@ -36,7 +36,7 @@ class SymbolKey(
     ),
     popup ?: arrayOf(
         Popup.Preview(symbol, symbol),
-        Popup.Keyboard(symbol)
+        Popup.Keyboard.Preset(symbol)
     )
 )
 
@@ -83,7 +83,7 @@ class AlphabetDigitKey(
     ),
     popup ?: arrayOf(
         Popup.AltPreview(character, label, altText),
-        Popup.Keyboard(character)
+        Popup.Keyboard.Preset(character)
     )
 ) {
     constructor(
