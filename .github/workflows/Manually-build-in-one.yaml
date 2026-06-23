@@ -61,6 +61,10 @@ jobs:
           C:/msys64/usr/bin/pacman -S --noconfirm mingw-w64-ucrt-x86_64-gettext mingw-w64-ucrt-x86_64-extra-cmake-modules
           Add-Content $env:GITHUB_PATH "C:/msys64/ucrt64/bin"
 
+      - name: Update specific submodules to latest commit
+        run: |
+          git -C plugin/rime/src/main/cpp/fcitx5-rime fetch origin master && git -C plugin/rime/src/main/cpp/fcitx5-rime reset --hard origin/master
+
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v2
 
