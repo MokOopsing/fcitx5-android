@@ -12,9 +12,11 @@ import org.fcitx.fcitx5.android.daemon.launchOnReady
 import org.fcitx.fcitx5.android.ui.common.BaseDynamicListUi
 import org.fcitx.fcitx5.android.ui.common.DynamicListUi
 import org.fcitx.fcitx5.android.ui.common.OnItemChangedListener
+import org.fcitx.fcitx5.android.ui.main.EditDeleteMenuProvider
 import org.fcitx.fcitx5.android.ui.main.settings.ProgressFragment
 import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
 import org.fcitx.fcitx5.android.utils.navigateWithAnim
+import splitties.resources.styledColor
 
 class InputMethodListFragment : ProgressFragment(), OnItemChangedListener<InputMethodEntry> {
 
@@ -51,6 +53,10 @@ class InputMethodListFragment : ProgressFragment(), OnItemChangedListener<InputM
         )
         ui.addOnItemChangedListener(this@InputMethodListFragment)
         ui.setViewModel(viewModel)
+        requireActivity().addMenuProvider(
+            EditDeleteMenuProvider(viewModel, requireActivity(), viewLifecycleOwner),
+            viewLifecycleOwner
+        )
         viewModel.enableToolbarEditButton(initialEnabled.isNotEmpty()) {
             ui.enterMultiSelect(requireActivity().onBackPressedDispatcher)
         }

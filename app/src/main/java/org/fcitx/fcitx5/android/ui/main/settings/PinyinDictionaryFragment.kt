@@ -29,12 +29,14 @@ import org.fcitx.fcitx5.android.data.pinyin.dict.LibIMEDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.PinyinDictionary
 import org.fcitx.fcitx5.android.ui.common.BaseDynamicListUi
 import org.fcitx.fcitx5.android.ui.common.OnItemChangedListener
+import org.fcitx.fcitx5.android.ui.main.EditDeleteMenuProvider
 import org.fcitx.fcitx5.android.ui.main.MainViewModel
 import org.fcitx.fcitx5.android.utils.NaiveDustman
 import org.fcitx.fcitx5.android.utils.importErrorDialog
 import org.fcitx.fcitx5.android.utils.lazyRoute
 import org.fcitx.fcitx5.android.utils.notificationManager
 import org.fcitx.fcitx5.android.utils.queryFileName
+import splitties.resources.styledColor
 import java.util.concurrent.atomic.AtomicBoolean
 
 class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDictionary> {
@@ -107,6 +109,10 @@ class PinyinDictionaryFragment : Fragment(), OnItemChangedListener<PinyinDiction
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         args.uri?.let { importFromUri(Uri.parse(it)) }
         super.onViewCreated(view, savedInstanceState)
+        requireActivity().addMenuProvider(
+            EditDeleteMenuProvider(viewModel, requireActivity(), viewLifecycleOwner),
+            viewLifecycleOwner
+        )
     }
 
     private fun createNotificationChannel() {

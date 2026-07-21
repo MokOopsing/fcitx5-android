@@ -31,6 +31,7 @@ import org.fcitx.fcitx5.android.data.quickphrase.QuickPhrase
 import org.fcitx.fcitx5.android.data.quickphrase.QuickPhraseManager
 import org.fcitx.fcitx5.android.ui.common.BaseDynamicListUi
 import org.fcitx.fcitx5.android.ui.common.OnItemChangedListener
+import org.fcitx.fcitx5.android.ui.main.EditDeleteMenuProvider
 import org.fcitx.fcitx5.android.ui.main.MainViewModel
 import org.fcitx.fcitx5.android.utils.NaiveDustman
 import org.fcitx.fcitx5.android.utils.importErrorDialog
@@ -295,6 +296,14 @@ class QuickPhraseListFragment : Fragment(), OnItemChangedListener<QuickPhrase> {
         ui.addOnItemChangedListener(this)
         resetDustman()
         return ui.root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        requireActivity().addMenuProvider(
+            EditDeleteMenuProvider(viewModel, requireActivity(), viewLifecycleOwner),
+            viewLifecycleOwner
+        )
     }
 
     override fun onItemAdded(idx: Int, item: QuickPhrase) {
