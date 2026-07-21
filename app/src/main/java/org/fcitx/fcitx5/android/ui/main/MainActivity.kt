@@ -63,7 +63,6 @@ class MainActivity : AppCompatActivity() {
         setSupportActionBar(binding.toolbar)
         // always show toolbar back arrow icon
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        setupToolbarMenu(binding.toolbar.menu)
         navController = binding.navHostFragment.getFragment<NavHostFragment>().navController
         navController.graph = SettingsRoute.createGraph(navController)
         viewModel.toolbarTitle.observe(this) {
@@ -122,6 +121,12 @@ class MainActivity : AppCompatActivity() {
                 navController.navigateWithAnim(route)
             }
         }
+    }
+    
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        setupToolbarMenu(menu)
+        viewModel.enableAboutButton()
+        return true
     }
 
     private fun setupToolbarMenu(menu: Menu) {
