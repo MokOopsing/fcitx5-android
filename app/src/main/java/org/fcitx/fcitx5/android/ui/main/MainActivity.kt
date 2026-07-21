@@ -66,7 +66,7 @@ class MainActivity : AppCompatActivity() {
         navController = binding.navHostFragment.getFragment<NavHostFragment>().navController
         navController.graph = SettingsRoute.createGraph(navController)
         viewModel.toolbarTitle.observe(this) {
-            binding.toolbar.title = it
+            supportActionBar!!.title = it
         }
         viewModel.toolbarShadow.observe(this) {
             binding.toolbar.elevation = dp(if (it) 4f else 0f)
