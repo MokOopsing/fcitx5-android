@@ -34,7 +34,7 @@ class MainFragment : PaddingPreferenceFragment() {
         // AboutMenuProvider is tied to viewLifecycleOwner, so the about menu items
         // are automatically shown when this Fragment is visible and removed when it's not
         requireActivity().addMenuProvider(
-            AboutMenuProvider(), viewLifecycleOwner, Lifecycle.State.RESUMED
+            AboutMenuProvider(), viewLifecycleOwner, Lifecycle.State.STARTED
         )
     }
 

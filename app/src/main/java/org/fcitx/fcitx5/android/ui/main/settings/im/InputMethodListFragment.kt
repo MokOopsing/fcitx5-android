@@ -6,6 +6,7 @@ package org.fcitx.fcitx5.android.ui.main.settings.im
 
 import android.os.Build
 import android.view.View
+import androidx.lifecycle.Lifecycle
 import org.fcitx.fcitx5.android.core.InputMethodEntry
 import org.fcitx.fcitx5.android.core.SubtypeManager
 import org.fcitx.fcitx5.android.daemon.launchOnReady
@@ -13,10 +14,10 @@ import org.fcitx.fcitx5.android.ui.common.BaseDynamicListUi
 import org.fcitx.fcitx5.android.ui.common.DynamicListUi
 import org.fcitx.fcitx5.android.ui.common.OnItemChangedListener
 import org.fcitx.fcitx5.android.ui.main.EditDeleteMenuProvider
+import org.fcitx.fcitx5.android.ui.main.MainViewModel.ButtonMode
 import org.fcitx.fcitx5.android.ui.main.settings.ProgressFragment
 import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
 import org.fcitx.fcitx5.android.utils.navigateWithAnim
-import splitties.resources.styledColor
 
 class InputMethodListFragment : ProgressFragment(), OnItemChangedListener<InputMethodEntry> {
 
@@ -53,30 +54,26 @@ class InputMethodListFragment : ProgressFragment(), OnItemChangedListener<InputM
         )
         ui.addOnItemChangedListener(this@InputMethodListFragment)
         ui.setViewModel(viewModel)
+        viewModel.toolbarButton.value =
+            if (ui.entries.isNotEmpty()) ButtonMode.EDIT else ButtonMode.NONE
         requireActivity().addMenuProvider(
-            EditDeleteMenuProvider(viewModel, requireActivity(), viewLifecycleOwner),
-            viewLifecycleOwner
+            EditDeleteMenuProvider(
+                buttonMode = viewModel.toolbarButton,
+                editButtonAction = { ui.enterMultiSelect(requireActivity().onBackPressedDispatcher) },
+                deleteButtonAction = { ui.deleteSelected(); ui.exitMultiSelect() },
+                menuHost = requireActivity(),
+                lifecycleOwner = viewLifecycleOwner,
+            ),
+            viewLifecycleOwner,
+            Lifecycle.State.STARTED
         )
-        viewModel.enableToolbarEditButton(initialEnabled.isNotEmpty()) {
-            ui.enterMultiSelect(requireActivity().onBackPressedDispatcher)
-        }
         return ui.root
-    }
-
-    override fun onStart() {
-        super.onStart()
-        if (::ui.isInitialized) {
-            viewModel.enableToolbarEditButton(ui.entries.isNotEmpty()) {
-                ui.enterMultiSelect(requireActivity().onBackPressedDispatcher)
-            }
-        }
     }
 
     override fun onStop() {
         if (::ui.isInitialized) {
             ui.exitMultiSelect()
         }
-        viewModel.disableToolbarEditButton()
         super.onStop()
     }
 
