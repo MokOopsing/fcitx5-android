@@ -1,6 +1,10 @@
 {
     "uniqueId": "fcitx/fcitx5-libthai",
+<<<<<<< HEAD
     "artifactVersion": "5.1.4",
+=======
+    "artifactVersion": "5.1.10",
+>>>>>>> 9dfbd0c1 (Update fcitx5 submodules)
     "description": "Thai Wrapper for Fcitx",
     "name": "fcitx/fcitx5-libthai",
     "website": "https://github.com/fcitx/fcitx5-libthai",
