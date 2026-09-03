@@ -91,7 +91,23 @@ jobs:
             target_file="app-and-plugins/$prefix"_"$filename"
             mv "$source_file" "$target_file"
           done
-
+      - name: Check signing secrets
+        shell: bash
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+          KEY_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          missing=()
+          for secret_name in SIGNING_KEY KEY_STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -n "${!secret_name}" ]]; then
+              echo "${!secret_name}"
+            else
+              echo "$secret_name: missing"
+              missing+=("$secret_name")
+            fi
+          done
       - name: Sign app and plugins
         uses: kevin-david/zipalign-sign-android-release@v2
         #uses: rpavlik/sign-android-release@master
