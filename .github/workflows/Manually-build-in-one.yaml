@@ -11,9 +11,7 @@ jobs:
     strategy:
       matrix:
         os:
-          #- ubuntu-22.04
           - macos-26
-          # - windows-2025
         abi:
           #- armeabi-v7a
           - arm64-v8a
@@ -23,7 +21,7 @@ jobs:
       BUILD_ABI: ${{ matrix.abi }}
     steps:
       - name: Fetch source code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           submodules: recursive
@@ -33,12 +31,6 @@ jobs:
           git -C plugin/rime/src/main/cpp/fcitx5-rime fetch origin master && git -C plugin/rime/src/main/cpp/fcitx5-rime reset --hard origin/master
           git -C lib/fcitx5/src/main/cpp/prebuilt fetch origin master && git -C lib/fcitx5/src/main/cpp/prebuilt reset --hard origin/master
 
-      - name: Regenerate symlinks pointing to submodule (Windows)
-        if: ${{ matrix.os == 'windows-2022' }}
-        run: |
-          Remove-Item -Recurse app/src/main/assets/usr/share, plugin/hangul/src/main/assets/usr/share/libhangul, plugin/chewing/src/main/assets/usr/share/libchewing, plugin/jyutping/src/main/assets/usr/share/libime
-          git checkout -- .
-
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
@@ -46,31 +38,19 @@ jobs:
           java-version: "17"
 
       - name: Setup Android environment
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install Android NDK
         run: |
           sdkmanager --install "cmake;3.31.6"
-
-      - name: Install system dependencies (Ubuntu)
-        if: ${{ matrix.os == 'ubuntu-22.04' }}
-        run: |
-          sudo apt update
-          sudo apt install extra-cmake-modules gettext
 
       - name: Install system dependencies (macOS)
         if: ${{ startsWith(matrix.os, 'macos') }}
         run: |
           brew install extra-cmake-modules
 
-      - name: Install system dependencies (Windows)
-        if: ${{ startsWith(matrix.os, 'windows') }}
-        run: |
-          C:/msys64/usr/bin/pacman -S --noconfirm mingw-w64-ucrt-x86_64-gettext mingw-w64-ucrt-x86_64-extra-cmake-modules
-          Add-Content $env:GITHUB_PATH "C:/msys64/ucrt64/bin"
-
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v5
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Build APK
         run: |
@@ -123,7 +103,7 @@ jobs:
           BUILD_TOOLS_VERSION: "35.0.0"
 
       - name: Upload app and plugins
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: app&plugins-${{ matrix.os }}-${{ matrix.abi }}
           path: app-and-plugins/*-signed.apk
