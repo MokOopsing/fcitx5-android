@@ -145,6 +145,8 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
 
     private val recreateInputViewPrefs: Array<ManagedPreference<*>> = arrayOf(
         prefs.keyboard.expandKeypressArea,
+        prefs.keyboard.floatingMode,
+        prefs.keyboard.splitLandscape,
         prefs.advanced.disableAnimation,
         prefs.advanced.ignoreSystemWindowInsets,
     )
@@ -601,11 +603,31 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
 
     override fun onComputeInsets(outInsets: Insets) {
         if (inputDeviceMgr.isVirtualKeyboard) {
-            inputView?.keyboardView?.getLocationInWindow(inputViewLocation)
-            outInsets.apply {
-                contentTopInsets = inputViewLocation[1]
-                visibleTopInsets = inputViewLocation[1]
-                touchableInsets = Insets.TOUCHABLE_INSETS_VISIBLE
+            val currentInputView = inputView
+            if (currentInputView?.keyboardView?.let { currentInputView.isFloatingMode } == true) {
+                val bounds = currentInputView.keyboardView.keyboardBounds()
+                if (!bounds.isEmpty) {
+                    outInsets.apply {
+                        contentTopInsets = decorView.height
+                        visibleTopInsets = decorView.height
+                        touchableInsets = Insets.TOUCHABLE_INSETS_REGION
+                        touchableRegion.set(bounds)
+                    }
+                } else {
+                    currentInputView.keyboardView.getLocationInWindow(inputViewLocation)
+                    outInsets.apply {
+                        contentTopInsets = inputViewLocation[1]
+                        visibleTopInsets = inputViewLocation[1]
+                        touchableInsets = Insets.TOUCHABLE_INSETS_VISIBLE
+                    }
+                }
+            } else {
+                currentInputView?.keyboardView?.getLocationInWindow(inputViewLocation)
+                outInsets.apply {
+                    contentTopInsets = inputViewLocation[1]
+                    visibleTopInsets = inputViewLocation[1]
+                    touchableInsets = Insets.TOUCHABLE_INSETS_VISIBLE
+                }
             }
         } else {
             val n = decorView.findViewById<View>(android.R.id.navigationBarBackground)?.height ?: 0

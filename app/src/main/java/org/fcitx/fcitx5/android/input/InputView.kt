@@ -8,6 +8,7 @@ package org.fcitx.fcitx5.android.input
 import android.annotation.SuppressLint
 import android.content.res.Configuration
 import android.graphics.Point
+import android.graphics.Rect
 import android.os.Build
 import android.view.View
 import android.view.WindowInsets
@@ -131,6 +132,8 @@ class InputView(
     }
 
     private val keyboardPrefs = AppPrefs.getInstance().keyboard
+    private val prefs = AppPrefs.getInstance()
+    private val floatingMode by keyboardPrefs.floatingMode
 
     private val focusChangeResetKeyboard by keyboardPrefs.focusChangeResetKeyboard
 
@@ -201,7 +204,21 @@ class InputView(
         }
     }
 
-    val keyboardView: View
+    val keyboardView: KeyboardLayoutContainer
+    val isFloatingMode: Boolean get() = floatingMode
+    private lateinit var keyboardContent: ConstraintLayout
+
+    private fun isLandscape() = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    private fun offsetKey(base: String): String =
+        if (isLandscape()) "${base}_landscape" else base
+
+    private fun readOffset(base: String): Int =
+        prefs.keyboard.floatingMode.sharedPreferences.getInt(offsetKey(base), 0)
+
+    private fun saveOffset(base: String, value: Int) {
+        prefs.keyboard.floatingMode.sharedPreferences.edit().putInt(offsetKey(base), value).apply()
+    }
 
     init {
         // MUST call before any operation
@@ -224,7 +241,7 @@ class InputView(
 
         customBackground.imageDrawable = theme.backgroundDrawable(keyBorder)
 
-        keyboardView = constraintLayout {
+        keyboardContent = constraintLayout {
             // allow MotionEvent to be delivered to keyboard while pressing on padding views.
             // although it should be default for apps targeting Honeycomb (3.0, API 11) and higher,
             // but it's not the case on some devices ... just set it here
@@ -261,13 +278,27 @@ class InputView(
             })
         }
 
+        keyboardView = KeyboardLayoutContainer(context).apply {
+            setContentView(keyboardContent)
+            setFloatingMode(floatingMode, readOffset("floating_offset_x"), readOffset("floating_offset_y"))
+            onDrag = { dx, dy ->
+                val (x, y) = moveBy(dx, dy)
+                saveOffset("floating_offset_x", x)
+                saveOffset("floating_offset_y", y)
+                service.window.window?.decorView?.requestApplyInsets()
+            }
+            onDragEnd = {
+                service.window.window?.decorView?.requestApplyInsets()
+            }
+        }
+
         updateKeyboardSize()
 
         /* add(preedit.ui.root, lParams(matchParent, wrapContent) {
             above(keyboardView)
             centerHorizontally()
         }) */
-        add(keyboardView, lParams(matchParent, wrapContent) {
+        add(keyboardView, lParams(matchParent, if (floatingMode) matchParent else wrapContent) {
             centerHorizontally()
             bottomOfParent()
         })

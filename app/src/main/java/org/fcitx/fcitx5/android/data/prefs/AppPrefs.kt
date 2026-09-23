@@ -178,6 +178,10 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             switch(R.string.space_swipe_move_cursor, "space_swipe_move_cursor", true)
         val showLangSwitchKey =
             switch(R.string.show_lang_switch_key, "show_lang_switch_key", true)
+        val floatingMode =
+            switch(R.string.floating_keyboard, "floating_keyboard", false)
+        val splitLandscape =
+            switch(R.string.split_landscape_keyboard, "split_landscape_keyboard", false)
         val langSwitchKeyBehavior = enumList(
             R.string.lang_switch_key_behavior,
             "lang_switch_key_behavior",

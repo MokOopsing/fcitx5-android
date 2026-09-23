@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.input.keyboard
 
 import android.text.InputType
+import android.content.res.Configuration
 import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -44,6 +45,8 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     private val popup: PopupComponent by manager.must()
     private val bar: KawaiiBarComponent by manager.must()
     private val returnKeyDrawable: ReturnKeyDrawableComponent by manager.must()
+    private val floatingMode by AppPrefs.getInstance().keyboard.floatingMode
+    private val splitLandscape by AppPrefs.getInstance().keyboard.splitLandscape
 
     companion object : EssentialWindow.Key
 
@@ -68,6 +71,7 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     private val keyboards: HashMap<String, BaseKeyboard> by lazy {
         hashMapOf(
             TextKeyboard.Name to TextKeyboard(context, theme),
+            TextKeyboard.SplitName to TextKeyboard(context, theme, splitLandscape = true),
             NumberKeyboard.Name to NumberKeyboard(context, theme)
         )
     }
@@ -75,6 +79,13 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     private var lastSymbolType: String by AppPrefs.getInstance().internal.lastSymbolLayout
 
     private val currentKeyboard: BaseKeyboard? get() = keyboards[currentKeyboardName]
+
+    private val textLayoutName: String
+        get() = if (!floatingMode && splitLandscape && resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            TextKeyboard.SplitName
+        } else {
+            TextKeyboard.Name
+        }
 
     private val keyActionListener = KeyActionListener { it, source ->
         if (it is KeyAction.LayoutSwitchAction) {
@@ -91,7 +102,7 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     // This will be called EXACTLY ONCE
     override fun onCreateView(): View {
         keyboardView = context.frameLayout(R.id.keyboard_view)
-        attachLayout(TextKeyboard.Name)
+        attachLayout(textLayoutName)
         return keyboardView
     }
 
@@ -117,10 +128,14 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     }
 
     fun switchLayout(to: String, remember: Boolean = true) {
-        val target = to.ifEmpty { lastSymbolType }
+        val target = when {
+            to.isEmpty() -> lastSymbolType
+            to == TextKeyboard.Name -> textLayoutName
+            else -> to
+        }
         ContextCompat.getMainExecutor(service).execute {
             if (keyboards.containsKey(target)) {
-                if (remember && target != TextKeyboard.Name) {
+                if (remember && target != TextKeyboard.Name && target != TextKeyboard.SplitName) {
                     lastSymbolType = target
                 }
                 if (target == currentKeyboardName) return@execute
@@ -142,7 +157,7 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
         val targetLayout = when (info.inputType and InputType.TYPE_MASK_CLASS) {
             InputType.TYPE_CLASS_NUMBER -> NumberKeyboard.Name
             InputType.TYPE_CLASS_PHONE -> NumberKeyboard.Name
-            else -> TextKeyboard.Name
+            else -> textLayoutName
         }
         switchLayout(targetLayout, remember = false)
     }

@@ -17,19 +17,22 @@ import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
 import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.input.popup.PopupAction
+import org.fcitx.fcitx5.android.input.keyboard.KeyDef.Appearance.Variant
 import splitties.views.imageResource
 import timber.log.Timber
 
 @SuppressLint("ViewConstructor")
 class TextKeyboard(
     context: Context,
-    theme: Theme
-) : BaseKeyboard(context, theme, Layout) {
+    theme: Theme,
+    splitLandscape: Boolean = false
+) : BaseKeyboard(context, theme, if (splitLandscape) SplitLayout else Layout) {
 
     enum class CapsState { None, Once, Lock }
 
     companion object {
         const val Name = "Text"
+        const val SplitName = "TextSplit"
 
         val Layout: List<List<KeyDef>> = listOf(
             listOf(
@@ -73,6 +76,68 @@ class TextKeyboard(
                 SpaceKey(),
                 SymbolKey(".", 0.1f, KeyDef.Appearance.Variant.Alternative),
                 ReturnKey()
+            )
+        )
+
+        private fun spacer(width: Float) = KeyDef(
+            Appearance.Text(
+                keyCodeString = "",
+                displayText = " ",
+                textSize = 0f,
+                percentWidth = width,
+                border = Appearance.Border.Off,
+                margin = false,
+            ),
+            emptySet()
+        )
+
+        val SplitLayout: List<List<KeyDef>> = listOf(
+            listOf(
+                AlphabetKey("Q", "手", "1", percentWidth = 0.075f),
+                AlphabetKey("W", "田", "2", percentWidth = 0.075f),
+                AlphabetKey("E", "水", "3", percentWidth = 0.075f),
+                AlphabetKey("R", "口", "4", percentWidth = 0.075f),
+                AlphabetKey("T", "廿", "5", percentWidth = 0.075f),
+                spacer(0.25f),
+                AlphabetKey("Y", "卜", "6", percentWidth = 0.075f),
+                AlphabetKey("U", "山", "7", percentWidth = 0.075f),
+                AlphabetKey("I", "戈", "8", percentWidth = 0.075f),
+                AlphabetKey("O", "人", "9", percentWidth = 0.075f),
+                AlphabetKey("P", "心", "0", percentWidth = 0.075f),
+            ),
+            listOf(
+                AlphabetKey("A", "日", "@", percentWidth = 0.075f),
+                AlphabetKey("S", "尸", "*", percentWidth = 0.075f),
+                AlphabetKey("D", "木", "+", percentWidth = 0.075f),
+                AlphabetKey("F", "火", "-", percentWidth = 0.075f),
+                AlphabetKey("G", "土", "=", percentWidth = 0.075f),
+                spacer(0.25f),
+                AlphabetKey("G", "土", "=", percentWidth = 0.075f),
+                AlphabetKey("H", "的", "/", percentWidth = 0.075f),
+                AlphabetKey("J", "十", "#", percentWidth = 0.075f),
+                AlphabetKey("K", "大", "(", percentWidth = 0.075f),
+                AlphabetKey("L", "中", ")", percentWidth = 0.075f),
+            ),
+            listOf(
+                CapsKey(),
+                AlphabetKey("Z", "重", "'", percentWidth = 0.075f),
+                AlphabetKey("X", "止", ":", percentWidth = 0.075f),
+                AlphabetKey("C", "金", "\"", percentWidth = 0.075f),
+                AlphabetKey("V", "女", "?", percentWidth = 0.075f),
+                AlphabetKey("B", "月", "!", percentWidth = 0.075f),
+                spacer(0.1f),
+                AlphabetKey("B", "月", "!", percentWidth = 0.075f),
+                AlphabetKey("N", "弓", "~", percentWidth = 0.075f),
+                AlphabetKey("M", "一", "\\", percentWidth = 0.075f),
+                BackspaceKey(),
+            ),
+            listOf(
+                LayoutSwitchKey("?123", percentWidth = 0.15f),
+                CommaKey(0.1f, Variant.Alternative),
+                spacer(0.15f),
+                SpaceKey(0.35f),
+                LanguageKey(0.1f),
+                ReturnKey(0.15f),
             )
         )
     }

@@ -45,14 +45,16 @@ class AlphabetKey(
     val label: String,
     val punctuation: String,
     variant: Variant = Variant.Normal,
-    popup: Array<Popup>? = null
+    popup: Array<Popup>? = null,
+    percentWidth: Float = 0.1f
 ) : KeyDef(
     Appearance.AltText(
         keyCodeString = character,
         displayText = label,
         altText = punctuation,
         textSize = 23f,
-        variant = variant
+        variant = variant,
+        percentWidth = percentWidth
     ),
     setOf(
         Behavior.Press(KeyAction.FcitxKeyAction(character)),
@@ -100,11 +102,11 @@ class AlphabetDigitKey(
     )
 }
 
-class CapsKey : KeyDef(
+class CapsKey(percentWidth: Float = 0.15f) : KeyDef(
     Appearance.Image(
         src = R.drawable.ic_capslock_none,
         viewId = R.id.button_caps,
-        percentWidth = 0.15f,
+        percentWidth = percentWidth,
         variant = Variant.Alternative
     ),
     setOf(
@@ -202,10 +204,11 @@ class CommaKey(
     )
 )
 
-class LanguageKey : KeyDef(
+class LanguageKey(percentWidth: Float = 0.1f) : KeyDef(
     Appearance.Image(
         src = R.drawable.ic_baseline_language_24,
         variant = Variant.AltForeground,
+        percentWidth = percentWidth,
         viewId = R.id.button_lang
     ),
     setOf(
@@ -214,12 +217,12 @@ class LanguageKey : KeyDef(
     )
 )
 
-class SpaceKey : KeyDef(
+class SpaceKey(percentWidth: Float = 0f) : KeyDef(
     Appearance.Text(
         keyCodeString = " ",
         displayText = " ",
         textSize = 13f,
-        percentWidth = 0f,
+        percentWidth = percentWidth,
         border = Border.Special,
         viewId = R.id.button_space,
         soundEffect = InputFeedbacks.SoundEffect.SpaceBar
