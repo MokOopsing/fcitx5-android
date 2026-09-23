@@ -17,6 +17,7 @@ import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
 import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.input.popup.PopupAction
+import org.fcitx.fcitx5.android.input.keyboard.KeyDef.Appearance
 import org.fcitx.fcitx5.android.input.keyboard.KeyDef.Appearance.Variant
 import splitties.views.imageResource
 import timber.log.Timber

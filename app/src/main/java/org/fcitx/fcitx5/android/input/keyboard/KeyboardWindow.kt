@@ -81,7 +81,7 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     private val currentKeyboard: BaseKeyboard? get() = keyboards[currentKeyboardName]
 
     private val textLayoutName: String
-        get() = if (!floatingMode && splitLandscape && resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+        get() = if (!floatingMode && splitLandscape && context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
             TextKeyboard.SplitName
         } else {
             TextKeyboard.Name
