@@ -7,6 +7,7 @@ import android.graphics.drawable.GradientDrawable
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewOutlineProvider
 import android.widget.FrameLayout
 import kotlin.math.roundToInt
 
@@ -20,7 +21,8 @@ class KeyboardLayoutContainer(context: Context) : FrameLayout(context) {
 
     private val density = resources.displayMetrics.density
     private val dragHandleHeight = (DRAG_HANDLE_HEIGHT_DP * density).roundToInt()
-    private val dragHandle = View(context)
+    private val dragHandle = FrameLayout(context)
+    private val dragIndicator = View(context)
     private var content: View? = null
     private var floating = false
     private var offsetX = 0
@@ -34,11 +36,18 @@ class KeyboardLayoutContainer(context: Context) : FrameLayout(context) {
     var onBoundsChanged: ((Rect) -> Unit)? = null
 
     init {
-        clipChildren = false
+        clipChildren = true
+        clipToPadding = true
         dragHandle.setBackgroundColor(Color.TRANSPARENT)
+        dragHandle.elevation = 2f * density
+        dragIndicator.background = GradientDrawable().apply {
+            setColor(Color.WHITE)
+            cornerRadius = 3f * density
+        }
         dragHandle.setOnTouchListener { _, event ->
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
+                    dragHandle.parent.requestDisallowInterceptTouchEvent(true)
                     lastTouchX = event.rawX
                     lastTouchY = event.rawY
                     true
@@ -54,6 +63,7 @@ class KeyboardLayoutContainer(context: Context) : FrameLayout(context) {
                 }
 
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    dragHandle.parent.requestDisallowInterceptTouchEvent(false)
                     onDragEnd?.invoke()
                     true
                 }
@@ -61,6 +71,7 @@ class KeyboardLayoutContainer(context: Context) : FrameLayout(context) {
                 else -> false
             }
         }
+        dragHandle.addView(dragIndicator, LayoutParams((36 * density).roundToInt(), (5 * density).roundToInt()))
         addView(dragHandle, LayoutParams(0, 0))
     }
 
@@ -80,6 +91,7 @@ class KeyboardLayoutContainer(context: Context) : FrameLayout(context) {
             cornerRadius = CARD_RADIUS_DP * density
         } else null
         clipToOutline = enabled
+        outlineProvider = if (enabled) ViewOutlineProvider.BACKGROUND else ViewOutlineProvider.BOUNDS
         elevation = if (enabled) 12f * density else 0f
         dragHandle.visibility = if (enabled) VISIBLE else GONE
         requestLayout()
@@ -120,6 +132,10 @@ class KeyboardLayoutContainer(context: Context) : FrameLayout(context) {
             MeasureSpec.makeMeasureSpec(cardWidth, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(dragHandleHeight, MeasureSpec.EXACTLY)
         )
+        dragIndicator.measure(
+            MeasureSpec.makeMeasureSpec((36 * density).roundToInt(), MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec((5 * density).roundToInt(), MeasureSpec.EXACTLY)
+        )
     }
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
@@ -143,6 +159,12 @@ class KeyboardLayoutContainer(context: Context) : FrameLayout(context) {
             (height - totalHeight).coerceAtLeast(0)
         )
         dragHandle.layout(cardLeft, cardTop, cardLeft + child.measuredWidth, cardTop + dragHandleHeight)
+        dragIndicator.layout(
+            (dragHandle.width - dragIndicator.measuredWidth) / 2,
+            (dragHandle.height - dragIndicator.measuredHeight) / 2,
+            (dragHandle.width + dragIndicator.measuredWidth) / 2,
+            (dragHandle.height + dragIndicator.measuredHeight) / 2
+        )
         child.layout(
             cardLeft,
             cardTop + dragHandleHeight,
