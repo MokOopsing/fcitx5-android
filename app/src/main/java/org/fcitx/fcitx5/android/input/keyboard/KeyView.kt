@@ -116,13 +116,13 @@ abstract class KeyView(ctx: Context, val theme: Theme, val def: KeyDef.Appearanc
     init {
         // trigger setEnabled(true)
         isEnabled = true
-            isClickable = def.behaviors.isNotEmpty()
+        isClickable = true
         isHapticFeedbackEnabled = false
         if (def.viewId > 0) {
             id = def.viewId
         }
         // key border
-            if (def.behaviors.isNotEmpty() && ((bordered && def.border != Border.Off) || def.border == Border.On)) {
+        if ((bordered && def.border != Border.Off) || def.border == Border.On) {
             val bkgColor = when (def.variant) {
                 Variant.Normal, Variant.AltForeground -> theme.keyBackgroundColor
                 Variant.Alternative -> theme.altKeyBackgroundColor
@@ -142,11 +142,18 @@ abstract class KeyView(ctx: Context, val theme: Theme, val def: KeyDef.Appearanc
         } else {
             // normal press highlight for keys without special background
             // special background is handled in `onSizeChanged()`
-                if (def.behaviors.isNotEmpty() && def.border != Border.Special) {
+            if (def.border != Border.Special) {
                 setupPressHighlight()
             }
         }
         add(appearanceView, lParams(matchParent, matchParent))
+    }
+
+    fun disableInteraction() {
+        isClickable = false
+        isFocusable = false
+        isHapticFeedbackEnabled = false
+        appearanceView.foreground = null
     }
 
     private fun setupPressHighlight(mask: Drawable? = null) {
