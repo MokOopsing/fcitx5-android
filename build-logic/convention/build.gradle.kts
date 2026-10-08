@@ -37,10 +37,6 @@ gradlePlugin {
             id = "org.fcitx.fcitx5.android.lib-convention"
             implementationClass = "AndroidLibConventionPlugin"
         }
-        register("androidPluginAppConvention") {
-            id = "org.fcitx.fcitx5.android.plugin-app-convention"
-            implementationClass = "AndroidPluginAppConventionPlugin"
-        }
         register("buildMetadata") {
             id = "org.fcitx.fcitx5.android.build-metadata"
             implementationClass = "BuildMetadataPlugin"
