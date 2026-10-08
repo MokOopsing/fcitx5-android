@@ -18,9 +18,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.fcitx.fcitx5.android.common.ipc.IClipboardEntryTransformer
 import org.fcitx.fcitx5.android.common.ipc.IFcitxRemoteService
-import org.fcitx.fcitx5.android.core.data.DataManager
-import org.fcitx.fcitx5.android.core.reloadPinyinDict
-import org.fcitx.fcitx5.android.core.reloadQuickPhrase
 import org.fcitx.fcitx5.android.daemon.FcitxDaemon
 import org.fcitx.fcitx5.android.data.clipboard.ClipboardManager
 import org.fcitx.fcitx5.android.utils.Const
@@ -61,11 +58,6 @@ class FcitxRemoteService : Service() {
 
         override fun getPid(): Int = Process.myPid()
 
-        override fun getLoadedPlugins(): MutableMap<String, String> =
-            DataManager.getLoadedPlugins().map {
-                it.packageName to it.versionName
-            }.let { mutableMapOf<String, String>().apply { putAll(it) } }
-
         override fun restartFcitx() {
             FcitxDaemon.restartFcitx()
         }
@@ -98,10 +90,6 @@ class FcitxRemoteService : Service() {
                         || return@launch
                 updateClipboardManager()
             }
-        }
-
-        override fun reloadPinyinDict() {
-            FcitxDaemon.getFirstConnectionOrNull()?.runIfReady { reloadPinyinDict() }
         }
 
         override fun reloadQuickPhrase() {

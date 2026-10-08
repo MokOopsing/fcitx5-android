@@ -27,7 +27,9 @@ android {
                     // android specific modules
                     "androidfrontend",
                     "androidkeyboard",
-                    "androidnotification"
+                    "androidnotification",
+                    // fcitx5-rime addon (rime engine fused into main apk)
+                    "rime"
                 )
             }
         }
@@ -60,16 +62,14 @@ android {
 
 fcitxComponent {
     includeLibs = listOf(
-        "fcitx5",
-        "fcitx5-lua",
-        "libime",
-        "fcitx5-chinese-addons"
+        "fcitx5"
     )
-    // exclude (delete immediately after install) tables that nobody would use
-    excludeFiles = listOf("cangjie", "erbi", "qxm", "wanfeng").map {
-        "usr/share/fcitx5/inputmethod/$it.conf"
-    }
     installPrebuiltAssets = true
+}
+
+generateDataDescriptor {
+    // rime-data ships its own copy of opencc data; link it to the shared one
+    symlinks.put("usr/share/rime-data/opencc", "usr/share/opencc")
 }
 
 ksp {
@@ -79,9 +79,6 @@ ksp {
 dependencies {
     ksp(project(":codegen"))
     implementation(project(":lib:fcitx5"))
-    implementation(project(":lib:fcitx5-lua"))
-    implementation(project(":lib:libime"))
-    implementation(project(":lib:fcitx5-chinese-addons"))
     implementation(project(":lib:common"))
     implementation(libs.kotlinx.coroutines)
     implementation(libs.kotlinx.serialization.json)

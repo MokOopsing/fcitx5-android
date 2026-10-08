@@ -61,22 +61,12 @@ jobs:
       - name: Build APK
         run: |
           ./gradlew :app:assembleRelease
-          ./gradlew :assembleReleasePlugins
 
       - name: Move app and plugins to one dir
         shell: bash
         run: |
           mkdir app-and-plugins
           mv app/build/outputs/apk/release/* app-and-plugins/
-          find plugin/*/build/outputs/apk/release -type f -print0 | while IFS= read -r -d '' source_file; do
-            # 获取第二级目录名作为前缀 
-            prefix=$(basename "$(dirname "$(dirname "$(dirname "$(dirname "$(dirname "$source_file")")")")")")
-            # 获取文件名 
-            filename=$(basename "$source_file") 
-            # 构建目标文件路径，加上前缀
-            target_file="app-and-plugins/$prefix"_"$filename"
-            mv "$source_file" "$target_file"
-          done
 
       - name: Sign app and plugins
         uses: kevin-david/zipalign-sign-android-release@v2

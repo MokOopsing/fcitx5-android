@@ -102,12 +102,6 @@ object PreferenceScreenFactory {
             }
         }
 
-        fun pinyinDictionary() = Preference(context).apply {
-            setOnPreferenceClickListener {
-                navigate(SettingsRoute.PinyinDict(""))
-            }
-        }
-
         fun punctuationEditor(title: String, lang: String?) = Preference(context).apply {
             setOnPreferenceClickListener {
                 navigate(SettingsRoute.Punctuation(title, lang))
@@ -117,18 +111,6 @@ object PreferenceScreenFactory {
         fun quickPhraseEditor() = Preference(context).apply {
             setOnPreferenceClickListener {
                 navigate(SettingsRoute.QuickPhraseList)
-            }
-        }
-
-        fun tableInputMethod() = Preference(context).apply {
-            setOnPreferenceClickListener {
-                navigate(SettingsRoute.TableInputMethods)
-            }
-        }
-
-        fun pinyinCustomPhrase() = Preference(context).apply {
-            setOnPreferenceClickListener {
-                navigate(SettingsRoute.PinyinCustomPhrase)
             }
         }
 
@@ -206,7 +188,6 @@ object PreferenceScreenFactory {
             }
             is ConfigEnumList -> listPreference(ConfigType.TyEnum)
             is ConfigExternal -> when (descriptor.knownType) {
-                ConfigExternal.ETy.PinyinDict -> pinyinDictionary()
                 ConfigExternal.ETy.Punctuation -> punctuationEditor(
                     descriptor.description ?: descriptor.name,
                     // fcitx://config/addon/punctuation/punctuationmap/zh_CN
@@ -214,9 +195,6 @@ object PreferenceScreenFactory {
                 )
                 ConfigExternal.ETy.QuickPhrase -> quickPhraseEditor()
                 ConfigExternal.ETy.Chttrans -> addonConfigPreference("chttrans")
-                ConfigExternal.ETy.TableGlobal -> addonConfigPreference("table")
-                ConfigExternal.ETy.AndroidTable -> tableInputMethod()
-                ConfigExternal.ETy.PinyinCustomPhrase -> pinyinCustomPhrase()
                 ConfigExternal.ETy.RimeUserDataDir -> rimeUserDataDir(
                     descriptor.description ?: descriptor.name
                 )
