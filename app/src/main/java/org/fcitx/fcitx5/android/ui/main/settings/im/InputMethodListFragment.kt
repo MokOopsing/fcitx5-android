@@ -67,6 +67,7 @@ class InputMethodListFragment : ProgressFragment(), OnItemChangedListener<InputM
             viewLifecycleOwner,
             Lifecycle.State.STARTED
         )
+        ui.removable = { it.uniqueName != "rime" }
         return ui.root
     }
 
