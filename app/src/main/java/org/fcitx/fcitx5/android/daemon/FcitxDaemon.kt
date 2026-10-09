@@ -23,6 +23,7 @@ import org.fcitx.fcitx5.android.daemon.FcitxDaemon.disconnect
 import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.notificationManager
 import timber.log.Timber
+import java.util.concurrent.CancellationException
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
@@ -47,28 +48,32 @@ object FcitxDaemon {
 
     private fun mkConnection(name: String) = object : FcitxConnection {
 
-        private inline fun <T> ensureConnected(block: () -> T) =
-            if (name in clients)
-                block()
-            else throw IllegalStateException("$name is disconnected")
+        private fun ensureConnected() = lock.withLock {
+            if (name !in clients)
+                throw IllegalStateException("$name is disconnected")
+        }
 
-        override fun <T> runImmediately(block: suspend FcitxAPI.() -> T): T = ensureConnected {
-            runBlocking(realFcitx.lifeCycleScope.coroutineContext) {
+        override fun <T> runImmediately(block: suspend FcitxAPI.() -> T): T {
+            ensureConnected()
+            return runBlocking(realFcitx.lifeCycleScope.coroutineContext) {
                 block(fcitxImpl)
             }
         }
 
-        override suspend fun <T> runOnReady(block: suspend FcitxAPI.() -> T): T = ensureConnected {
-            realFcitx.lifecycle.whenReady { block(fcitxImpl) }
+        override suspend fun <T> runOnReady(block: suspend FcitxAPI.() -> T): T {
+            lock.withLock {
+                if (name !in clients)
+                    throw CancellationException("$name is disconnected")
+            }
+            return realFcitx.lifecycle.whenReady { block(fcitxImpl) }
         }
 
         override fun runIfReady(block: suspend FcitxAPI.() -> Unit) {
-            ensureConnected {
-                if (realFcitx.isReady)
-                    realFcitx.lifeCycleScope.launch {
-                        block(fcitxImpl)
-                    }
-            }
+            ensureConnected()
+            if (realFcitx.isReady)
+                realFcitx.lifeCycleScope.launch {
+                    runOnReady { block(fcitxImpl) }
+                }
         }
 
         override val lifecycleScope: CoroutineScope
