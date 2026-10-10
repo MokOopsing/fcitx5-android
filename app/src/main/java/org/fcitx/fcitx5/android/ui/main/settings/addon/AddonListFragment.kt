@@ -24,6 +24,9 @@ class AddonListFragment : ProgressFragment(), OnItemChangedListener<AddonInfo> {
 
     private val addonDisplayNames = mutableMapOf<String, String>()
 
+    private fun AddonInfo.isRequiredAddon() =
+        uniqueName == "androidfrontend" || uniqueName == "rime"
+
     private fun updateAddonState() {
         if (!isInitialized) return
         val ids = ui.entries.map { it.uniqueName }.toTypedArray()
@@ -96,12 +99,15 @@ class AddonListFragment : ProgressFragment(), OnItemChangedListener<AddonInfo> {
         ui = requireContext().CheckBoxListUi(
             initialEntries = fcitx.runOnReady {
                 addons()
-                    .sortedBy { it.uniqueName }
+                    .sortedWith(
+                        compareBy<AddonInfo> { !it.isRequiredAddon() }
+                            .thenBy { it.uniqueName }
+                    )
                     .onEach { addonDisplayNames[it.uniqueName] = it.displayName }
             },
             initCheckBox = { entry ->
                 // The Android frontend and Rime are required by this app.
-                isEnabled = entry.uniqueName != "androidfrontend" && entry.uniqueName != "rime"
+                isEnabled = !entry.isRequiredAddon()
                 isChecked = entry.enabled
                 setOnCheckedChangeListener { _, isChecked ->
                     if (!isChecked)
