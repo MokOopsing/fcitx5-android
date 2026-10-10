@@ -100,8 +100,8 @@ class AddonListFragment : ProgressFragment(), OnItemChangedListener<AddonInfo> {
                     .onEach { addonDisplayNames[it.uniqueName] = it.displayName }
             },
             initCheckBox = { entry ->
-                // our addon shouldn't be disabled
-                isEnabled = entry.uniqueName != "androidfrontend"
+                // The Android frontend and Rime are required by this app.
+                isEnabled = entry.uniqueName != "androidfrontend" && entry.uniqueName != "rime"
                 isChecked = entry.enabled
                 setOnCheckedChangeListener { _, isChecked ->
                     if (!isChecked)
