@@ -6,24 +6,14 @@ written to batch-NNN.unsure.txt for a second look with the sentences, and to nei
 Nothing is written unless all is well."""
 import datetime
 import os
-import re
 import sys
+
+import common
 
 HERE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..')
 TAKE = {'word', 'name', 'slang', 'term'}
 LEAVE = {'fragment', 'phrase', 'typo', 'junk', 'obscure'}
-
-def spellings():
-    """The engine's syllables, as Syllables.kt lists them: a reading of any other cannot be packed."""
-    path = os.path.join(HERE, '..', 'lib', 'ime-core', 'src', 'main', 'kotlin', 'org', 'fcitx', 'fcitx5',
-                        'android', 'engine', 'pinyin', 'Syllables.kt')
-    with open(path, encoding='utf-8') as f:
-        source = f.read()
-    listed = source[source.index('SPELLINGS ='):source.index('private val spellings')]
-    return set(''.join(re.findall(r'"([^"]*)"', listed)).split())
-
-
-SYLLABLES = spellings()
+SYLLABLES = common.syllables()
 
 
 def length(word):
@@ -32,18 +22,16 @@ def length(word):
 
 
 def words(path):
-    with open(path, encoding='utf-8') as f:
-        return [line.split('\t', 1)[0].strip() for line in f if line.strip() and not line.startswith('#')]
+    return [r[0].strip() for r in common.rows(path)]
 
 
 def suggested(path):
     """The batch's suggested reading of each word."""
-    with open(path, encoding='utf-8') as f:
-        rows = [line.rstrip('\n').split('\t') for line in f if line.strip() and not line.startswith('#')]
-    return {r[0].strip(): r[1].strip().split("'") for r in rows if len(r) > 1}
+    return {r[0].strip(): r[1].strip().split("'") for r in common.rows(path) if len(r) > 1}
 
 
-def check(out, seen):
+def parse_decisions(out, seen):
+    """A curator's decisions on a batch, checked against it; each word is noted in `seen`, across batches."""
     batch = out.replace('.out.tsv', '.tsv')
     if batch == out or not os.path.exists(batch):
         raise SystemExit(f'{out}: no batch beside it ({batch})')
@@ -54,9 +42,9 @@ def check(out, seen):
         for n, line in enumerate(f, 1):
             if not line.strip() or line.startswith('#'):
                 continue
-            f_ = [x.strip() for x in line.rstrip('\n').split('\t')]
-            word, verdict = f_[0], f_[1] if len(f_) > 1 else ''
-            kind = f_[2] if len(f_) > 2 else ''
+            fields = [x.strip() for x in line.rstrip('\n').split('\t')]
+            word, verdict = fields[0], fields[1] if len(fields) > 1 else ''
+            kind = fields[2] if len(fields) > 2 else ''
             where = f'{out}:{n}: {word}'
             if word not in asked:
                 errors.append(f'{where}: not in the batch')
@@ -65,25 +53,26 @@ def check(out, seen):
             seen.setdefault(word, where)
             here.add(word)
             if verdict == 'add':
-                reading = f_[3] if len(f_) > 3 else ''
+                reading = fields[3] if len(fields) > 3 else ''
                 syllables = reading.split("'")
                 if kind not in TAKE:
                     errors.append(f'{where}: kind {kind!r}, not one of {sorted(TAKE)}')
-                note = f_[4] if len(f_) > 4 else ''
+                note = fields[4] if len(fields) > 4 else ''
                 if len(syllables) != length(word) or not all(s in SYLLABLES for s in syllables):
                     errors.append(f'{where}: reading {reading!r}')
                 elif word in suggestion and not note:
                     # a curator that slipped a line gives each word the next one's reading
                     agree = sum(a == b for a, b in zip(syllables, suggestion[word]))
                     if agree * 2 < len(syllables):
-                        errors.append(f"{where}: reading {reading!r} far from the suggested "
-                                      f"{"'".join(suggestion[word])!r}, with no note saying why")
+                        said = "'".join(suggestion[word])
+                        errors.append(f'{where}: reading {reading!r} far from the suggested '
+                                      f'{said!r}, with no note saying why')
                 add.append((word, reading, kind, note))
             elif verdict == 'reject':
                 if kind not in LEAVE:
                     errors.append(f'{where}: kind {kind!r}, not one of {sorted(LEAVE)}')
                 # a note where an add's reading goes, or after it
-                reject.append((word, kind, ' '.join(x for x in f_[3:5] if x)))
+                reject.append((word, kind, ' '.join(x for x in fields[3:5] if x)))
             elif verdict == 'unsure':
                 unsure.append(word)
             else:
@@ -98,11 +87,11 @@ def main():
     today = datetime.date.today().isoformat()
     adds, rejects, errors, unsure, seen = [], [], [], {}, {}
     for out in sys.argv[1:]:
-        a, r, u, e = check(out, seen)
-        adds += a
-        rejects += r
-        errors += e
-        unsure[out.replace('.out.tsv', '.unsure.txt')] = u
+        batch_adds, batch_rejects, batch_unsure, batch_errors = parse_decisions(out, seen)
+        adds += batch_adds
+        rejects += batch_rejects
+        errors += batch_errors
+        unsure[out.replace('.out.tsv', '.unsure.txt')] = batch_unsure
     if errors or not sys.argv[1:]:
         print('\n'.join(errors) or __doc__, file=sys.stderr)
         raise SystemExit(1)
@@ -116,10 +105,10 @@ def main():
     with open(os.path.join(HERE, 'reject.tsv'), 'a', encoding='utf-8') as f:
         for word, kind, note in rejected:
             f.write(f'{word}\t{kind}\t{today}\t{note}\n')
-    for path, words_ in unsure.items():
-        if words_:
+    for path, unsure_words in unsure.items():
+        if unsure_words:
             with open(path, 'w', encoding='utf-8') as f:
-                f.write(''.join(w + '\n' for w in words_))
+                f.write(''.join(w + '\n' for w in unsure_words))
         elif os.path.exists(path):
             os.remove(path)
     print(f'{len(added)} added, {len(rejected)} rejected, {sum(map(len, unsure.values()))} unsure, '

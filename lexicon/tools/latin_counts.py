@@ -2,14 +2,18 @@
 """latin_counts.py <fineweb shard.parquet>...: how often each Latin word is written inside Chinese
 text, in each spelling (iPhone, APP, app): a word with a Han character on one side or the other,
 a space between allowed, so a sentence of English is not counted, only words Chinese is typed
-around. Writes latin-counts.tsv here, `word<TAB>count<TAB>pages`, of those seen 3 times or more.
+around. Writes latin-counts.tsv here, `word<TAB>count<TAB>pages`, of those seen 3 times or more,
+pages being how many the word is on in any spelling, after a `# shards:` line naming the shards.
 For lexicon/tools/latin.py."""
 import collections
 import re
 import sys
 from multiprocessing import Pool
+from pathlib import Path
 
 import pyarrow.parquet as pq
+
+from common import SHARDS
 
 HAN = '\\u3400-\\u4dbf\\u4e00-\\u9fff'
 WORD = r'([A-Za-z][A-Za-z0-9]*(?:[+#]+)?)'
@@ -22,7 +26,11 @@ TOKEN = re.compile(r'(?:(?<=[%s])|(?<=[%s] ))%s%s|%s%s(?=[%s]| [%s])'
 
 def count(job):
     path, group = job
-    texts = pq.ParquetFile(path).read_row_group(group, columns=['text']).column('text').to_pylist()
+    return tally(pq.ParquetFile(path).read_row_group(group, columns=['text']).column('text').to_pylist())
+
+
+def tally(texts):
+    """count of these texts, a page each, read from no parquet: each word's uses, and its pages in any spelling."""
     words, pages = collections.Counter(), collections.Counter()
     for text in texts:
         seen = set()
@@ -30,7 +38,8 @@ def count(job):
             w = m.group(1) or m.group(2)
             if len(w) <= 24:
                 words[w] += 1
-                seen.add(w)
+                # a page with both APP and app is one page of the word
+                seen.add(w.lower())
         pages.update(seen)
     return words, pages
 
@@ -38,11 +47,13 @@ def count(job):
 if __name__ == '__main__':
     jobs = [(p, g) for p in sys.argv[1:] for g in range(pq.ParquetFile(p).num_row_groups)]
     words, pages = collections.Counter(), collections.Counter()
-    with Pool(6) as pool:
+    with Pool() as pool:
         for w, p in pool.imap_unordered(count, jobs):
             words.update(w)
             pages.update(p)
+    names = ' '.join(Path(p).stem for p in sys.argv[1:])
     with open('latin-counts.tsv', 'w') as out:
+        out.write(f'{SHARDS} {names}\n')
         for w, n in words.most_common():
             if n >= 3:
-                out.write(f'{w}\t{n}\t{pages[w]}\n')
+                out.write(f'{w}\t{n}\t{pages[w.lower()]}\n')

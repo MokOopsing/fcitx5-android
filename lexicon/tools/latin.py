@@ -22,6 +22,8 @@ import statistics
 import sys
 from pathlib import Path
 
+from common import SHARDS, rows, syllables
+
 MIN_COUNT = 100
 MIN_PAGES = 25
 MIN_SHARE = 0.1
@@ -30,10 +32,14 @@ PINYIN_PENALTY = float(os.environ.get('PINYIN_PENALTY', '-1'))
 LEXICON = Path(__file__).resolve().parent.parent
 
 
-def syllables():
-    text = (LEXICON.parent / 'lib/ime-core/src/main/kotlin/org/fcitx/fcitx5/android/engine/pinyin/Syllables.kt').read_text()
-    body = text[text.index('SPELLINGS =') : text.index('private val spellings')]
-    return {s for s in ' '.join(re.findall(r'"([^"]*)"', body)).split() if s.islower() and s not in ('m', 'n', 'ng', 'r')}
+def shards(counts_path):
+    """The FineWeb shards counted, as latin_counts.py's first line names them."""
+    with open(counts_path, encoding='utf-8') as f:
+        header = f.readline().rstrip('\n')
+    names = header[len(SHARDS):].split() if header.startswith(SHARDS) else []
+    if not names:
+        raise SystemExit(f'{counts_path}: no {SHARDS!r} line first; count again with latin_counts.py')
+    return names
 
 
 def all_pinyin(word, pinyin):
@@ -45,26 +51,30 @@ def all_pinyin(word, pinyin):
 
 
 def main(counts_path, arpa_path, out_path):
-    pinyin = syllables()
-    rejected = {line.split('\t')[0].lower() for line in (LEXICON / 'reject.tsv').read_text().splitlines()
-                if line and not line.startswith('#')}
+    pinyin = {s for s in syllables() if s.islower() and s not in ('m', 'n', 'ng', 'r')}
+    rejected = {r[0].lower() for r in rows(LEXICON / 'reject.tsv')}
+    counted = shards(counts_path)
     spellings = collections.defaultdict(dict)
     pages = collections.Counter()
-    for line in open(counts_path, encoding='utf-8'):
-        word, count, on = line.rstrip('\n').split('\t')
+    for word, count, on in rows(counts_path):
         if re.fullmatch(r'[A-Za-z]{2,%d}' % MAX_LENGTH, word):
             spellings[word.lower()][word] = int(count)
-            pages[word.lower()] += int(on)
+            # latin_counts.py's pages are the word's, in any spelling: not to be summed
+            pages[word.lower()] = int(on)
     model = {}
     with open(arpa_path, encoding='utf-8') as arpa:
         for line in arpa:
             if line.startswith('\\2-grams'):
                 break
-            f = line.split('\t')
+            # any whitespace, as ArpaReader splits; no '\n' left on a unigram without a backoff
+            f = line.split()
             if len(f) >= 2 and re.fullmatch(r'[A-Za-z]+', f[1]):
                 model[f[1]] = float(f[0])
     seen = {w: c for forms in spellings.values() for w, c in forms.items()}
     offsets = [score - math.log10(seen[w]) for w, score in model.items() if seen.get(w, 0) >= MIN_COUNT]
+    if not offsets:
+        raise SystemExit(f'{arpa_path}: no Latin word of the model seen {MIN_COUNT} times or more in {counts_path}, '
+                         'nothing to place the scores by')
     offset = statistics.median(offsets)
     words = []
     for key, forms in spellings.items():
@@ -76,10 +86,11 @@ def main(counts_path, arpa_path, out_path):
             if count >= MIN_SHARE * total:
                 words.append((word, round(min(-3.0, math.log10(count) + offset + penalty), 2)))
     words.sort(key=lambda w: (-w[1], w[0]))
+    named = ', '.join(counted[:-1]) + ' and ' + counted[-1] if len(counted) > 1 else counted[0]
     with open(out_path, 'w', encoding='utf-8') as out:
         out.write('# youmo words 1\n# layer: latin\n')
-        out.write('# The Latin words typed inside Chinese, from FineWeb-2 cmn_Hani (ODC-By 1.0) shards 000_00002\n')
-        out.write('# and 000_00003; made by lexicon/tools/latin.py, %d words, offset %.2f from %d words of the model.\n'
+        out.write('# The Latin words typed inside Chinese, from FineWeb-2 cmn_Hani (ODC-By 1.0) shards %s;\n' % named)
+        out.write('# made by lexicon/tools/latin.py, %d words, offset %.2f from %d words of the model.\n'
                   % (len(words), offset, len(offsets)))
         for word, score in words:
             out.write('%s\t%s\t%s\n' % (word, "'".join(word.upper()), score))

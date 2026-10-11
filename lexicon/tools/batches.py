@@ -22,13 +22,18 @@ import argparse
 import math
 import os
 
+from common import rows
 
-def rows(path):
+
+def candidates(path):
+    """The rows of `ime-dict-tool words`, each by its header's names: no column read by its place."""
     with open(path, encoding='utf-8') as f:
-        for line in f:
-            if line.startswith('#') or not line.strip():
-                continue
-            yield line.rstrip('\n').split('\t')
+        header = f.readline().rstrip('\n')
+    names = header[2:].split('\t') if header.startswith('# ') else []
+    if not {'text', 'count', 'pmi', 'left_entropy', 'right_entropy'} <= set(names):
+        raise SystemExit(f'{path}: not the candidates of ime-dict-tool words: {header!r}')
+    for r in rows(path):
+        yield dict(zip(names, r))
 
 
 def decided(lexicon):
@@ -41,24 +46,23 @@ def decided(lexicon):
 
 
 def main():
-    a = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser()
     for flag in ('--pack', '--candidates', '--probe', '--out'):
-        a.add_argument(flag, required=True)
-    a.add_argument('--examples')
-    a.add_argument('--size', type=int)
-    a.add_argument('--brief', action='store_true')
-    a.add_argument('--words')
-    a.add_argument('--first', type=int)
-    a.add_argument('--right-from', type=int)
-    a.add_argument('--lexicon', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
-    args = a.parse_args()
+        parser.add_argument(flag, required=True)
+    parser.add_argument('--examples')
+    parser.add_argument('--size', type=int)
+    parser.add_argument('--brief', action='store_true')
+    parser.add_argument('--words')
+    parser.add_argument('--first', type=int)
+    parser.add_argument('--right-from', type=int)
+    parser.add_argument('--lexicon', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+    args = parser.parse_args()
     size = args.size if args.size is not None else (1000 if args.brief else 200)
     if size < 1 or not (args.brief or args.examples):
         raise SystemExit('--size: 1 or more; --examples: wanted unless --brief')
     only = None
     if args.words:
-        with open(args.words, encoding='utf-8') as f:
-            only = {line.split('\t', 1)[0].strip() for line in f if line.strip() and not line.startswith('#')}
+        only = {r[0].strip() for r in rows(args.words)}
 
     pack = [(r[0], r[1]) for r in rows(args.pack)]
     with open(args.probe, encoding='utf-8') as f:
@@ -67,7 +71,7 @@ def main():
         raise SystemExit(f'{args.probe}: {len(probe)} lines, the pack {len(pack)} words')
     skip = decided(args.lexicon)
     # only when asked: the candidates of a crawl are millions
-    counts = {r[0]: int(r[1]) for r in rows(args.candidates)} if args.right_from is not None else {}
+    counts = {r['text']: int(r['count']) for r in candidates(args.candidates)} if args.right_from is not None else {}
     todo = {}
     for (word, reading), out in zip(pack, probe):
         if out[0] != reading.replace("'", ''):
@@ -77,10 +81,10 @@ def main():
         ask = not top or top[0] != word or often
         if word not in skip and ask and (only is None or word in only):
             todo[word] = [reading, '/'.join(top)]
-    for r in rows(args.candidates):
-        if r[0] in todo:
-            entropy = min(float(r[4]), float(r[5]))
-            todo[r[0]] += [int(r[1]), r[3], '-' if math.isnan(entropy) else f'{entropy:.2f}']
+    for r in candidates(args.candidates):
+        if r['text'] in todo:
+            entropy = min(float(r['left_entropy']), float(r['right_entropy']))
+            todo[r['text']] += [int(r['count']), r['pmi'], '-' if math.isnan(entropy) else f'{entropy:.2f}']
     examples = {} if args.brief else {r[0]: r[1:] for r in rows(args.examples) if r[0] in todo}
 
     order = sorted((w for w in todo if len(todo[w]) == 5), key=lambda w: (-todo[w][2], w))[:args.first]
