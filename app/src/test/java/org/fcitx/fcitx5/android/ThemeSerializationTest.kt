@@ -6,6 +6,8 @@ package org.fcitx.fcitx5.android
 
 import android.graphics.Rect
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import org.fcitx.fcitx5.android.data.theme.CustomThemeSerializer
 import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.data.theme.ThemePreset
@@ -228,7 +230,7 @@ class ThemeSerializationTest {
     @Test
     fun missingVersionFallsBackToOldest() {
         // no version field at all is treated as 1.0, so the full migration chain applies
-        val raw = Fixtures.v1.replace(",\n                \"version\": \"1.0\"", "")
+        val raw = JsonObject(Json.parseToJsonElement(Fixtures.v1).jsonObject - "version").toString()
         val (decoded, migrated) = raw.toCustomTheme()
         Assert.assertEquals("Migration should happen", true, migrated)
         Assert.assertEquals("Same as an explicit 1.0 document", Fixtures.v1.toCustomTheme().first, decoded)

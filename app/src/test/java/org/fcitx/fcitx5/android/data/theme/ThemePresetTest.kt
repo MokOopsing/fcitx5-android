@@ -9,6 +9,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.lang.reflect.Modifier
 
 /**
  * Invariants that must hold for every built-in theme. Presets are 300 lines of hand-written
@@ -29,30 +30,15 @@ class ThemePresetTest {
                 field.name to (field.get(ThemePreset) as Theme.Builtin)
             }
 
-    /** Every colour a [Theme] exposes, so a newly added field is picked up by the diff checks. */
-    private fun Theme.colours(): Map<String, Int> = mapOf(
-        "backgroundColor" to backgroundColor,
-        "barColor" to barColor,
-        "keyboardColor" to keyboardColor,
-        "keyBackgroundColor" to keyBackgroundColor,
-        "keyTextColor" to keyTextColor,
-        "candidateTextColor" to candidateTextColor,
-        "candidateLabelColor" to candidateLabelColor,
-        "candidateCommentColor" to candidateCommentColor,
-        "altKeyBackgroundColor" to altKeyBackgroundColor,
-        "altKeyTextColor" to altKeyTextColor,
-        "accentKeyBackgroundColor" to accentKeyBackgroundColor,
-        "accentKeyTextColor" to accentKeyTextColor,
-        "keyPressHighlightColor" to keyPressHighlightColor,
-        "keyShadowColor" to keyShadowColor,
-        "popupBackgroundColor" to popupBackgroundColor,
-        "popupTextColor" to popupTextColor,
-        "spaceBarColor" to spaceBarColor,
-        "dividerColor" to dividerColor,
-        "clipboardEntryColor" to clipboardEntryColor,
-        "genericActiveBackgroundColor" to genericActiveBackgroundColor,
-        "genericActiveForegroundColor" to genericActiveForegroundColor,
-    )
+    /** Every colour a [Theme] exposes, found by reflection so a newly added field is picked up by the diff checks. */
+    private val colourGetters = Theme::class.java.declaredMethods.filter {
+        it.name.startsWith("get") && it.returnType == Int::class.javaPrimitiveType &&
+            it.parameterCount == 0 && !Modifier.isStatic(it.modifiers) && !it.isSynthetic
+    }
+
+    private fun Theme.colours(): Map<String, Int> = colourGetters.associate {
+        it.name.removePrefix("get").replaceFirstChar { c -> c.lowercaseChar() } to it.invoke(this) as Int
+    }
 
     // region the presets themselves
 
@@ -89,10 +75,8 @@ class ThemePresetTest {
     }
 
     @Test
-    fun everyPresetDefinesEveryColour() {
-        for ((property, theme) in presets) {
-            assertEquals("$property is missing a colour", 21, theme.colours().size)
-        }
+    fun thereAreColoursToCheck() {
+        assertTrue("reflection found too few colours, the diff checks are vacuous", colourGetters.size >= 21)
     }
 
     /** Text must not be fully transparent, whatever the background does. */

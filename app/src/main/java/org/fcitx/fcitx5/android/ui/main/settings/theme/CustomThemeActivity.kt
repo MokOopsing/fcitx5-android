@@ -33,10 +33,11 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updateLayoutParams
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.R as MaterialR
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
 import org.fcitx.fcitx5.android.R
@@ -51,6 +52,7 @@ import org.fcitx.fcitx5.android.utils.DarkenColorFilter
 import org.fcitx.fcitx5.android.utils.item
 import org.fcitx.fcitx5.android.utils.parcelable
 import org.fcitx.fcitx5.android.utils.styledColor
+import org.fcitx.fcitx5.android.utils.toast
 import splitties.dimensions.dp
 import splitties.resources.color
 import splitties.resources.resolveThemeAttribute
@@ -82,7 +84,10 @@ import splitties.views.gravityVerticalCenter
 import splitties.views.horizontalPadding
 import splitties.views.textAppearance
 import splitties.views.topPadding
+import timber.log.Timber
 import java.io.File
+import java.io.IOException
+import java.io.InputStream
 
 class CustomThemeActivity : AppCompatActivity() {
 
@@ -221,7 +226,7 @@ class CustomThemeActivity : AppCompatActivity() {
         lateinit var launcher: ActivityResultLauncher<CropOption>
         var srcImageExtension: String? = null
         var srcImageCopy: File? = null
-        var srcImageCopyJob: Job? = null
+        var srcImageCopyJob: Deferred<Boolean>? = null
         var cropRect: Rect? = null
         var cropRotation: Int = 0
         lateinit var croppedBitmap: Bitmap
@@ -394,28 +399,7 @@ class CustomThemeActivity : AppCompatActivity() {
         val input = contentResolver.openInputStream(uri)!!
         val copy = File(cacheDir, "$SRC_COPY${System.nanoTime()}.tmp")
         srcImageCopy = copy
-        srcImageCopyJob = lifecycleScope.launch(Dispatchers.IO) {
-            input.use { i ->
-                copy.outputStream().use { o ->
-                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                    var n = i.read(buffer)
-                    while (n >= 0) {
-                        ensureActive()
-                        o.write(buffer, 0, n)
-                        n = i.read(buffer)
-                    }
-                }
-            }
-        }.apply {
-            // cut short, maybe before it ran: nothing else closes the stream, and the copy may be
-            // made after onDestroy deleted it
-            invokeOnCompletion {
-                if (it != null) {
-                    input.close()
-                    copy.delete()
-                }
-            }
-        }
+        srcImageCopyJob = lifecycleScope.copyImage(input, copy)
     }
 
     @SuppressLint("SetTextI18n")
@@ -437,6 +421,12 @@ class CustomThemeActivity : AppCompatActivity() {
     private fun done() {
         lifecycleScope.withLoadingDialog(this) {
             whenHasBackground {
+                // the photo could not be read: a theme without it could never be cropped again
+                if (newCreated && !srcImageCopyJob!!.await()) {
+                    toast(R.string.exception_theme_src_image)
+                    cancel()
+                    return@withLoadingDialog
+                }
                 withContext(Dispatchers.IO) {
                     croppedImageFile.delete()
                     croppedImageFile.outputStream().use {
@@ -451,7 +441,6 @@ class CustomThemeActivity : AppCompatActivity() {
                                 )
                             )
                         }
-                        srcImageCopyJob!!.join()
                         srcImageCopy!!.copyTo(srcImageFile, overwrite = true)
                     }
                 }
@@ -537,3 +526,38 @@ class CustomThemeActivity : AppCompatActivity() {
         private const val SRC_COPY = "src"
     }
 }
+
+/**
+ * [input] copied into [copy] off the main thread: true once copied. False, the copy deleted, when
+ * the photo's provider fails the read, which uncaught would close the app, keyboard and all.
+ */
+internal fun CoroutineScope.copyImage(input: InputStream, copy: File): Deferred<Boolean> =
+    async(Dispatchers.IO) {
+        try {
+            input.use { i ->
+                copy.outputStream().use { o ->
+                    val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                    var n = i.read(buffer)
+                    while (n >= 0) {
+                        ensureActive()
+                        o.write(buffer, 0, n)
+                        n = i.read(buffer)
+                    }
+                }
+            }
+            true
+        } catch (e: IOException) {
+            Timber.w(e, "theme background image")
+            copy.delete()
+            false
+        }
+    }.apply {
+        // cut short, maybe before it ran: nothing else closes the stream, and the copy may be
+        // made after onDestroy deleted it
+        invokeOnCompletion {
+            if (it != null) {
+                input.close()
+                copy.delete()
+            }
+        }
+    }

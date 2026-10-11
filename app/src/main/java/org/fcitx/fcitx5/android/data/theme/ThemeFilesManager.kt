@@ -44,8 +44,18 @@ object ThemeFilesManager {
         return Triple(themeName, croppedImageFile, srcImageFile)
     }
 
+    // the images by name only, as exported: an absolute path breaks once the files dir moves
+    private fun Theme.Custom.withImageNames() = backgroundImage?.let {
+        copy(
+            backgroundImage = it.copy(
+                croppedFilePath = File(it.croppedFilePath).name,
+                srcFilePath = File(it.srcFilePath).name
+            )
+        )
+    } ?: this
+
     fun saveThemeFiles(theme: Theme.Custom) {
-        themeFile(theme).writeText(Json.encodeToString(CustomThemeSerializer, theme))
+        themeFile(theme).writeText(Json.encodeToString(CustomThemeSerializer, theme.withImageNames()))
     }
 
     fun deleteThemeFiles(theme: Theme.Custom) {
@@ -72,27 +82,23 @@ object ThemeFilesManager {
                     Timber.w("Theme file ${it.absolutePath} has a name that is a path: ${theme.name}")
                     return@decode null
                 }
-                // the paths are absolute; a backup imported from another package id (the renaming to
-                // 幽默输入法) has them in that app's directory, while the images came along into this one
                 val image = theme.backgroundImage
-                val found = if (image == null ||
-                    File(image.croppedFilePath).isThemeImage() && File(image.srcFilePath).isThemeImage()
-                ) {
+                val found = if (image == null) {
                     theme
                 } else {
-                    val here = image.copy(
-                        croppedFilePath = File(dir, File(image.croppedFilePath).name).path,
-                        srcFilePath = File(dir, File(image.srcFilePath).name).path
-                    )
-                    if (!File(here.croppedFilePath).isThemeImage() || !File(here.srcFilePath).isThemeImage()) {
+                    val here = image.foundIn(dir) { it.isThemeImage() }
+                    if (here == null) {
                         Timber.w("Cannot find background image file for theme ${theme.name}")
                         return@decode null
                     }
                     theme.copy(backgroundImage = here)
                 }
-                // Update the saved file if migration happens or the images were found elsewhere
-                if (migrated || found !== theme) {
+                // Update the saved file if migration happens
+                if (migrated) {
+                    // listed by age: rewritten newest first, the newest would get the oldest new time
+                    val modified = it.lastModified()
                     saveThemeFiles(found)
+                    themeFile(found).setLastModified(modified)
                 }
                 return@decode found
             }.toMutableList()
@@ -105,16 +111,7 @@ object ThemeFilesManager {
         runCatching {
             ZipOutputStream(dest.buffered()).use { zipStream ->
                 // we don't export the internal path of images
-                val tweakedTheme = theme.backgroundImage?.let {
-                    theme.copy(
-                        backgroundImage = theme.backgroundImage.copy(
-                            croppedFilePath = theme.backgroundImage.croppedFilePath
-                                .substringAfterLast('/'),
-                            srcFilePath = theme.backgroundImage.srcFilePath
-                                .substringAfterLast('/'),
-                        )
-                    )
-                } ?: theme
+                val tweakedTheme = theme.withImageNames()
                 if (tweakedTheme.backgroundImage != null) {
                     requireNotNull(theme.backgroundImage)
                     // write cropped image
@@ -152,7 +149,7 @@ object ThemeFilesManager {
                         jsonFile.readText()
                     )
                     // the name becomes a file name in dir, so a crafted one must not be a path out of it
-                    if (!isPlainFileName(decoded.name)) errorRuntime(R.string.exception_theme_json)
+                    if (!isPlainFileName(decoded.name)) errorRuntime(R.string.invalid_value)
                     if (ThemeManager.BuiltinThemes.find { it.name == decoded.name } != null)
                         errorRuntime(R.string.exception_theme_name_clash)
                     val oldTheme = ThemeManager.getTheme(decoded.name) as? Theme.Custom
@@ -160,20 +157,21 @@ object ThemeFilesManager {
                     val newTheme = if (decoded.backgroundImage != null) {
                         val srcFile = importedImageFile(decoded.backgroundImage.srcFilePath)
                             ?: errorRuntime(R.string.exception_theme_src_image)
-                        val oldSrcFile = oldTheme?.backgroundImage?.srcFilePath?.let { File(it) }
-                        val srcFileNameMatches = oldSrcFile?.name == srcFile.name
-                        extracted.find { it.name == srcFile.name }
-                            // allow overwriting background image files when theme and file names all are same
-                            ?.copyTo(srcFile, overwrite = srcFileNameMatches)
-                            ?: errorRuntime(R.string.exception_theme_src_image)
                         val croppedFile = importedImageFile(decoded.backgroundImage.croppedFilePath)
                             ?: errorRuntime(R.string.exception_theme_cropped_image)
+                        // both found before either is copied: one refused would leave the other in dir
+                        val extractedSrcFile = extracted.find { it.name == srcFile.name }
+                            ?: errorRuntime(R.string.exception_theme_src_image)
+                        val extractedCroppedFile = extracted.find { it.name == croppedFile.name }
+                            ?: errorRuntime(R.string.exception_theme_cropped_image)
+                        val oldSrcFile = oldTheme?.backgroundImage?.srcFilePath?.let { File(it) }
+                        val srcFileNameMatches = oldSrcFile?.name == srcFile.name
+                        // allow overwriting background image files when theme and file names all are same
+                        extractedSrcFile.copyTo(srcFile, overwrite = srcFileNameMatches)
                         val oldCroppedFile =
                             oldTheme?.backgroundImage?.croppedFilePath?.let { File(it) }
                         val croppedFileNameMatches = oldCroppedFile?.name == croppedFile.name
-                        extracted.find { it.name == croppedFile.name }
-                            ?.copyTo(croppedFile, overwrite = croppedFileNameMatches)
-                            ?: errorRuntime(R.string.exception_theme_cropped_image)
+                        extractedCroppedFile.copyTo(croppedFile, overwrite = croppedFileNameMatches)
                         if (!srcFileNameMatches) {
                             oldSrcFile?.delete()
                         }
@@ -196,3 +194,11 @@ object ThemeFilesManager {
         }
 
 }
+
+// a json names its images by file name; an older one by absolute path, of the old package id's dir in a backup
+// from before the renaming to 幽默输入法, while the images came along into this one; null if either is missing
+internal fun Theme.Custom.CustomBackground.foundIn(dir: File, isThemeImage: (File) -> Boolean) =
+    copy(
+        croppedFilePath = File(dir, File(croppedFilePath).name).path,
+        srcFilePath = File(dir, File(srcFilePath).name).path
+    ).takeIf { isThemeImage(File(it.croppedFilePath)) && isThemeImage(File(it.srcFilePath)) }

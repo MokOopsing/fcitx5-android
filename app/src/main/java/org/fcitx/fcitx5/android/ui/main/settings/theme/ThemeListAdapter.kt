@@ -69,7 +69,7 @@ abstract class ThemeListAdapter : RecyclerView.Adapter<ThemeListAdapter.ViewHold
     }
 
     // removedIndex is an entry's, index a position: those after it move up, its own is gone
-    private fun removeIndex(removedIndex: Int, index: Int): Int = when {
+    private fun indexAfterRemoval(removedIndex: Int, index: Int): Int = when {
         index == removedIndex + OFFSET -> -1
         index > removedIndex + OFFSET -> index - 1
         else -> index
@@ -79,13 +79,13 @@ abstract class ThemeListAdapter : RecyclerView.Adapter<ThemeListAdapter.ViewHold
         val index = entries.indexOfFirst { it.name == name }
         entries.removeAt(index)
         notifyItemRemoved(index + OFFSET)
-        activeIndex = removeIndex(index, activeIndex)
-        lightIndex = removeIndex(index, lightIndex)
-        darkIndex = removeIndex(index, darkIndex)
+        activeIndex = indexAfterRemoval(index, activeIndex)
+        lightIndex = indexAfterRemoval(index, lightIndex)
+        darkIndex = indexAfterRemoval(index, darkIndex)
     }
 
     // the replaced entry goes first, and those it passes move down one
-    private fun replaceIndex(replacedIndex: Int, index: Int): Int = when (index) {
+    private fun indexAfterReplace(replacedIndex: Int, index: Int): Int = when (index) {
         replacedIndex + OFFSET -> OFFSET
         in OFFSET until replacedIndex + OFFSET -> index + 1
         else -> index
@@ -95,9 +95,9 @@ abstract class ThemeListAdapter : RecyclerView.Adapter<ThemeListAdapter.ViewHold
         val index = entries.indexOfFirst { it.name == theme.name }
         entries.removeAt(index)
         entries.add(0, theme)
-        activeIndex = replaceIndex(index, activeIndex)
-        lightIndex = replaceIndex(index, lightIndex)
-        darkIndex = replaceIndex(index, darkIndex)
+        activeIndex = indexAfterReplace(index, activeIndex)
+        lightIndex = indexAfterReplace(index, lightIndex)
+        darkIndex = indexAfterReplace(index, darkIndex)
         notifyItemMoved(index + OFFSET, OFFSET)
         notifyItemChanged(OFFSET)
     }

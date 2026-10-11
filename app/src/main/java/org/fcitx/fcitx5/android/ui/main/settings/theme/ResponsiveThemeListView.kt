@@ -18,6 +18,8 @@ class ResponsiveThemeListView(context: Context) : RecyclerView(context) {
 
     private lateinit var grid: GridLayoutManager
 
+    private var spacing: ThemeListItemDecoration? = null
+
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         if (w <= 0) return
@@ -27,9 +29,14 @@ class ResponsiveThemeListView(context: Context) : RecyclerView(context) {
                 override fun generateDefaultLayoutParams() = LayoutParams(itemWidth, itemHeight)
             }
             layoutManager = grid
-            addItemDecoration(ThemeListItemDecoration(itemWidth, spanCount))
         } else {
             grid.spanCount = spanCount
+        }
+        // the spacing is worked out for a number of columns: a new one for the new count
+        if (spacing?.spanCount != spanCount) {
+            spacing?.let { removeItemDecoration(it) }
+            spacing = ThemeListItemDecoration(itemWidth, spanCount).also { addItemDecoration(it) }
+        } else {
             invalidateItemDecorations()
         }
     }

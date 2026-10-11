@@ -65,7 +65,7 @@ sealed class Theme : Parcelable {
         override val name: String,
         override val isDark: Boolean,
         /**
-         * absolute paths of cropped and src png files
+         * absolute paths of cropped and src png files; their names only in the saved json
          */
         val backgroundImage: CustomBackground?,
         override val backgroundColor: Int,
@@ -102,7 +102,7 @@ sealed class Theme : Parcelable {
             fun toDrawable(): Drawable? {
                 val cropped = File(croppedFilePath)
                 if (!cropped.exists()) return null
-                val bitmap = BitmapFactory.decodeStream(cropped.inputStream()) ?: return null
+                val bitmap = BitmapFactory.decodeFile(cropped.path) ?: return null
                 return BitmapDrawable(appContext.resources, bitmap).apply {
                     colorFilter = DarkenColorFilter(100 - brightness)
                 }
