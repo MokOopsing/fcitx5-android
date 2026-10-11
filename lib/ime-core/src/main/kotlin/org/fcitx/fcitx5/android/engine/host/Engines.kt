@@ -228,14 +228,14 @@ class Engines(
         when (im) {
             PINYIN -> {
                 val segmenter = PinyinSegmenter(s.fuzzy, s.typos, neighbours = s.typos, latin = if (s.latinWords) assets.latinWords else null)
-                val pinyin = pinyinSession(segmenter, spell = false, habitScope = PINYIN)
+                val pinyin = pinyinSession(segmenter, spell = false)
                 ForgetsInTables(StrokeLookup(pinyin, assets::strokes, assets::charReading, s.pageSize, blocked = lexicon::isBlocked, follow = pinyin::follow, retype = pinyin::typeAll))
             }
             ENGLISH -> EnglishSession(assets.englishWords, pageSize = s.pageSize)
             // 简拼 only where the digits read nothing else: as common on the evaluation set, and faster
-            T9 -> ForgetsInTables(pinyinSession(T9Segmenter(s.fuzzy, abbreviations = false), spell = true, habitScope = T9))
+            T9 -> ForgetsInTables(pinyinSession(T9Segmenter(s.fuzzy, abbreviations = false), spell = true))
             SHUANGPIN -> ForgetsInTables(
-                pinyinSession(ShuangpinSegmenter(s.scheme, s.fuzzy, s.typos), spell = true, habitScope = "$SHUANGPIN/${s.shuangpin}"),
+                pinyinSession(ShuangpinSegmenter(s.scheme, s.fuzzy, s.typos), spell = true),
             )
             else -> {
                 val method = TABLES[im]
@@ -249,13 +249,13 @@ class Engines(
         }
     }
 
-    /** A session of one of the pinyins, alike but for how [segmenter] reads the keys and where their habits are kept ([habitScope]). */
-    private fun pinyinSession(segmenter: Segmenter, spell: Boolean, habitScope: String): PinyinSession {
+    /** A session of one of the pinyins, alike but for how [segmenter] reads the keys. */
+    private fun pinyinSession(segmenter: Segmenter, spell: Boolean): PinyinSession {
         val s = settings
         return PinyinSession(
             assets.pinyinData, segmenter, spell = spell,
             pageSize = s.pageSize, user = lexicon.user(), prediction = s.prediction, prior = lexicon.prior(), phraseBook = lexicon.phrases(),
-            reranker = reranker(), refiner = refiner(), block = lexicon::block, habits = lexicon.habits.scope(habitScope),
+            reranker = reranker(), refiner = refiner(), block = lexicon::block,
             charReadings = assets::charSyllables, extensions = assets::decoderExtensions,
         )
     }

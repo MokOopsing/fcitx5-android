@@ -207,6 +207,8 @@ class UserModel(
         return (counts[key(prev, word)] + PRIOR * alone) / (before + PRIOR)
     }
 
+    override fun count(word: Int): Float = counts[key(NO_WORD, word)]
+
     override fun forEachAfter(prev: Int, visit: (Int) -> Unit) {
         if (prev == NO_WORD) return
         followers[prev]?.forEach { if (counts[key(prev, it)] > 0f) visit(it) }

@@ -10,7 +10,6 @@ import org.fcitx.fcitx5.android.engine.pinyin.Segmenter
 import org.fcitx.fcitx5.android.engine.rerank.SentencePicker
 import org.fcitx.fcitx5.android.engine.rerank.SentenceRefiner
 import org.fcitx.fcitx5.android.engine.session.PinyinSession
-import org.fcitx.fcitx5.android.engine.user.KeyHabits
 import org.fcitx.fcitx5.android.engine.user.UserModel
 import org.fcitx.fcitx5.android.engine.user.WordPack
 
@@ -23,8 +22,7 @@ import org.fcitx.fcitx5.android.engine.user.WordPack
  *   to text not typed before, which learning must not make worse.
  * Each against the same typed by an engine that learns nothing.
  *
- * Each engine is a session as the app makes one: with rerankers of its own when given and, one
- * learning, the habits of what it was taught ([KeyHabits]) too.
+ * Each engine is a session as the app makes one: with rerankers of its own when given.
  */
 class Learning(
     private val data: PinyinData,
@@ -65,12 +63,12 @@ class Learning(
         return rows
     }
 
-    /** An engine learning all along, as the app's: the user's words, their habits and, if [learnsPrior], the prior per layer. */
+    /** An engine learning all along, as the app's: the user's words and, if [learnsPrior], the prior per layer. */
     private inner class Learner(learnsPrior: Boolean = false) {
         private val user = UserModel(data.dictionary, data.vocabulary)
         val prior = if (learnsPrior) LayerPrior(data.layers, extra = { id -> user.layerOf(id) }) else null
         private val keystrokes = KeystrokeRun(
-            session(listed(user, prior), prior, KeyHabits().scope(HABITS), reranker?.invoke(), refiner?.invoke()),
+            session(listed(user, prior), prior, reranker?.invoke(), refiner?.invoke()),
         )
 
         fun type(sample: Sample) = keystrokes.type(sample)
@@ -84,7 +82,7 @@ class Learning(
         private val user = pack?.let { listed(UserModel(data.dictionary, data.vocabulary), null) }?.apply {
             journal = UserModel.Journal { _, sentence -> learned += sentence }
         }
-        private val keystrokes = KeystrokeRun(session(user, null, null, reranker?.invoke(), refiner?.invoke()))
+        private val keystrokes = KeystrokeRun(session(user, null, reranker?.invoke(), refiner?.invoke()))
 
         fun type(sample: Sample) = keystrokes.type(sample).also {
             user?.forgetEach(learned)
@@ -93,8 +91,8 @@ class Learning(
     }
 
     // no prediction, unlike the app's: KeystrokeRun reads none, and the next sample clears it
-    private fun session(user: UserModel?, prior: LayerPrior?, habits: KeyHabits.Scope?, picker: SentencePicker?, refine: SentenceRefiner?) =
-        PinyinSession(data, segmenter, prediction = false, user = user, prior = prior, refiner = refine, habits = habits, reranker = picker)
+    private fun session(user: UserModel?, prior: LayerPrior?, picker: SentencePicker?, refine: SentenceRefiner?) =
+        PinyinSession(data, segmenter, prediction = false, user = user, prior = prior, refiner = refine, reranker = picker)
 
     /** [user] with the [pack]'s words listed, in the pack's layer of [prior] if there is one. */
     private fun listed(user: UserModel, prior: LayerPrior?): UserModel {
@@ -104,7 +102,4 @@ class Learning(
         return user
     }
 
-    private companion object {
-        const val HABITS = "pinyin"
-    }
 }

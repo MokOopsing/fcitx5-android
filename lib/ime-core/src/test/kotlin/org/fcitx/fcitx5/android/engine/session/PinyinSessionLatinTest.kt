@@ -8,9 +8,10 @@ import org.fcitx.fcitx5.android.engine.data.PinyinData
 import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
 import org.fcitx.fcitx5.android.engine.pinyin.LatinWords
 import org.fcitx.fcitx5.android.engine.pinyin.PinyinSegmenter
+import org.fcitx.fcitx5.android.engine.pinyin.Syllables
 import org.fcitx.fcitx5.android.engine.session.Action.Key
 import org.fcitx.fcitx5.android.engine.session.Action.Select
-import org.fcitx.fcitx5.android.engine.user.KeyHabits
+import org.fcitx.fcitx5.android.engine.user.UserModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -76,10 +77,13 @@ class PinyinSessionLatinTest {
         assertNotEquals("iPhone", session(latin = null).type("iphone").candidates.first())
     }
 
-    // a word's letters cost nothing, 简拼 an initial each: learning the word alone never made it up
+    // a word's letters cost nothing, 简拼 an initial each: a word the user committed twice is spared that
     @Test
     fun aWordPickedOverALatinWordTwiceIsFirstThereafter() {
-        val session = PinyinSession(data, PinyinSegmenter(latin = latin), habits = KeyHabits().scope("pinyin"))
+        val session = PinyinSession(data, PinyinSegmenter(latin = latin), user = UserModel(data.dictionary, data.vocabulary).apply {
+            // a user who has typed for a while: one commit's lift alone puts nothing first
+            addCount(UserModel.Entry("的", intArrayOf(Syllables.id("de"))), 1000f)
+        })
         fun pick(): List<String> {
             val zzz = session.type("zzz").candidates
             session.apply(Select(zzz.indexOf("啧啧啧")))

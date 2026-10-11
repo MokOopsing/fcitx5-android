@@ -162,8 +162,7 @@ class EngineEvalRunner {
 
     /**
      * The logs under [dir], the engine's user directory, with a record in them: pinyin's, which keeps
-     * the counts of every word typed, the dictionary's too, the layer prior and the key habits
-     * (UserStore), and each table's. One of a header alone learned nothing, as a first start leaves it.
+     * the counts of every word typed, the dictionary's too, and the layer prior (UserStore), and each table's. One of a header alone learned nothing, as a first start leaves it.
      */
     private fun learnedLogs(dir: File): List<File> =
         dir.walkTopDown().filter { it.isFile && it.name.endsWith(LOG_SUFFIX) && it.length() > RecordFormat.HEADER_SIZE }.toList()

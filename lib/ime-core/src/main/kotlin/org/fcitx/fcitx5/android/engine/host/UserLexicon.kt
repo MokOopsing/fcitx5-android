@@ -15,7 +15,6 @@ import org.fcitx.fcitx5.android.engine.lattice.LayerPrior
 import org.fcitx.fcitx5.android.engine.phrase.CustomPhrases
 import org.fcitx.fcitx5.android.engine.phrase.PhraseBook
 import org.fcitx.fcitx5.android.engine.pinyin.Syllables
-import org.fcitx.fcitx5.android.engine.user.KeyHabits
 import org.fcitx.fcitx5.android.engine.user.LibimeImport
 import org.fcitx.fcitx5.android.engine.user.UserModel
 import org.fcitx.fcitx5.android.engine.user.UserModel.Entry
@@ -29,7 +28,7 @@ import java.util.concurrent.Executor
 /**
  * The user's words, for [Engines]: what they added to pinyin ([additions]: custom phrases,
  * dictionaries, word packs), the model of what they typed with its log under [userDir] (made
- * afresh from libime's, [legacy]), its layer prior, their key habits, and the words they added
+ * afresh from libime's, [legacy]), its layer prior, and the words they added
  * and blocked by hand ([WordLists]). It lists, adds, blocks, imports, exports and forgets those
  * words for the settings, blocks and forgets them for a table's candidate, and learns what a
  * table saved. A word forgotten here is forgotten in the tables too ([forgetInTables]); a change
@@ -97,7 +96,7 @@ internal class UserLexicon(
             val file = File(userDir, USER_PINYIN)
             // a log that cannot be read or moved aside: learn in memory rather than not type
             store = try {
-                UserStore(file, model, onError = onError, prior = prior(), habits = habits, background = compactions).apply { open(seed = ::importLegacy) }
+                UserStore(file, model, onError = onError, prior = prior(), background = compactions).apply { open(seed = ::importLegacy) }
             } catch (e: IOException) {
                 onError(e)
                 null
@@ -106,9 +105,6 @@ internal class UserLexicon(
         addDictionaries(model)
         lists.applyTo(model)
     }
-
-    // kept in the user model's log, read with it: asked for after user()
-    val habits = KeyHabits()
 
     // in the user directory with the log, in memory without one
     private val lists by lazy(LazyThreadSafetyMode.NONE) { WordLists(userDir, onError) }
@@ -170,7 +166,6 @@ internal class UserLexicon(
         val blocked = lists.blockAll(entries)
         val model = user()
         entries.forEach { model.block(it) }
-        habits.forgetAll(entries.mapTo(HashSet()) { it.text })
         return blocked.size
     }
 
@@ -185,7 +180,6 @@ internal class UserLexicon(
             // learned word is the dictionary's: at worst a stale one costs a compaction
             val forgotten = entries.toSet().count(model::knows)
             model.forgetEach(entries)
-            habits.forgetAll(entries.mapTo(HashSet()) { it.text })
             forgetInTables(entries.map { it.text })
             if (forgotten > 1) compactUser()
         }
@@ -419,7 +413,6 @@ internal class UserLexicon(
     /** Forgets [text] in pinyin, however read, and in every table that saved it. */
     fun forgetEverywhere(text: String) {
         user().forgetText(text)
-        habits.forgetAll(setOf(text))
         forgetInTables(listOf(text))
     }
 

@@ -40,6 +40,9 @@ interface UserWords {
     /** The syllables of [word] as the user typed it, of this trie's or the dictionary's; null if never. */
     fun reading(word: Int): IntArray? = null
 
+    /** How many times the user committed [word]: 0 for a word never typed. */
+    fun count(word: Int): Float = 0f
+
     /** The chance the user types [word] after [prev], from what they typed: 0 for a word never typed. */
     fun probability(prev: Int, word: Int): Float = 0f
 }

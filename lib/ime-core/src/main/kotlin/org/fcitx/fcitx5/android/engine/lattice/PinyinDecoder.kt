@@ -133,7 +133,7 @@ class PinyinDecoder(
             arcs.start[at] = arcs.size
             if (graph.edges(at).isEmpty()) continue
             val limit = if (at == graph.start) Int.MAX_VALUE else wordsPerReading
-            collect(graph, at, dictionary.root, user?.root ?: -1, 0f, limit)
+            collect(graph, at, dictionary.root, user?.root ?: -1, 0f, 0f, limit)
             // nothing in the dictionary starts here: keep what was typed, so every path goes on
             if (arcs.size == arcs.start[at]) {
                 for (e in graph.edges(at)) arcs.add(graph.to(e), NO_WORD, penalties.raw)
@@ -145,49 +145,60 @@ class PinyinDecoder(
 
     /**
      * Adds the words of every path from [node] in the dictionary, and [userNode] in the user's
-     * words, that the graph spells from [at]; -1 for a trie the path has left.
+     * words, that the graph spells from [at]; -1 for a trie the path has left. [short] is the part
+     * of [cost] for syllables typed short (简拼, the start of one): a word the user has committed
+     * [LEARNED] times is spared it, so typed whole once, its 简拼 finds it too (嗯嗯 for ee).
      */
-    private fun collect(graph: SyllableGraph, at: Int, node: Int, userNode: Int, cost: Float, limit: Int) {
+    private fun collect(graph: SyllableGraph, at: Int, node: Int, userNode: Int, cost: Float, short: Float, limit: Int) {
         for (e in graph.edges(at)) {
             val kind = graph.kind(e)
             if (kind == Kind.RAW) continue
             val to = graph.to(e)
             val matches = graph.matches(e)
             val edgeCost = cost + penalty(kind)
+            val edgeShort = short + shortPenalty(kind)
             for (i in 0 until matches.size) {
                 val child = if (node < 0) -1 else dictionary.child(node, matches.syllable(i))
                 val userChild = if (userNode < 0 || user == null) -1 else user.child(userNode, matches.syllable(i))
                 if (child < 0 && userChild < 0) continue
-                val c = edgeCost + penalty(matches.flags(i)) + if (kind == Kind.SYLLABLE && matches.syllable(i) in NASALS) penalties.nasal else 0f
+                val c = edgeCost + penalty(matches.flags(i)) + nasal(kind, matches.syllable(i))
                 var more = false
                 if (child >= 0) {
                     val words = minOf(dictionary.wordCount(child), limit)
-                    addWords(to, child, words, c)
+                    addWords(to, child, words, c, edgeShort)
                     more = dictionary.childCount(child) > 0
                     if (to == graph.end) lookAhead(kind, to, child, c, words)
                 }
                 if (userChild >= 0 && user != null) {
-                    addUserWords(to, user, userChild, c)
+                    addUserWords(to, user, userChild, c, edgeShort)
                     more = more || user.childCount(userChild) > 0
                 }
-                if (to < graph.end && more) collect(graph, to, child, userChild, c, limit)
+                if (to < graph.end && more) collect(graph, to, child, userChild, c, edgeShort, limit)
             }
         }
     }
 
     // the first [words] of the dictionary's at [node], those the user blocked left out
-    private fun addWords(to: Int, node: Int, words: Int, cost: Float) {
+    private fun addWords(to: Int, node: Int, words: Int, cost: Float, short: Float) {
         for (w in 0 until words) {
             val word = dictionary.word(node, w)
-            if (user?.blocked(word, node) != true) arcs.add(to, word, cost + dictionary.weight(node, w))
+            if (user?.blocked(word, node) != true) arcs.add(to, word, cost - spared(word, short) + dictionary.weight(node, w))
         }
     }
 
+    // what a word of the user's is spared of typing it short; not a character, whose initial
+    // alone would cut every sentence into the characters the user types most (w for 我)
+    private fun spared(word: Int, short: Float): Float {
+        if (short == 0f || user == null || user.count(word) < LEARNED) return 0f
+        val text = if (word < vocabulary.size) vocabulary.word(word) else user.text(word)
+        return if (text.codePointCount(0, text.length) > 1) short else 0f
+    }
+
     // one reading each, so no weight; and few enough to take them all
-    private fun addUserWords(to: Int, user: UserWords, node: Int, cost: Float) {
+    private fun addUserWords(to: Int, user: UserWords, node: Int, cost: Float, short: Float) {
         for (w in 0 until user.wordCount(node)) {
             val word = user.word(node, w)
-            if (!user.blocked(word, -1)) arcs.add(to, word, cost)
+            if (!user.blocked(word, -1)) arcs.add(to, word, cost - spared(word, short))
         }
     }
 
@@ -246,6 +257,14 @@ class PinyinDecoder(
         Kind.RAW -> penalties.raw
         Kind.LETTER -> penalties.letter
     }
+
+    // of a syllable typed short: what a word the user knows is spared ([spared])
+    private fun shortPenalty(kind: Kind) = when (kind) {
+        Kind.INITIAL, Kind.PARTIAL, Kind.EXTENDED -> penalty(kind)
+        else -> 0f
+    }
+
+    private fun nasal(kind: Kind, syllable: Int) = if (kind == Kind.SYLLABLE && syllable in NASALS) penalties.nasal else 0f
 
     private fun penalty(flags: Int): Float {
         var p = 0f
@@ -523,6 +542,13 @@ class PinyinDecoder(
     }
 
     companion object {
+        /**
+         * Committed this often, a word of two characters or more is the user's: typed short it
+         * costs no more than typed whole. Once may be a slip. The user model halves its counts
+         * as they grow, so a word not typed since goes back to costing what it did.
+         */
+        const val LEARNED = 2f
+
         /** The syllables of a nasal alone: see [Penalties.nasal]. */
         private val NASALS = setOf("m", "n", "ng").map { Syllables.id(it) }.toIntArray()
 

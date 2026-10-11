@@ -251,16 +251,14 @@ class UserStoreTest {
 
     /** As the engine keeps it: the compaction an append makes due written by another executor, here when told. */
     @Test
-    fun countsPriorAndHabitsCompactedInTheBackgroundComeBackWithWhatWasLearnedMeanwhile() {
+    fun countsAndPriorCompactedInTheBackgroundComeBackWithWhatWasLearnedMeanwhile() {
         val deferred = ArrayList<Runnable>()
         val layers = WordLayers(listOf("base", "places", "new2025"), null, 0)
         val prior = LayerPrior(layers, step = 0.5f, extra = { it })
-        val habits = KeyHabits()
         val m = model()
-        UserStore(file, m, compactAt = 200, prior = prior, habits = habits, background = Executor { deferred += it }).use {
+        UserStore(file, m, compactAt = 200, prior = prior, background = Executor { deferred += it }).use {
             it.open()
             assertTrue(prior.learn(intArrayOf(1), intArrayOf(2)))
-            repeat(2) { habits.scope("pinyin").learn("ee", "嗯嗯", own = "呃呃") }
             // past 200 bytes the counts are read and handed on, not written here; capped, or a store that never handed them on would hang here
             var learned = 0
             while (deferred.isEmpty() && learned < 100) {
@@ -279,12 +277,10 @@ class UserStoreTest {
         assertEquals(listOf(sentence, sentence), types.takeLast(2))
         val again = model()
         val restoredPrior = LayerPrior(layers)
-        val restoredHabits = KeyHabits()
-        UserStore(file, again, prior = restoredPrior, habits = restoredHabits).use { it.open() }
+        UserStore(file, again, prior = restoredPrior).use { it.open() }
         assertEquals(counts(m), counts(again))
         assertEquals(0.5f, restoredPrior[1], 0f)
         assertEquals(-0.5f, restoredPrior[2], 0f)
-        assertEquals("嗯嗯", restoredHabits.scope("pinyin").habit("ee"))
     }
 
     /** The types of [log]'s records, as its format reads them: not at an offset of its framing. */
@@ -517,34 +513,20 @@ class UserStoreTest {
         assertEquals(long.size + 1f, m.total)
     }
 
+    // a key habit's count, type 6, of a build that kept them: the user model's own words took over
     @Test
-    fun keyHabitsAreKeptInTheLogThroughCompaction() {
-        val habits = KeyHabits()
-        UserStore(file, model(), habits = habits).use {
-            it.open()
-            repeat(2) { habits.scope("pinyin").learn("ee", "嗯嗯", own = "呃呃") }
-            habits.scope("pinyin").learn("e", "饿", own = "呃")
-            habits.scope("pinyin").forget("饿")
+    fun anOldLogsKeyHabitsArePassedOverAndGoAtTheNextCompaction() {
+        val habit = UserLog.FORMAT.record(6.toByte()) {
+            writeUTF("pinyin\u0000ee")
+            writeUTF("嗯嗯")
+            writeFloat(2f)
         }
-        val again = KeyHabits()
-        UserStore(file, model(), habits = again).use {
+        file.writeBytes(UserLog.header() + habit + UserLog.sentence(null, listOf(entry("你", "ni"))))
+        UserStore(file, model()).use {
             it.open()
-            assertEquals("嗯嗯", again.scope("pinyin").habit("ee"))
-            assertEquals(1, again.size)
             it.compact()
         }
-        val compacted = KeyHabits()
-        val m = model()
-        UserStore(file, m, habits = compacted).use {
-            it.open()
-            // after the habits compaction wrote
-            m.learn(null, listOf(entry("你", "ni")))
-        }
-        assertEquals("嗯嗯", compacted.scope("pinyin").habit("ee"))
-        // a build without habits reads the rest of the log, and leaves the habits in it
         assertEquals(mapOf("你(ni)" to 1f), counts(session()))
-        val after = KeyHabits()
-        UserStore(file, model(), habits = after).use { it.open() }
-        assertEquals("嗯嗯", after.scope("pinyin").habit("ee"))
+        assertFalse(6.toByte() in typesOf(file.readBytes()))
     }
 }
