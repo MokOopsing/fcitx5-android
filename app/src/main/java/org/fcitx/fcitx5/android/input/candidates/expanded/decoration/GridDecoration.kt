@@ -47,7 +47,7 @@ class GridDecoration(val drawable: Drawable) : RecyclerView.ItemDecoration() {
             val view = parent.getChildAt(i)
             val lp = view.layoutParams as GridLayoutManager.LayoutParams
             // break if it is the last item in data set
-            if (i == (parent.adapter!!.itemCount - 1))
+            if (parent.getChildAdapterPosition(view) == (parent.adapter!!.itemCount - 1))
                 break
             // skip if it is the last item in each row
             if (lp.spanIndex + lp.spanSize == layoutManager.spanCount)

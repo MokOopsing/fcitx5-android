@@ -9,6 +9,7 @@ import android.content.Context
 import android.content.res.ColorStateList
 import android.widget.ImageView
 import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.FcitxEvent
 import org.fcitx.fcitx5.android.data.theme.Theme
@@ -27,15 +28,16 @@ import splitties.views.imageDrawable
 
 class PaginationUi(override val ctx: Context, val theme: Theme) : Ui {
 
-    private fun createIcon(@DrawableRes icon: Int) = imageView {
+    private fun createIcon(@DrawableRes icon: Int, @StringRes description: Int) = imageView {
         imageTintList = ColorStateList.valueOf(theme.keyTextColor)
         imageDrawable = drawable(icon)
         scaleType = ImageView.ScaleType.CENTER_CROP
         isClickable = true
+        contentDescription = ctx.getString(description)
     }
 
-    val prevIcon = createIcon(R.drawable.ic_baseline_arrow_prev_24)
-    val nextIcon = createIcon(R.drawable.ic_baseline_arrow_next_24)
+    val prevIcon = createIcon(R.drawable.ic_baseline_arrow_prev_24, R.string.a11y_candidates_prev_page)
+    val nextIcon = createIcon(R.drawable.ic_baseline_arrow_next_24, R.string.a11y_candidates_next_page)
 
     private val disabledAlpha = styledFloat(android.R.attr.disabledAlpha)
 

@@ -103,6 +103,7 @@ class PagedCandidatesUi(
         override fun onViewRecycled(holder: UiHolder) {
             if (holder is UiHolder.Candidate) {
                 holder.ui.root.setOnClickListener(null)
+                holder.ui.root.setOnLongClickListener(null)
             }
             super.onViewRecycled(holder)
         }

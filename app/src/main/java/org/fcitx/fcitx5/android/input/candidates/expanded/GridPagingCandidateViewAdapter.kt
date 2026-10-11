@@ -33,7 +33,8 @@ abstract class GridPagingCandidateViewAdapter(theme: Theme) : PagingCandidateVie
     }
 
     fun measureWidth(position: Int): Float {
-        val candidate = getItem(position) ?: return 0f
+        // the span lookup reads ahead of what is shown: getItem would have Paging load for it
+        val candidate = peek(position) ?: return 0f
         return measuredWidths[candidate.textWithComment()]
     }
 
