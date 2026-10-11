@@ -99,11 +99,11 @@ internal val COMMANDS = listOf(
     },
     Command(
         "ksc",
-        "<pinyin.data> <set.tsv> [--scheme <scheme>] [--fuzzy all|<pair>,...] [--half <half>] [--rerank <model.safetensors>] [--refine <model.safetensors>] [--weight <rerank>[,<refine>]] [--threads <n>]",
-        2..2, "scheme", "fuzzy", "half", "rerank", "refine", "weight", "threads",
+        "<pinyin.data> <set.tsv> [--scheme <scheme>] [--fuzzy all|<pair>,...] [--half <half>] [--rerank <model.safetensors>] [--refine <model.safetensors>] [--weight <rerank>[,<refine>]] [--threads <n>] [--outcomes <out.tsv>]",
+        2..2, "scheme", "fuzzy", "half", "rerank", "refine", "weight", "threads", "outcomes",
     ) { args, out, _ ->
         val (dataPath, setPath) = args.operands
-        ksc(dataPath, setPath, RunOptions(args.options), Models(args.options), out)
+        ksc(dataPath, setPath, RunOptions(args.options), Models(args.options), args.options["outcomes"], out)
     },
     Command(
         "learn",
@@ -112,6 +112,10 @@ internal val COMMANDS = listOf(
     ) { args, out, _ ->
         val (dataPath, setPath) = args.operands
         learn(dataPath, setPath, RunOptions(args.options), Models(args.options), args.options["pack"], out)
+    },
+    Command("chars", "<pinyin.data>", 1..1) { args, out, _ ->
+        CharRanks.report(CharRanks(loadData(args.operands[0])).measure(), out)
+        0
     },
     Command("table", "<table.data> <set.tsv> [--preset <preset>]", 2..2, "preset") { args, out, _ ->
         val (dataPath, setPath) = args.operands
@@ -422,12 +426,14 @@ private fun tune(dataPath: String, setPath: String, slipsPath: String, threads: 
     return 0
 }
 
-private fun ksc(dataPath: String, setPath: String, options: RunOptions, models: Models, out: Appendable): Int {
+private fun ksc(dataPath: String, setPath: String, options: RunOptions, models: Models, outcomesPath: String?, out: Appendable): Int {
     val outcomes = dealt(Halves.select(readSet(setPath), options.half), options.threads, {
         val data = loadData(dataPath)
         Typist(data, options.segmenter(data), options.spell, models.reranker, models.refiner)
     }) { hand -> hand.map { type(it) } }
     out.appendLine(KeystrokeRun.report(outcomes))
+    // a line a sample, for two runs to be compared on the samples both reached
+    outcomesPath?.let { path -> File(path).printWriter().use { w -> outcomes.forEach { w.println(KeystrokeRun.line(it)) } } }
     return 0
 }
 

@@ -58,7 +58,7 @@ class PinyinRun(
     private val decoder = PinyinDecoder(
         data.dictionary, data.vocabulary,
         (if (user == null) WordScorer.of(data.model) else UserScorer(data.model, user)).let { if (prior == null) it else prior.scorer(it) },
-        penalties, beam, user = user,
+        penalties, beam, user = user, wholeFirst = segmenter.typesLetters,
     )
     private val textWords = TextWords(data.model, data.wordIndex)
 

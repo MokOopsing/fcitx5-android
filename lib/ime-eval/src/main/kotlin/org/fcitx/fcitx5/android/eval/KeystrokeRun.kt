@@ -70,6 +70,10 @@ class KeystrokeRun(private val session: Session, private val maxPages: Int = MAX
             return (listOf(HEADER) + groups.map { (group, members) -> row(group, members) }).joinToString("\n")
         }
 
+        /** [outcome] as a line of tab-separated cells: input, expected, keys, reached, first. */
+        fun line(outcome: Outcome): String =
+            listOf(outcome.sample.input, outcome.sample.expected, outcome.keys, outcome.reached, outcome.first).joinToString("\t")
+
         val HEADER: String = String.format(Locale.ROOT, "%-28s %6s %8s %7s %6s", "group", "n", "reached", "top1", "KSC")
 
         /** One line of [report]: KSC is `-` when nothing was reached. */
