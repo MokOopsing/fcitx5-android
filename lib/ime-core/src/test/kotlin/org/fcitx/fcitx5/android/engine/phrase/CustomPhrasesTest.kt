@@ -61,13 +61,14 @@ class CustomPhrasesTest {
 
     @Test
     fun aQuotedValueIsUnescaped() {
-        assertEquals("a\"b\\c\nd", CustomPhrases.unquote("\"a\\\"b\\\\c\\nd\""))
+        fun value(raw: String) = CustomPhrases.parse("k,1=$raw").all.single().value
+        assertEquals("a\"b\\c\nd", value("\"a\\\"b\\\\c\\nd\""))
         // what fcitx's editor writes for a line pasted from Windows, a tab and the like
-        assertEquals("a\r\nb\tc\u000c\u000b", CustomPhrases.unquote("\"a\\r\\nb\\tc\\f\\v\""))
+        assertEquals("a\r\nb\tc\u000c\u000b", value("\"a\\r\\nb\\tc\\f\\v\""))
         // another character after a backslash is itself, as fcitx reads it
-        assertEquals("ax", CustomPhrases.unquote("\"a\\x\""))
+        assertEquals("ax", value("\"a\\x\""))
         // not quoted, or not escaped right: as it is
-        for (raw in listOf("abc", "\"", "\"a\"b\"", "\"a\\\"")) assertEquals(raw, CustomPhrases.unquote(raw))
+        for (raw in listOf("abc", "\"", "\"a\"b\"", "\"a\\\"")) assertEquals(raw, value(raw))
         assertEquals(listOf(0 to "two\nlines"), CustomPhrases.parse("q,1=\"two\\nlines\"").lookup("q", now))
     }
 

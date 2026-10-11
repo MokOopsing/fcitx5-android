@@ -120,6 +120,12 @@ class QuickPhraseEntryTest {
         assertNull(parse("""k "a" b""""))
     }
 
+    /** fcitx reads `""` as an empty phrase, which does not survive a save: the line is skipped. */
+    @Test
+    fun anEmptyQuotedPhraseIsSkipped() {
+        assertNull(parse("k \"\""))
+    }
+
     // endregion
 
     // region serialize

@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.engine.phrase
 
 import org.fcitx.fcitx5.android.engine.data.escapeValue
+import org.fcitx.fcitx5.android.engine.data.unescapeValue
 import java.util.Calendar
 
 /**
@@ -172,37 +173,11 @@ class CustomPhrases private constructor(private val phrases: Map<String, List<Ph
             if (i == digits || i >= line.length || line[i] != '=') return null
             // what does not fit an int is 0 as libime reads it, and 0 is no order
             val order = line.substring(digits, i).toIntOrNull()?.takeIf { it != 0 } ?: return null
-            return Phrase(key, if (negative) -order else order, unquote(line.substring(i + 1)))
+            return Phrase(key, if (negative) -order else order, unescapeValue(line.substring(i + 1)))
         }
-
-        private val ESCAPES = mapOf('n' to '\n', 't' to '\t', 'r' to '\r', 'f' to '\u000c', 'v' to '\u000b')
 
         private fun Char.isAsciiLetter() = this in 'a'..'z' || this in 'A'..'Z'
         private fun Char.isNameChar() = isAsciiLetter() || this in '0'..'9' || this == '_'
-
-        /**
-         * [value] unescaped if in double quotes, as fcitx's `unescapeForValue` does: the escapes
-         * its editor writes, and any other character after a backslash as it is. As it is if it
-         * is not in quotes, or a quote inside is not escaped.
-         */
-        internal fun unquote(value: String): String {
-            if (value.length < 2 || !value.startsWith('"') || !value.endsWith('"')) return value
-            val out = StringBuilder()
-            var i = 1
-            while (i < value.length - 1) {
-                val c = value[i]
-                if (c == '"') return value
-                if (c != '\\') {
-                    out.append(c)
-                    i++
-                    continue
-                }
-                if (i + 1 >= value.length - 1) return value
-                out.append(ESCAPES[value[i + 1]] ?: value[i + 1])
-                i += 2
-            }
-            return out.toString()
-        }
 
         /**
          * [content] with each `$name` or `${name}` filled in from [VARIABLES] at [now]; one it

@@ -37,7 +37,7 @@ data class FormattedText(
         val Empty = FormattedText()
 
         @JvmStatic
-        @Suppress("UNUSED") // called from JNI
+        @Suppress("UNUSED", "NestedBlockDepth") // called from JNI
         fun fromByteCursor(
             strings: Array<String>,
             flags: IntArray,

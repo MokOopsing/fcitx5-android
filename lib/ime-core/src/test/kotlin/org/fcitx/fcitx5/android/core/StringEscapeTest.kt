@@ -3,9 +3,8 @@
  * SPDX-FileCopyrightText: Copyright 2024-2026 Fcitx5 for Android Contributors
  */
 
-package org.fcitx.fcitx5.android
+package org.fcitx.fcitx5.android.core
 
-import org.fcitx.fcitx5.android.core.FcitxUtils
 import org.junit.Assert
 import org.junit.Test
 
@@ -25,7 +24,7 @@ class StringEscapeTest {
     @Test
     fun testEscapeForValue() {
         data.forEach {
-            Assert.assertEquals(FcitxUtils.escapeForValue(it.first), it.second)
+            Assert.assertEquals(it.second, FcitxUtils.escapeForValue(it.first))
         }
     }
 

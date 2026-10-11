@@ -24,8 +24,8 @@ data class QuickPhraseEntry(val keyword: String, val phrase: String) {
             val word = text.substring(pos).indexOfFirst { c -> !WhiteSpaces.contains(c) }
             if (word < 0) return null
             return try {
-                // a quote closing before the end: fcitx skips the line
-                val wordString = FcitxUtils.unescapeForValue(text.substring(pos + word)) ?: return null
+                // a quote closing before the end: fcitx skips the line; "" is fcitx's empty phrase, which a save would lose
+                val wordString = FcitxUtils.unescapeForValue(text.substring(pos + word))?.takeIf { it.isNotEmpty() } ?: return null
                 val key = text.substring(0, pos)
                 QuickPhraseEntry(key, wordString)
             } catch (e: Exception) {

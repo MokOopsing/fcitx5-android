@@ -4,8 +4,6 @@
  */
 package org.fcitx.fcitx5.android.engine.table
 
-import org.fcitx.fcitx5.android.engine.data.unescapeValue
-
 /**
  * A table input method's `.conf` as fcitx's table addon reads it: the table [file] its `[Table]`
  * section names, and the [options] it sets, libime's defaults for those it does not. [learning]
@@ -40,7 +38,7 @@ class TableConf(val file: String, val options: TableOptions, val learning: Boole
          * @throws IllegalArgumentException if it names no table file
          */
         fun parse(text: String, settings: String = ""): TableConf {
-            val table = section(text, "Table") + section(settings, "Table")
+            val table = IniText.section(text, "Table") + IniText.section(settings, "Table")
             val file = table["File"]?.takeIf { it.isNotEmpty() } ?: throw IllegalArgumentException("no [Table] File")
             fun int(key: String, default: Int) = table[key]?.toIntOrNull() ?: default
             fun bool(key: String, default: Boolean) = when (table[key]?.lowercase()) {
@@ -76,26 +74,8 @@ class TableConf(val file: String, val options: TableOptions, val learning: Boole
          * one; null for a key that types none (see [keyChar]).
          */
         private fun keyList(text: String, settings: String, name: String): List<Char?> {
-            val list = section(settings, name).ifEmpty { section(text, name) }
+            val list = IniText.section(settings, name).ifEmpty { IniText.section(text, name) }
             return list.entries.sortedBy { it.key.toIntOrNull() ?: Int.MAX_VALUE }.map { keyChar(it.value) }
-        }
-
-        /** The keys of [name]'s section in the ini [text]: fcitx's format, `#` starting a comment. */
-        internal fun section(text: String, name: String): Map<String, String> {
-            val out = HashMap<String, String>()
-            var inside = false
-            for (raw in text.lineSequence()) {
-                val line = raw.trim()
-                when {
-                    line.isEmpty() || line.startsWith("#") -> {}
-                    line.startsWith("[") && line.endsWith("]") -> inside = line.substring(1, line.length - 1).trim() == name
-                    inside -> {
-                        val eq = line.indexOf('=')
-                        if (eq > 0) out[line.substring(0, eq).trim()] = unescapeValue(line.substring(eq + 1).trim())
-                    }
-                }
-            }
-            return out
         }
 
         /**

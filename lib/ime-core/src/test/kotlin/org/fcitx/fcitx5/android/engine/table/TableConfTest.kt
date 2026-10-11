@@ -98,13 +98,15 @@ class TableConfTest {
 
     @Test
     fun quotedValuesUnescape() {
-        assertEquals(mapOf("A" to "a \"b\"\nc", "B" to "\""), TableConf.section("[S]\nA=\"a \\\"b\\\"\\nc\"\nB=\"\n", "S"))
+        assertEquals(mapOf("A" to "a \"b\"\nc", "B" to "\""), IniText.section("[S]\nA=\"a \\\"b\\\"\\nc\"\nB=\"\n", "S"))
     }
 
     @Test
     fun noTableFileIsNoTable() {
         assertThrows(IllegalArgumentException::class.java) { TableConf.parse("[InputMethod]\nName=x\n") }
         assertThrows(IllegalArgumentException::class.java) { TableConf.parse("[Table]\nFile=\n") }
+        // a section is named as written between the brackets, as fcitx's own reader names it: the app's import never took this one
+        assertThrows(IllegalArgumentException::class.java) { TableConf.parse("[ Table ]\nFile=a\n") }
     }
 
     @Test

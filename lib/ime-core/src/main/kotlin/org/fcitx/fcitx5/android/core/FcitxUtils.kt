@@ -22,85 +22,42 @@ object FcitxUtils {
     // https://github.com/fcitx/fcitx5/blob/5.1.21/src/lib/fcitx-utils/stringutils.cpp#L390
     // null where a quote closes before the end, as fcitx's std::nullopt
     fun unescapeForValue(str: String): String? {
-        if (str.length > 2 && str.startsWith('"') && str.endsWith('"')) {
-            val (consumed, result) = consumeMaybeEscapedValue(str)
-            return if (consumed.length == str.length) result else null
-        }
-        return str
+        if (str.length < 2 || !str.startsWith('"') || !str.endsWith('"')) return str
+        val value = StringBuilder(str.length)
+        return if (consumeMaybeEscapedValue(str, 0, "", value) == str.length) value.toString() else null
     }
-
-    // https://en.cppreference.com/cpp/string/basic_string/find_first_of
-    private fun String.findFirstOf(str: String, pos: Int = 0): Int {
-        val set = str.toSet()
-        for (i in pos..<length) {
-            if (set.contains(get(i))) {
-                return i
-            }
-        }
-        return -1
-    }
-    // https://en.cppreference.com/cpp/string/basic_string/find_first_not_of
-    private fun String.findFirstNotOf(str: String, pos: Int = 0): Int {
-        val set = str.toSet()
-        for (i in pos..<length) {
-            if (!set.contains(get(i))) {
-                return i
-            }
-        }
-        return -1
-    }
-
-    enum class UnescapeState { NORMAL, ESCAPE }
 
     // https://github.com/fcitx/fcitx5/blob/5.1.21/src/lib/fcitx-utils/stringutils.cpp#L435
-    private fun consumeMaybeEscapedValue(str: String, skip: String = ""): Pair<String, String> {
-        var input = str
-        val start = input.findFirstNotOf(skip)
-        if (start < 0) {
-            return "" to ""
-        }
-        input = input.substring(start)
-        val maybeQuoted = input.startsWith('"')
-        if (maybeQuoted) {
-            var end = 0
-            val result = buildString {
-                var state = UnescapeState.NORMAL
-                input.forEachIndexed { i, c ->
-                    // skip first "
-                    if (i == 0) {
-                        return@forEachIndexed
-                    }
-                    when (state) {
-                        UnescapeState.NORMAL -> {
-                            when (c) {
-                                '\\' -> {
-                                    state = UnescapeState.ESCAPE
-                                }
-                                '"' -> {
-                                    end = i + 1
-                                    return@buildString
-                                }
-                                else -> {
-                                    append(c)
-                                }
-                            }
-                        }
-                        UnescapeState.ESCAPE -> {
-                            // treat invalid escape sequence as normal character
-                            append(unescapeMap[c] ?: c)
-                            state = UnescapeState.NORMAL
-                        }
-                    }
+    /**
+     * The value in [input] from [from] on, past any of [skip]: one starting with a quote
+     * unescaped up to the quote closing it, else (or if that quote never closes) as it is, up to
+     * the next of [skip]. Put in [out]; returns where it ends, or -1 if only [skip] is left.
+     */
+    fun consumeMaybeEscapedValue(input: String, from: Int, skip: String, out: StringBuilder): Int {
+        out.setLength(0)
+        var start = from
+        while (start < input.length && input[start] in skip) start++
+        if (start == input.length) return -1
+        if (input[start] == '"') {
+            var i = start + 1
+            while (i < input.length) {
+                val c = input[i]
+                if (c == '"') return i + 1
+                if (c == '\\' && i + 1 < input.length) {
+                    i++
+                    // treat invalid escape sequence as normal character
+                    out.append(unescapeMap[input[i]] ?: input[i])
+                } else {
+                    out.append(c)
                 }
+                i++
             }
-            if (end > 0) {
-                val consumed = input.substring(0, end)
-                return consumed to result
-            }
+            out.setLength(0)
         }
-        val end = input.findFirstOf(skip, 1)
-        val consumed = if (end < 0) input else input.substring(0, end)
-        return consumed to consumed
+        var end = start + 1
+        while (end < input.length && input[end] !in skip) end++
+        out.append(input, start, end)
+        return end
     }
 
     // https://github.com/fcitx/fcitx5/blob/5.1.21/src/lib/fcitx-utils/stringutils.cpp#L86
@@ -119,9 +76,9 @@ object FcitxUtils {
 
     // https://github.com/fcitx/fcitx5/blob/5.1.21/src/lib/fcitx-utils/stringutils.cpp#L404
     fun escapeForValue(str: String): String {
-        val needsEscape = str.lastIndexOfAny(EscapeChars) >= 0
+        if (str.lastIndexOfAny(EscapeChars) < 0) return str
         return buildString {
-            if (needsEscape) append('"')
+            append('"')
             str.forEach { c ->
                 val escape = escapeMap[c]
                 if (escape != null) {
@@ -131,7 +88,7 @@ object FcitxUtils {
                     append(c)
                 }
             }
-            if (needsEscape) append('"')
+            append('"')
         }
     }
 }
