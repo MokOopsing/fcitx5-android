@@ -6,7 +6,6 @@
 package org.fcitx.fcitx5.android.data
 
 import android.content.Context
-import android.os.Build
 import androidx.core.content.edit
 import kotlinx.serialization.json.Json
 import org.fcitx.fcitx5.android.FcitxApplication
@@ -57,15 +56,12 @@ class RecentlyUsed(val type: String, val limit: Int) {
     }
 
     fun insert(item: String) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-            map.putLast(item, true)
-        } else {
-            // LinkedHashMap's encounter order is not affected when `put` an existing key
-            if (map.containsKey(item)) {
-                map.remove(item)
-            }
-            map.put(item, true)
+        // LinkedHashMap's encounter order is not affected when `put` an existing key; not putLast,
+        // which Java 21 and Android 15 have but the JDK 17 the unit tests run on does not
+        if (map.containsKey(item)) {
+            map.remove(item)
         }
+        map.put(item, true)
         map.dropOldest()
         save()
     }
