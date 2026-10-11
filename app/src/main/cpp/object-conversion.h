@@ -74,13 +74,13 @@ void jobjectFillRawConfig(JNIEnv *env, jobject jConfig, fcitx::RawConfig &config
     auto subItems = JRef<jobjectArray>(env, env->GetObjectField(jConfig, GlobalRef->RawConfigSubItems));
     if (*subItems == nullptr) {
         auto value = JRef<jstring>(env, env->GetObjectField(jConfig, GlobalRef->RawConfigValue));
-        config = CString(env, value);
+        config = utf8FromJString(env, value);
     } else {
         int size = env->GetArrayLength(subItems);
         for (int i = 0; i < size; i++) {
             auto item = JRef(env, env->GetObjectArrayElement(subItems, i));
             auto name = JRef<jstring>(env, env->GetObjectField(item, GlobalRef->RawConfigName));
-            auto subConfig = config.get(CString(env, name), true);
+            auto subConfig = config.get(utf8FromJString(env, name), true);
             jobjectFillRawConfig(env, item, *subConfig);
         }
     }

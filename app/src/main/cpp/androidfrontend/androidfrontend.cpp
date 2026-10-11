@@ -155,7 +155,10 @@ public:
         const auto &bulk = list->toBulk();
         try {
             const auto &candidate = bulk ? bulk->candidateFromAll(idx) : list->candidate(idx);
-            if (!shows(candidate, text)) return false;
+            if (!shows(candidate, text)) {
+                FCITX_DEBUG() << "selectCandidate(" << idx << ") dropped: the list changed since the tap";
+                return false;
+            }
             candidate.select(this);
         } catch (const std::invalid_argument &e) {
             FCITX_WARN() << "selectCandidate index out of range";
@@ -171,7 +174,10 @@ public:
         }
         try {
             const auto &candidate = list->candidate(idx);
-            if (!shows(candidate, text)) return false;
+            if (!shows(candidate, text)) {
+                FCITX_DEBUG() << "selectCandidate(" << idx << ") dropped: the page changed since the tap";
+                return false;
+            }
             candidate.select(this);
         } catch (const std::invalid_argument &e) {
             FCITX_WARN() << "selectCandidate index out of range";
@@ -241,7 +247,12 @@ public:
         const auto &list = inputPanel().candidateList();
         auto *actionable = list ? list->toActionable() : nullptr;
         const auto *c = actionable ? candidateAt(idx, paged) : nullptr;
-        if (c && shows(*c, text)) actionable->triggerAction(*c, actionIdx);
+        if (!c) return;
+        if (!shows(*c, text)) {
+            FCITX_DEBUG() << "triggerCandidateAction(" << idx << ") dropped: the list changed since the press";
+            return;
+        }
+        actionable->triggerAction(*c, actionIdx);
     }
 
     void triggerTabAction(const int idx) {

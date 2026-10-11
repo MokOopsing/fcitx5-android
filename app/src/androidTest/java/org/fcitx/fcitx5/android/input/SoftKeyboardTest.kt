@@ -6,6 +6,7 @@ package org.fcitx.fcitx5.android.input
 
 import android.content.ComponentName
 import android.content.Intent
+import android.os.Build
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
@@ -17,24 +18,35 @@ import androidx.test.uiautomator.BySelector
 import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.FcitxAPI
+import org.fcitx.fcitx5.android.core.FcitxEvent
 import org.fcitx.fcitx5.android.core.InputMethodEntry
 import org.fcitx.fcitx5.android.core.InputMethodNames
+import org.fcitx.fcitx5.android.core.SubtypeManager
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.daemon.FcitxDaemon
 import org.fcitx.fcitx5.android.engine.host.Engines
+import org.fcitx.fcitx5.android.utils.inputMethodManager
 import org.junit.After
 import org.junit.AfterClass
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.BeforeClass
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.Timeout
+import java.util.concurrent.CopyOnWriteArrayList
 
 /**
  * The keyboard end to end: this app's input method, shown over a real `EditText`, driven by
@@ -184,6 +196,61 @@ class SoftKeyboardTest {
         tap(R.string.a11y_key_backspace)
         assertFieldBecomes("ab")
     }
+
+    /**
+     * fcitx switching again before the system's echo of a switch is back leaves the keyboard, and
+     * the system's subtype, on the last switch. On the emulator the service's startup switch to
+     * Pinyin and a test's switch to English ran 2 ms apart, and the echo of the first put the
+     * keyboard back on Pinyin. Ending on an input method the system did not have shows it was told.
+     */
+    @Test
+    fun switchesBackToBackLeaveTheKeyboardOnTheLast() {
+        assumeTrue("subtypes from Android 14 on", Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+        val switched = listOf(ENGLISH, PINYIN, SHUANGPIN)
+        withFcitx {
+            if (originalIms == null) originalIms = enabledIme().map { it.uniqueName }.toTypedArray()
+            val missing = switched.filter { im -> enabledIme().none { it.uniqueName == im } }
+            if (missing.isNotEmpty()) setEnabledIme((enabledIme().map { it.uniqueName } + missing).toTypedArray())
+            // without a subtype the service tells the system nothing, and no echo comes back;
+            // before the launch, so that its switch to English is told
+            if (switched.any { SubtypeManager.subtypeOf(it) == null }) SubtypeManager.syncWith(enabledIme())
+        }
+        launch(inputMethod = ENGLISH)
+        // the launch's switch told: a service that never tells the system fails here, or at the end on
+        // Shuangpin if the system had English already
+        val deadline = SystemClock.uptimeMillis() + 5_000
+        while (systemIme() != ENGLISH && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(50)
+        assertEquals("the system's subtype after the launch", ENGLISH, systemIme())
+        // back to back from one block (each activateIme its own hop to fcitx): all three IMChangeEvents
+        // most likely reach the service before the first's echo is back, as on the emulator
+        val changes = withFcitx {
+            val seen = CopyOnWriteArrayList<String>()
+            coroutineScope {
+                // in the emitting thread: eventFlow drops its oldest event past 15 buffered
+                val collecting = launch(Dispatchers.Unconfined, CoroutineStart.UNDISPATCHED) {
+                    eventFlow.filterIsInstance<FcitxEvent.IMChangeEvent>().collect { seen += it.data.uniqueName }
+                }
+                activateIme(PINYIN)
+                activateIme(ENGLISH)
+                activateIme(SHUANGPIN)
+                // the system on Shuangpin, the main thread idle, and a second more for a switch back
+                val told = SystemClock.uptimeMillis() + 5_000
+                while (systemIme() != SHUANGPIN && SystemClock.uptimeMillis() < told) delay(50)
+                instrumentation.waitForIdleSync()
+                delay(1_000)
+                collecting.cancel()
+            }
+            seen.toList()
+        }
+        // a single slot holds the last switch (Shuangpin), so the earlier switches' echoes read as the user's picks and switch fcitx back
+        // from the third switch on only its sub-modes' changes, which repeat the input method (Fcitx.handleFcitxEvent)
+        assertEquals("input methods from the third switch on, of $changes", listOf(SHUANGPIN), changes.dropWhile { it != SHUANGPIN }.distinct())
+        assertEquals("the input method switched to last", SHUANGPIN, withFcitx { currentIme().uniqueName })
+        assertEquals("the system's subtype", SHUANGPIN, systemIme())
+    }
+
+    /** The fcitx input method of the system's subtype, null if not one of ours. */
+    private fun systemIme() = context.inputMethodManager.currentInputMethodSubtype?.let(SubtypeManager::inputMethodOf)
 
     /**
      * Dragging left from Backspace selects text before the cursor; letting go deletes it. The
@@ -348,6 +415,7 @@ class SoftKeyboardTest {
 
     private companion object {
         const val PINYIN = Engines.PINYIN
+        const val SHUANGPIN = Engines.SHUANGPIN
         const val ENGLISH = "keyboard-us"
 
         val instrumentation = InstrumentationRegistry.getInstrumentation()!!
@@ -385,17 +453,28 @@ class SoftKeyboardTest {
          * test class (FcitxTest starts one of its own).
          *
          * On a device whose keyboard is this app already, it is left selected -- and bound here,
-         * which FcitxTest collides with regardless of this class.
+         * where FcitxTest then refuses to start an engine of its own (checkThisInputMethodIsNotBound).
          */
         @AfterClass
         @JvmStatic
         fun restoreDeviceIme() {
-            // the device's input method is put back even if fcitx's list could not be
-            val restoreIms = runCatching { originalIms?.let { ims -> withFcitx { setEnabledIme(ims) } } }
+            // the device's input method is put back even if fcitx's list could not be; the
+            // subtypes with it, as the input method list's settings page does on a change
+            val restoreIms = runCatching {
+                originalIms?.let { ims ->
+                    withFcitx {
+                        setEnabledIme(ims)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) SubtypeManager.syncWith(enabledIme())
+                    }
+                }
+            }
             val original = originalDeviceIme
             when {
                 original == null -> shell("ime reset")
-                ComponentName.unflattenFromString(original) == ComponentName.unflattenFromString(imeId) -> return
+                ComponentName.unflattenFromString(original) == ComponentName.unflattenFromString(imeId) -> {
+                    restoreIms.getOrThrow()
+                    return
+                }
                 else -> shell("ime set $original")
             }
             if (!wasEnabled) shell("ime disable $imeId")

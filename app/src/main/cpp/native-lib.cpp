@@ -43,6 +43,7 @@
 #include "nativestreambuf.h"
 #include "helper-types.h"
 #include "object-conversion.h"
+#include "utf16-to-utf8.h"
 
 
 class Fcitx {
@@ -505,45 +506,6 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_setupLogStream(JNIEnv *env, jclass claz
     Fcitx::setLogStream(stream, verbose);
 }
 
-// JNI's "UTF" is modified UTF-8, which spells a character past U+FFFF (CJK Ext-B, in the tables)
-// as two surrogates fcitx cannot read: go through UTF-16 instead. A surrogate without its pair
-// has no UTF-8 at all, and becomes U+FFFD.
-static std::string utf8FromJString(JNIEnv *env, jstring str) {
-    if (!str) return {};
-    const jsize n = env->GetStringLength(str);
-    std::u16string units(static_cast<size_t>(n), u'\0');
-    env->GetStringRegion(str, 0, n, reinterpret_cast<jchar *>(units.data()));
-    std::string out;
-    // CJK is three bytes a unit
-    out.reserve(units.size() * 3);
-    for (size_t i = 0; i < units.size(); i++) {
-        uint32_t c = units[i];
-        if (c >= 0xD800 && c < 0xE000) {
-            if (c < 0xDC00 && i + 1 < units.size() && units[i + 1] >= 0xDC00 && units[i + 1] < 0xE000) {
-                c = 0x10000 + ((c - 0xD800) << 10) + (units[++i] - 0xDC00);
-            } else {
-                c = 0xFFFD;
-            }
-        }
-        if (c < 0x80) {
-            out += static_cast<char>(c);
-        } else if (c < 0x800) {
-            out += static_cast<char>(0xC0 | (c >> 6));
-            out += static_cast<char>(0x80 | (c & 0x3F));
-        } else if (c < 0x10000) {
-            out += static_cast<char>(0xE0 | (c >> 12));
-            out += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
-            out += static_cast<char>(0x80 | (c & 0x3F));
-        } else {
-            out += static_cast<char>(0xF0 | (c >> 18));
-            out += static_cast<char>(0x80 | ((c >> 12) & 0x3F));
-            out += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
-            out += static_cast<char>(0x80 | (c & 0x3F));
-        }
-    }
-    return out;
-}
-
 static std::vector<std::string> utf8FromJStringArray(JNIEnv *env, jobjectArray array) {
     std::vector<std::string> out;
     if (!array) return out;
@@ -556,30 +518,68 @@ static std::vector<std::string> utf8FromJStringArray(JNIEnv *env, jobjectArray a
     return out;
 }
 
+static std::string className(JNIEnv *env, jobject object) {
+    static const jmethodID getName = [env] {
+        auto c = JRef<jclass>(env, env->FindClass("java/lang/Class"));
+        return env->GetMethodID(c, "getName", "()Ljava/lang/String;");
+    }();
+    auto type = JRef<jclass>(env, env->GetObjectClass(object));
+    auto name = utf8FromJString(env, JRef<jstring>(env, env->CallObjectMethod(type, getName)));
+    env->ExceptionClear();
+    return name;
+}
+
+// The lines of [e]'s trace: its frames, then each cause's by its class. Not Throwable.toString's
+// lines, which add each message, and a message may hold letters typed (CustomPhrases' "not a key").
+static std::vector<std::string> traceOf(JNIEnv *env, jthrowable e) {
+    struct Methods {
+        jmethodID getStackTrace, getCause, frameToString;
+    };
+    static const Methods methods = [env] {
+        auto throwable = JRef<jclass>(env, env->FindClass("java/lang/Throwable"));
+        auto frame = JRef<jclass>(env, env->FindClass("java/lang/StackTraceElement"));
+        return Methods{env->GetMethodID(throwable, "getStackTrace", "()[Ljava/lang/StackTraceElement;"),
+                       env->GetMethodID(throwable, "getCause", "()Ljava/lang/Throwable;"),
+                       env->GetMethodID(frame, "toString", "()Ljava/lang/String;")};
+    }();
+    std::vector<std::string> lines;
+    auto t = static_cast<jthrowable>(env->NewLocalRef(e));
+    // a chain may loop back (initCause refuses only a throwable itself): a few causes at most
+    for (int depth = 0; t && depth < 8 && !env->ExceptionCheck(); depth++) {
+        if (depth > 0) lines.push_back("Caused by: " + className(env, t));
+        auto frames = JRef<jobjectArray>(env, env->CallObjectMethod(t, methods.getStackTrace));
+        const jsize n = frames ? env->GetArrayLength(frames) : 0;
+        for (jsize i = 0; i < n && !env->ExceptionCheck(); i++) {
+            auto frame = JRef(env, env->GetObjectArrayElement(frames, i));
+            lines.push_back("\tat " + utf8FromJString(env, JRef<jstring>(env, env->CallObjectMethod(frame, methods.frameToString))));
+        }
+        auto cause = env->ExceptionCheck() ? nullptr : static_cast<jthrowable>(env->CallObjectMethod(t, methods.getCause));
+        env->DeleteLocalRef(t);
+        t = cause;
+    }
+    env->DeleteLocalRef(t);
+    // only memory run out throws here, which cuts the trace short
+    env->ExceptionClear();
+    return lines;
+}
+
 // An exception from the engine must not unwind through fcitx: log it, and the key goes to the app.
 // Its trace once for each call, input method, event and exception class, then a line with the
 // count at the 2nd, 4th, 8th... alike: still failing, not a stack on every key. Never an event's
-// arg (a character typed), nor the message.
+// arg (a character typed), nor a message (traceOf): the log is exported, and no test can throw from
+// the engine to hold this, so no ExceptionDescribe nor Throwable.toString here.
 static bool engineFailed(JNIEnv *env, const char *call, const std::string &im = "", int event = -1) {
     if (!env->ExceptionCheck()) return false;
     auto e = JRef<jthrowable>(env, env->ExceptionOccurred());
     // nothing else may be called while it is pending
     env->ExceptionClear();
-    static const jmethodID getName = [env] {
-        auto c = JRef<jclass>(env, env->FindClass("java/lang/Class"));
-        return env->GetMethodID(c, "getName", "()Ljava/lang/String;");
-    }();
-    auto type = JRef<jclass>(env, env->GetObjectClass(e));
-    const auto name = utf8FromJString(env, JRef<jstring>(env, env->CallObjectMethod(type, getName)));
-    env->ExceptionClear();
+    const auto name = className(env, e);
     static std::unordered_map<std::string, unsigned long> failures;
     const auto where = std::string(call) + " " + im + (event < 0 ? std::string() : " " + std::to_string(event)) + " " + name;
     const auto count = ++failures[where];
     if (count == 1) {
         FCITX_ERROR() << "engine failed: " << where;
-        env->Throw(e);
-        env->ExceptionDescribe();
-        env->ExceptionClear();
+        for (const auto &line: traceOf(env, e)) FCITX_ERROR() << line;
     } else if ((count & (count - 1)) == 0) {
         FCITX_ERROR() << "engine failed again: " << where << ", " << count << " times";
     }
@@ -664,7 +664,8 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_startupFcitx(
         auto candidatesArray = JRef<jobjectArray>(env, env->NewObjectArray(static_cast<int>(candidates.size()), GlobalRef->Candidate, nullptr));
         int i = 0;
         for (const auto &candidate: candidates) {
-            env->SetObjectArrayElement(candidatesArray, i++, candidateEntityToObject(env, candidate));
+            auto obj = JRef(env, candidateEntityToObject(env, candidate));
+            env->SetObjectArrayElement(candidatesArray, i++, obj);
         }
         auto vararg = JRef<jobjectArray>(env, env->NewObjectArray(2, GlobalRef->Object, nullptr));
         auto candidatesCount = JRef(env, env->NewObject(GlobalRef->Integer, GlobalRef->IntegerInit, total));
@@ -683,19 +684,24 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_startupFcitx(
     auto preeditCallback = [](const fcitx::Text &clientPreedit) {
         auto env = GlobalRef->AttachEnv();
         auto vararg = JRef<jobjectArray>(env, env->NewObjectArray(1, GlobalRef->FormattedText, nullptr));
-        env->SetObjectArrayElement(vararg, 0, fcitxTextToJObject(env, clientPreedit));
+        auto text = JRef(env, fcitxTextToJObject(env, clientPreedit));
+        env->SetObjectArrayElement(vararg, 0, text);
         env->CallStaticVoidMethod(GlobalRef->Fcitx, GlobalRef->HandleFcitxEvent, 2, *vararg);
     };
     auto inputPanelCallback = [](const fcitx::Text &preedit, const fcitx::Text &auxUp, const fcitx::Text &auxDown, const std::vector<CandidateActionEntity> &tabs) {
         auto env = GlobalRef->AttachEnv();
         auto vararg = JRef<jobjectArray>(env, env->NewObjectArray(4, GlobalRef->Object, nullptr));
-        env->SetObjectArrayElement(vararg, 0, fcitxTextToJObject(env, preedit));
-        env->SetObjectArrayElement(vararg, 1, fcitxTextToJObject(env, auxUp));
-        env->SetObjectArrayElement(vararg, 2, fcitxTextToJObject(env, auxDown));
+        auto preeditObj = JRef(env, fcitxTextToJObject(env, preedit));
+        env->SetObjectArrayElement(vararg, 0, preeditObj);
+        auto auxUpObj = JRef(env, fcitxTextToJObject(env, auxUp));
+        env->SetObjectArrayElement(vararg, 1, auxUpObj);
+        auto auxDownObj = JRef(env, fcitxTextToJObject(env, auxDown));
+        env->SetObjectArrayElement(vararg, 2, auxDownObj);
         auto tabsArray = JRef<jobjectArray>(env, env->NewObjectArray(static_cast<int>(tabs.size()), GlobalRef->CandidateAction, nullptr));
         int i = 0;
         for (const auto &tab: tabs) {
-            env->SetObjectArrayElement(tabsArray, i++, fcitxCandidateActionToObject(env, tab));
+            auto obj = JRef(env, fcitxCandidateActionToObject(env, tab));
+            env->SetObjectArrayElement(tabsArray, i++, obj);
         }
         env->SetObjectArrayElement(vararg, 3, *tabsArray);
         env->CallStaticVoidMethod(GlobalRef->Fcitx, GlobalRef->HandleFcitxEvent, 3, *vararg);
@@ -708,11 +714,16 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_startupFcitx(
     auto keyEventCallback = [](const int sym, const uint32_t states, const uint32_t unicode, const bool up, const int timestamp) {
         auto env = GlobalRef->AttachEnv();
         auto vararg = JRef<jobjectArray>(env, env->NewObjectArray(5, GlobalRef->Object, nullptr));
-        env->SetObjectArrayElement(vararg, 0, env->NewObject(GlobalRef->Integer, GlobalRef->IntegerInit, sym));
-        env->SetObjectArrayElement(vararg, 1, env->NewObject(GlobalRef->Integer, GlobalRef->IntegerInit, states));
-        env->SetObjectArrayElement(vararg, 2, env->NewObject(GlobalRef->Integer, GlobalRef->IntegerInit, unicode));
-        env->SetObjectArrayElement(vararg, 3, env->NewObject(GlobalRef->Boolean, GlobalRef->BooleanInit, up));
-        env->SetObjectArrayElement(vararg, 4, env->NewObject(GlobalRef->Integer, GlobalRef->IntegerInit, timestamp));
+        auto symObj = JRef(env, env->NewObject(GlobalRef->Integer, GlobalRef->IntegerInit, sym));
+        env->SetObjectArrayElement(vararg, 0, symObj);
+        auto statesObj = JRef(env, env->NewObject(GlobalRef->Integer, GlobalRef->IntegerInit, states));
+        env->SetObjectArrayElement(vararg, 1, statesObj);
+        auto unicodeObj = JRef(env, env->NewObject(GlobalRef->Integer, GlobalRef->IntegerInit, unicode));
+        env->SetObjectArrayElement(vararg, 2, unicodeObj);
+        auto upObj = JRef(env, env->NewObject(GlobalRef->Boolean, GlobalRef->BooleanInit, up));
+        env->SetObjectArrayElement(vararg, 3, upObj);
+        auto timestampObj = JRef(env, env->NewObject(GlobalRef->Integer, GlobalRef->IntegerInit, timestamp));
+        env->SetObjectArrayElement(vararg, 4, timestampObj);
         env->CallStaticVoidMethod(GlobalRef->Fcitx, GlobalRef->HandleFcitxEvent, 5, *vararg);
     };
     auto imChangeCallback = [](const InputMethodStatus &status) {
@@ -755,7 +766,8 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_startupFcitx(
         }
         auto candidatesArray = JRef<jobjectArray>(env, env->NewObjectArray(size, GlobalRef->Candidate, nullptr));
         for (int i = 0; i < size; ++i) {
-            env->SetObjectArrayElement(candidatesArray, i, candidateEntityToObject(env, paged.candidates[i]));
+            auto obj = JRef(env, candidateEntityToObject(env, paged.candidates[i]));
+            env->SetObjectArrayElement(candidatesArray, i, obj);
         }
         auto cursorIndex = JRef(env, env->NewObject(GlobalRef->Integer, GlobalRef->IntegerInit, paged.cursorIndex));
         auto layoutHint = JRef(env, env->NewObject(GlobalRef->Integer, GlobalRef->IntegerInit, static_cast<int>(paged.layoutHint)));
@@ -797,7 +809,9 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_startupFcitx(
                 JRef(env, env->CallStaticObjectMethod(GlobalRef->EngineBridge, GlobalRef->EngineBridgeOnEvent,
                                                       *JString(env, im), static_cast<jint>(EngineEvent::Reset), 0,
                                                       static_cast<jboolean>(learning)));
-                engineFailed(env, "onEvent", im, static_cast<int>(EngineEvent::Reset));
+                // one that fails to reset too is not sent another till it answers: not two failing
+                // calls on every key
+                if (engineFailed(env, "onEvent", im, static_cast<int>(EngineEvent::Reset))) answered.erase(im);
             }
             return snapshot;
         }
@@ -862,6 +876,9 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_startupFcitx(
             androidengine->template call<fcitx::IAndroidEngine::setCandidatesCallback>(engineCandidatesCallback);
             androidengine->template call<fcitx::IAndroidEngine::setOffersCallback>(engineOffersCallback);
             androidengine->template call<fcitx::IAndroidEngine::setSettingsCallback>(engineSettingsCallback);
+        } else {
+            // pinyin and every table type through it: without it they type nothing
+            FCITX_ERROR() << "androidengine not loaded";
         }
     });
     FCITX_INFO() << "Finishing startup";
@@ -909,7 +926,8 @@ extern "C"
 JNIEXPORT void JNICALL
 Java_org_fcitx_fcitx5_android_core_Fcitx_sendKeyToFcitxChar(JNIEnv *env, jclass clazz, jchar c, jint state, jint code, jboolean up, jint timestamp) {
     RETURN_IF_NOT_RUNNING
-    const fcitx::Key parsedKey{fcitx::Key::keySymFromString(reinterpret_cast<const char *>(&c)),
+    // a UTF-16 unit: keySymFromString reads a character only as UTF-8
+    const fcitx::Key parsedKey{fcitx::Key::keySymFromString(fcitx::utf8::UCS4ToUTF8(c)),
                                fcitx::KeyStates(static_cast<uint32_t>(state)),
                                code + /* evdev offset */ 8};
     Fcitx::Instance().sendKey(parsedKey, up, timestamp);
@@ -950,6 +968,7 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_resetInputContext(JNIEnv *env, jclass c
 extern "C"
 JNIEXPORT void JNICALL
 Java_org_fcitx_fcitx5_android_core_Fcitx_repositionCursor(JNIEnv *env, jclass clazz, jint position) {
+    RETURN_IF_NOT_RUNNING
     FCITX_DEBUG() << "repositionCursor: to " << position;
     Fcitx::Instance().repositionCursor(position);
 }
@@ -989,7 +1008,7 @@ extern "C"
 JNIEXPORT void JNICALL
 Java_org_fcitx_fcitx5_android_core_Fcitx_setInputMethod(JNIEnv *env, jclass clazz, jstring ime) {
     RETURN_IF_NOT_RUNNING
-    Fcitx::Instance().setInputMethod(CString(env, ime));
+    Fcitx::Instance().setInputMethod(utf8FromJString(env, ime));
 }
 
 extern "C"
@@ -1008,7 +1027,7 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_setEnabledInputMethods(JNIEnv *env, jcl
     std::vector<std::string> entries;
     for (int i = 0; i < size; i++) {
         auto string = JRef<jstring>(env, env->GetObjectArrayElement(array, i));
-        entries.emplace_back(CString(env, string));
+        entries.emplace_back(utf8FromJString(env, string));
     }
     Fcitx::Instance().setEnabledInputMethods(entries);
 }
@@ -1129,7 +1148,7 @@ extern "C"
 JNIEXPORT void JNICALL
 Java_org_fcitx_fcitx5_android_core_Fcitx_setFcitxClipboard(JNIEnv *env, jclass clazz, jstring string, jboolean password) {
     RETURN_IF_NOT_RUNNING
-    Fcitx::Instance().setClipboard(CString(env, string), password == JNI_TRUE);
+    Fcitx::Instance().setClipboard(utf8FromJString(env, string), password == JNI_TRUE);
 }
 
 extern "C"

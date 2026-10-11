@@ -60,5 +60,8 @@ msgstr "糾正錯拼和按偏的鍵"
 msgid "Weigh readings as whole sentences"
 msgstr "按整句通順程度排候選"
 
+msgid "Type English words in pinyin"
+msgstr "中英混輸"
+
 msgid "Never show this word"
 msgstr "不再顯示這個詞"

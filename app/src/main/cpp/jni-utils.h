@@ -9,6 +9,8 @@
 
 #include <string>
 
+#include "utf16-to-utf8.h"
+
 void throwJavaException(JNIEnv *env, const char *msg) {
     jclass c = env->FindClass("java/lang/Exception");
     env->ThrowNew(c, msg);
@@ -226,5 +228,16 @@ public:
 };
 
 extern GlobalRefSingleton *GlobalRef;
+
+// JNI's "UTF" is modified UTF-8. By the spec it spells a character past U+FFFF (CJK Ext-B, in the
+// tables) as two surrogates; ART writes UTF-8 instead, with a FIXME to follow the spec. Either way
+// a surrogate without its pair comes out as bytes fcitx cannot read: through UTF-16 it is U+FFFD.
+inline std::string utf8FromJString(JNIEnv *env, jstring str) {
+    if (!str) return {};
+    const jsize n = env->GetStringLength(str);
+    std::u16string units(static_cast<size_t>(n), u'\0');
+    env->GetStringRegion(str, 0, n, reinterpret_cast<jchar *>(units.data()));
+    return utf8FromUtf16(units.data(), units.size());
+}
 
 #endif //FCITX5_ANDROID_JNI_UTILS_H

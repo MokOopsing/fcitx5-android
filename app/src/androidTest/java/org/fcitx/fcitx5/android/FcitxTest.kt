@@ -6,8 +6,9 @@ package org.fcitx.fcitx5.android
 
 import android.os.SystemClock
 import androidx.test.platform.app.InstrumentationRegistry
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -18,11 +19,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
+import org.fcitx.fcitx5.android.core.CapabilityFlag
+import org.fcitx.fcitx5.android.core.CapabilityFlags
 import org.fcitx.fcitx5.android.core.Fcitx
 import org.fcitx.fcitx5.android.core.FcitxEvent
+import org.fcitx.fcitx5.android.core.KeyState
 import org.fcitx.fcitx5.android.core.RawConfig
 import org.fcitx.fcitx5.android.data.punctuation.PunctuationManager
 import org.fcitx.fcitx5.android.data.punctuation.PunctuationMapEntry
+import org.fcitx.fcitx5.android.engine.host.EngineSettings
 import org.fcitx.fcitx5.android.engine.host.Engines
 import org.fcitx.fcitx5.android.engine.table.TableConf
 import org.junit.After
@@ -66,11 +71,22 @@ class FcitxTest {
         /** The page of candidates as of the newest event, kept as [latestInputPanel] is. */
         @Volatile
         var latestPaged = FcitxEvent.PagedCandidateEvent.Data.Empty
-        val scope = MainScope()
+
+        /**
+         * Off the main thread: eventFlow drops its oldest event past 15 buffered, so a collector
+         * held up by a main-thread stall could lose a `CommitStringEvent` before it reaches the channel.
+         */
+        val scope = CoroutineScope(Dispatchers.Default)
+
+        /** What [setUpEngine] saves over in the app's data, put back by [cleanup]. */
+        var enabledImeBefore: Array<String>? = null
+        var globalConfigBefore: RawConfig? = null
+        var predictionBefore: String? = null
 
         @BeforeClass
         @JvmStatic
         fun setup() {
+            checkThisInputMethodIsNotBound()
             val context = InstrumentationRegistry.getInstrumentation().targetContext
             fcitx = Fcitx(context)
 
@@ -101,7 +117,16 @@ class FcitxTest {
             // `onStartInputView`; a bare engine has to do it itself.
             fcitx.activate(TEST_UID, TEST_PKG_NAME)
             fcitx.focus(true)
+            // both are saved to the app's data at once
+            enabledImeBefore = fcitx.enabledIme().map { it.uniqueName }.toTypedArray()
+            globalConfigBefore = fcitx.getGlobalConfig()["cfg"]
+            // what the tests commit is not learned into the app's data: as in a field that asks
+            // for no personalized learning (CapabilityFlags.fromEditorInfo)
+            fcitx.setCapFlags(CapabilityFlags(CapabilityFlag.Sensitive))
             fcitx.setEnabledIme(arrayOf(Engines.PINYIN))
+            // prediction on, whatever the app's data says: a commit then followed by none says learning is off
+            predictionBefore = fcitx.getImConfig(Engines.PINYIN)["cfg"][EngineSettings.PREDICTION].value
+            fcitx.setImConfig(Engines.PINYIN, RawConfig(arrayOf(RawConfig(EngineSettings.PREDICTION, true))))
             fcitx.setGlobalConfig(
                 RawConfig(
                     arrayOf(
@@ -118,17 +143,25 @@ class FcitxTest {
         @AfterClass
         @JvmStatic
         fun cleanup() {
-            runBlocking {
-                fcitx.focus(false)
-                fcitx.deactivate(TEST_UID)
+            // setup failed before it made one
+            if (!::fcitx.isInitialized) return
+            try {
+                runBlocking {
+                    predictionBefore?.let { fcitx.setImConfig(Engines.PINYIN, RawConfig(arrayOf(RawConfig(EngineSettings.PREDICTION, it)))) }
+                    enabledImeBefore?.let { fcitx.setEnabledIme(it) }
+                    globalConfigBefore?.let { fcitx.setGlobalConfig(it) }
+                    fcitx.focus(false)
+                    fcitx.deactivate(TEST_UID)
+                }
+            } finally {
+                fcitx.stop()
+                scope.cancel()
             }
-            fcitx.stop()
-            scope.cancel()
         }
 
         /**
-         * How long the event channel must stay empty to count as drained. The collector runs on
-         * the main thread, which a GC or class loading on a loaded emulator can stall for a few
+         * How long the event channel must stay empty to count as drained. Events reach it through
+         * the collector, which a GC or class loading on a loaded emulator can stall for a few
          * hundred ms; this leaves headroom over that.
          */
         const val QUIET_MS = 500L
@@ -250,19 +283,22 @@ class FcitxTest {
     }
 
     /**
-     * `wqvb` is 您好 alone: the table's data leaves out 你好, under a tenth as common as 您好 by the
-     * model's unigram (TableText.addWords, lexicon/README.md), and a full code's one candidate
-     * commits itself on its last key (唯一自动上屏). 你好 is typed by its characters, 你 picked
-     * from `wq`'s candidates by content: what this test is for is the code -> commit and the
-     * code -> candidates -> select -> commit paths.
+     * `wqvb` is the table's 你好 and 您好, in the order of their use (TableText.addWords): the
+     * model's, or on a device whose user picked one, theirs. So each is picked by content, and with
+     * two candidates neither commits itself on the last key ([aFullCodeOfOneCandidateCommitsItself]
+     * has a code of one). 你好 is typed by its characters too, 你 picked from `wq`'s candidates: what
+     * this test is for is the code -> candidates -> select -> commit path.
      */
     @Test
     fun testWbx(): Unit = runBlocking {
         fcitx.setEnabledIme(arrayOf(WUBI))
         sendString("wqvb")
-        val commitString = receiveFirstCommitString()?.data?.text
-        Timber.i("commitString is $commitString")
-        Assert.assertEquals("您好", commitString)
+        awaitQuiet()
+        val words = fcitx.getCandidates(0, 16).map { it.text }
+        Timber.i("candidates for wubi 'wqvb' are $words")
+        Assert.assertTrue("您好 and 你好 among candidates: $words", words.containsAll(listOf("您好", "你好")))
+        fcitx.select(words.indexOf("您好"))
+        Assert.assertEquals("您好", receiveFirstCommitString()?.data?.text)
         awaitQuiet()
         Assert.assertEquals("nothing left to pick", emptyList<String>(), fcitx.getCandidates(0, 16).map { it.text })
 
@@ -282,9 +318,9 @@ class FcitxTest {
     /**
      * Picks the candidate by content rather than by index.
      *
-     * Asserting `select(0)` would pin the dictionary's ranking: "nihaoshijie" currently offers
-     * 你好时节 ahead of 你好世界, and either is a legitimate reading. What this test is for is
-     * the sendKey -> candidates -> select -> commit path, not libime's scoring.
+     * Asserting `select(0)` would pin the engine's ranking: "nihaoshijie" reads as 你好世界 or
+     * 你好时节, and either is a legitimate reading. What this test is for is
+     * the sendKey -> candidates -> select -> commit path, not the engine's scoring.
      */
     @Test
     fun testPinyin(): Unit = runBlocking {
@@ -348,9 +384,9 @@ class FcitxTest {
      * `sendString` produces one per keystroke, so the first would be "n".
      *
      * Uses the input panel's preedit, not [FcitxAPI.clientPreeditCached]. This test drives a
-     * bare engine and never calls `setCapFlags`, so fcitx has no reason to believe the client
-     * can render a preedit and keeps it in the input panel. The real service sets the
-     * capability flags in `onStartInput`, which is what moves it client-side.
+     * bare engine whose capability flags (see [setUpEngine]) leave out `Preedit`, so fcitx has
+     * no reason to believe the client can render a preedit and keeps it in the input panel. The
+     * real service sets the capability flags in `onStartInput`, which is what moves it client-side.
      */
     @Test
     fun pinyinSegmentsSyllablesInThePreedit(): Unit = runBlocking {
@@ -359,6 +395,16 @@ class FcitxTest {
         val preedit = awaitPanelPreedit("ni hao")
         Timber.i("input panel preedit is $preedit")
         Assert.assertEquals("ni hao", preedit)
+        fcitx.reset()
+    }
+
+    /** The preedit in the input panel has its cursor at its end, as one in the app has. */
+    @Test
+    fun theInputPanelsPreeditHasItsCursorAtItsEnd(): Unit = runBlocking {
+        fcitx.setEnabledIme(arrayOf(Engines.PINYIN))
+        sendString("nihao")
+        Assert.assertEquals("ni hao", awaitPanelPreedit("ni hao"))
+        Assert.assertEquals("ni hao".length, latestInputPanel.preedit.cursor)
         fcitx.reset()
     }
 
@@ -400,9 +446,10 @@ class FcitxTest {
     }
 
     /**
-     * Note what is asserted: the *preedit* is cleared, not the whole engine. After a commit
-     * fcitx offers prediction candidates for the word just typed, so `isEmpty()` is still
-     * false -- that is correct behaviour, not leftover state.
+     * The preedit is cleared, and the whole panel with it: where it learns the engine follows a
+     * commit with predictions for the word just typed (`isEmpty()` false), prediction being on as
+     * [setUpEngine] sets it, and the Sensitive flag it sets, which keeps the tests' words out of the
+     * app's data, turns learning off.
      */
     @Test
     fun selectingACandidateCommitsItAndClearsThePreedit(): Unit = runBlocking {
@@ -414,6 +461,7 @@ class FcitxTest {
         fcitx.select(0)
         Assert.assertEquals(first, receiveFirstCommitString()?.data?.text)
         Assert.assertEquals("preedit is consumed by the commit", "", awaitPanelPreedit(""))
+        Assert.assertTrue("nothing predicted: learning is off", fcitx.isEmpty())
         fcitx.reset()
     }
 
@@ -482,12 +530,43 @@ class FcitxTest {
             Assert.assertTrue("a page to go back to", second.hasPrev)
             Assert.assertTrue("another page: $firstWords, $secondWords", firstWords.none { it in secondWords })
             Assert.assertEquals(0, second.cursorIndex)
+            Assert.assertEquals("the list from the first of all", firstWords, fcitx.getCandidates(0, firstWords.size).map { it.text })
             Assert.assertFalse("a word of the page turned from", fcitx.select(0, firstWords[0]))
             fcitx.offsetCandidatePage(-1)
             awaitQuiet()
             Assert.assertEquals("the first page again", firstWords, latestPaged.candidates.map { it.text })
             Assert.assertTrue("its own text at its index", fcitx.select(1, firstWords[1]))
             Assert.assertEquals(firstWords[1], receiveFirstCommitString()?.data?.text)
+        } finally {
+            fcitx.setCandidatePagingMode(0)
+            fcitx.reset()
+        }
+    }
+
+    /**
+     * A page turned to: the bar still shows the list from the first of all, those before the page
+     * fetched as it asks for them, and a pick on the page commits that page's word, sent as its
+     * index among all.
+     */
+    @Test
+    fun aPageTurnedToKeepsTheBarWholeAndCommitsItsOwnWord(): Unit = runBlocking {
+        fcitx.setEnabledIme(arrayOf(Engines.PINYIN))
+        try {
+            sendString("ni")
+            Assert.assertEquals("ni", awaitPanelPreedit("ni"))
+            awaitQuiet()
+            val all = fcitx.getCandidates(0, 16).map { it.text }
+            fcitx.offsetCandidatePage(1)
+            val bar = receiveFirst<FcitxEvent.CandidateListEvent>()?.data?.candidates?.map { it.text }
+            Assert.assertEquals("the bar from the first of all", all, bar)
+            awaitQuiet()
+            fcitx.setCandidatePagingMode(1)
+            awaitQuiet()
+            val page = latestPaged
+            val words = page.candidates.map { it.text }
+            Assert.assertTrue("a page past the first for 'ni': $words", page.hasPrev && words.size >= 2)
+            Assert.assertTrue("its own text at its index", fcitx.select(1, words[1]))
+            Assert.assertEquals(words[1], receiveFirstCommitString()?.data?.text)
         } finally {
             fcitx.setCandidatePagingMode(0)
             fcitx.reset()
@@ -540,6 +619,22 @@ class FcitxTest {
         Timber.i("candidates for wubi 'wq' are $candidates")
         Assert.assertTrue("expected some candidates for a partial code", candidates.isNotEmpty())
         fcitx.reset()
+    }
+
+    /**
+     * A full code with one candidate commits it on its last key (唯一自动上屏): the code -> commit
+     * path. An imported table, as which of the shipped table's codes has one depends on its data.
+     */
+    @Test
+    fun aFullCodeOfOneCandidateCommitsItself(): Unit = runBlocking {
+        val name = "fcitxtest-autoselect"
+        withImportedTable(name, "AutoSelect=True\nAutoSelectLength=-1\n", "KeyCode=z\nLength=2\n[Data]\nzz 你\n") {
+            fcitx.setEnabledIme(arrayOf(name))
+            sendString("zz")
+            Assert.assertEquals("你", receiveFirstCommitString()?.data?.text)
+            Assert.assertEquals("", awaitPanelPreedit(""))
+            fcitx.reset()
+        }
     }
 
     // endregion
@@ -728,6 +823,23 @@ class FcitxTest {
         fcitx.reset()
     }
 
+    /** A shortcut puts in the first of the marks on offer before it goes to the app, as any other key does. */
+    @Test
+    fun aShortcutPutsInTheMarkOnOfferBeforeTheAppGetsIt(): Unit = runBlocking {
+        fcitx.setEnabledIme(arrayOf(Engines.PINYIN))
+        sendString("[")
+        Assert.assertEquals("【", awaitPanelPreedit("【"))
+        awaitQuiet()
+        fcitx.sendKey("v", KeyState.Ctrl.state)
+        Assert.assertEquals("【", receiveFirstCommitString()?.data?.text)
+        // then the key: what the app pastes goes in after the mark
+        val key = receiveFirst<FcitxEvent.KeyEvent>()?.data
+        Assert.assertEquals('v'.code, key?.unicode)
+        Assert.assertEquals(true, key?.states?.ctrl)
+        Assert.assertEquals("", awaitPanelPreedit(""))
+        fcitx.reset()
+    }
+
     // endregion
 
     @Test
@@ -742,6 +854,16 @@ class FcitxTest {
         fcitx.reset()
         Timber.i("after second reset: ${fcitx.isEmpty()}")
         Assert.assertEquals(true, fcitx.isEmpty())
+    }
+
+    /** A character key reaches fcitx as that character: one the engine does not take comes back to the app as it. */
+    @Test
+    fun aCharacterKeyPastLatin1ReachesFcitxAsItself(): Unit = runBlocking {
+        fcitx.setEnabledIme(arrayOf(Engines.PINYIN))
+        // neither of its two bytes is 0: read as a C string, it had no end
+        fcitx.sendKey('中')
+        Assert.assertEquals('中'.code, receiveFirst<FcitxEvent.KeyEvent>()?.data?.unicode)
+        fcitx.reset()
     }
 
 }

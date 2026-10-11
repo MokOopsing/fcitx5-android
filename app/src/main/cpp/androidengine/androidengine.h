@@ -82,15 +82,28 @@ inline EngineTableConfig engineTable(bool hint, EngineOrderPolicy order, int aut
     return config;
 }
 
+// The options AndroidEngineConfig shares with the pages below, each written once: a page shows the
+// engine's default and range, so a value the engine takes is not lost by saving the page
+#define ENGINE_SHUANGPIN_PROFILE \
+    OptionWithAnnotation<EngineShuangpinProfile, EngineShuangpinProfileI18NAnnotation> shuangpinProfile{ \
+            this, "ShuangpinProfile", _("Shuangpin Profile"), EngineShuangpinProfile::Ziranma};
+#define ENGINE_PAGE_SIZE \
+    Option<int, IntConstrain> pageSize{this, "PageSize", _("Candidates Per Page"), 7, IntConstrain(3, 10)};
+#define ENGINE_PREDICTION Option<bool> prediction{this, "Prediction", _("Enable Prediction"), true};
+#define ENGINE_SENTENCE_MODEL \
+    Option<bool> sentenceModel{this, "SentenceModel", D_("fcitx5-android", "Weigh readings as whole sentences"), true};
+#define ENGINE_LATIN_WORDS \
+    Option<bool> latinWords{this, "LatinWords", D_("fcitx5-android", "Type English words in pinyin"), true};
+#define ENGINE_FUZZY Option<EngineFuzzyConfig> fuzzy{this, "Fuzzy", _("Fuzzy Pinyin")};
+
 FCITX_CONFIGURATION(
         AndroidEngineConfig,
-        OptionWithAnnotation<EngineShuangpinProfile, EngineShuangpinProfileI18NAnnotation> shuangpinProfile{
-                this, "ShuangpinProfile", _("Shuangpin Profile"), EngineShuangpinProfile::Ziranma};
-        Option<int, IntConstrain> pageSize{this, "PageSize", _("Candidates Per Page"), 7, IntConstrain(3, 10)};
-        Option<bool> prediction{this, "Prediction", _("Enable Prediction"), true};
-        Option<bool> sentenceModel{this, "SentenceModel", D_("fcitx5-android", "Weigh readings as whole sentences"), true};
-        Option<bool> latinWords{this, "LatinWords", D_("fcitx5-android", "Type English words in pinyin"), true};
-        Option<EngineFuzzyConfig> fuzzy{this, "Fuzzy", _("Fuzzy Pinyin")};
+        ENGINE_SHUANGPIN_PROFILE
+        ENGINE_PAGE_SIZE
+        ENGINE_PREDICTION
+        ENGINE_SENTENCE_MODEL
+        ENGINE_LATIN_WORDS
+        ENGINE_FUZZY
         // named as the input methods are listed (androidengine.cpp)
         Option<EngineTableConfig> wubi{this, "Wubi", "五笔", engineTable(true, EngineOrderPolicy::Freq, 4, 3)};
         Option<EngineTableConfig> cangjie{this, "Cangjie", "仓颉", engineTable(false, EngineOrderPolicy::No, -1, -1)};
@@ -109,20 +122,26 @@ FCITX_CONFIGURATION(
 // with every table's options on it read as if pinyin had them all
 FCITX_CONFIGURATION(
         EnginePinyinPage,
-        Option<int, IntConstrain> pageSize{this, "PageSize", _("Candidates Per Page"), 7, IntConstrain(3, 10)};
-        Option<bool> prediction{this, "Prediction", _("Enable Prediction"), true};
-        Option<bool> sentenceModel{this, "SentenceModel", D_("fcitx5-android", "Weigh readings as whole sentences"), true};
-        Option<bool> latinWords{this, "LatinWords", D_("fcitx5-android", "Type English words in pinyin"), true};
-        Option<EngineFuzzyConfig> fuzzy{this, "Fuzzy", _("Fuzzy Pinyin")};)
+        ENGINE_PAGE_SIZE
+        ENGINE_PREDICTION
+        ENGINE_SENTENCE_MODEL
+        ENGINE_LATIN_WORDS
+        ENGINE_FUZZY)
 
 FCITX_CONFIGURATION(
         EngineShuangpinPage,
-        OptionWithAnnotation<EngineShuangpinProfile, EngineShuangpinProfileI18NAnnotation> shuangpinProfile{
-                this, "ShuangpinProfile", _("Shuangpin Profile"), EngineShuangpinProfile::Ziranma};
-        Option<int, IntConstrain> pageSize{this, "PageSize", _("Candidates Per Page"), 7, IntConstrain(3, 10)};
-        Option<bool> prediction{this, "Prediction", _("Enable Prediction"), true};
-        Option<bool> sentenceModel{this, "SentenceModel", D_("fcitx5-android", "Weigh readings as whole sentences"), true};
-        Option<EngineFuzzyConfig> fuzzy{this, "Fuzzy", _("Fuzzy Pinyin")};)
+        ENGINE_SHUANGPIN_PROFILE
+        ENGINE_PAGE_SIZE
+        ENGINE_PREDICTION
+        ENGINE_SENTENCE_MODEL
+        ENGINE_FUZZY)
+
+#undef ENGINE_SHUANGPIN_PROFILE
+#undef ENGINE_PAGE_SIZE
+#undef ENGINE_PREDICTION
+#undef ENGINE_SENTENCE_MODEL
+#undef ENGINE_LATIN_WORDS
+#undef ENGINE_FUZZY
 
 #undef FCITX_GETTEXT_DOMAIN
 #define FCITX_GETTEXT_DOMAIN "fcitx5-android"
@@ -207,6 +226,9 @@ private:
     /** Hands the config to the engine, flattened as EngineSettingsCallback says. */
     void pushSettings() const;
 
+    /** The table options of [im], one of the table input methods; null for pinyin, shuangpin and T9. */
+    Option<EngineTableConfig> *table(const std::string &im);
+
     Instance *instance_;
     FCITX_ADDON_DEPENDENCY_LOADER(punctuation, instance_->addonManager());
     FCITX_ADDON_DEPENDENCY_LOADER(fullwidth, instance_->addonManager());
@@ -219,9 +241,6 @@ private:
     // filled from config_ as a page is opened
     mutable EnginePinyinPage pinyinPage_;
     mutable EngineShuangpinPage shuangpinPage_;
-
-    /** The table options of [im], one of the table input methods; null for pinyin and shuangpin. */
-    Option<EngineTableConfig> *table(const std::string &im);
     // the pause a snapshot that refines waits for; any event ends it
     std::unique_ptr<EventSourceTime> refine_;
 
