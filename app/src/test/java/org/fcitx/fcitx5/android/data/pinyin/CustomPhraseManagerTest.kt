@@ -61,6 +61,21 @@ class CustomPhraseManagerTest {
     }
 
     @Test
+    fun aPhraseEditedWhileTheKeyboardChangedTheFileKeepsItsPlaceUnderItsKey() {
+        val file = File(folder.root, "customphrase")
+        val a = PinyinCustomPhrase("yx", 1, "邮箱")
+        val b = PinyinCustomPhrase("yx", 1, "信箱")
+        val c = PinyinCustomPhrase("dh", 1, "电话")
+        CustomPhraseManager.save(listOf(a, b, c), file)
+        val base = CustomPhraseManager.load(file)
+        // pinned from the keyboard meanwhile: the editor's changes are merged into the file
+        val pinned = PinyinCustomPhrase("sj", 1, "手机")
+        CustomPhraseManager.save(base + pinned, file)
+        val edited = a.copy(value = "邮件")
+        assertEquals(listOf(c, pinned, edited, b), CustomPhraseManager.saveOver(base, listOf(c, edited, b), file))
+    }
+
+    @Test
     fun aPhrasePinnedFromTheKeyboardGoesFirstThoughTheEditorSavedMeanwhile() {
         val file = File(folder.root, "customphrase")
         val a = PinyinCustomPhrase("yx", 1, "邮箱")

@@ -6,7 +6,6 @@ package org.fcitx.fcitx5.android.engine.host
 
 import org.fcitx.fcitx5.android.engine.data.CodeTable
 import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
-import org.fcitx.fcitx5.android.engine.pinyin.Syllables
 import org.fcitx.fcitx5.android.engine.session.Offer
 import org.fcitx.fcitx5.android.engine.stroke.Strokes
 import org.junit.Assert.assertEquals
@@ -23,8 +22,6 @@ class SharedLexiconTest {
 
     @get:Rule
     val folder = TemporaryFolder()
-
-    private fun syl(vararg s: String) = s.map { Syllables.id(it) }.toIntArray()
 
     private val pinyin = PinyinDataBuilder()
         .unigram("<unk>", -7f, 0f)
@@ -55,8 +52,6 @@ class SharedLexiconTest {
             else -> throw FileNotFoundException(path)
         },
     )
-
-    private fun Engines.type(im: String, keys: String) = keys.map { onEvent(im, EngineEvent.CHAR, it.code) }.last()
 
     @Test
     fun oneUserLexiconServesPinyinAndTheTables() {
@@ -97,11 +92,20 @@ class SharedLexiconTest {
             assertTrue(engines.userWords().any { it.text == "好你" && it.kind == Engines.UserWord.Kind.LEARNED })
         }
         // saved before pinyin was told, at the next start it is told
-        dir.resolve(Engines.USER_PINYIN).delete()
+        assertTrue(dir.resolve(Engines.USER_PINYIN).delete())
+        assertTrue(dir.resolve(Engines.userTable("engine-wubi") + Engines.TOLD).delete())
         Engines(::load, dir).use { engines ->
             engines.type("engine-wubi", "vbgw")
             engines.onEvent("engine-wubi", EngineEvent.RESET, 0)
             assertTrue("好你" in engines.type(Engines.PINYIN, "haoni").candidates)
+            assertTrue(engines.userWords().any { it.text == "好你" && it.kind == Engines.UserWord.Kind.LEARNED })
+        }
+        // told once: gone from pinyin since, it is not put back
+        assertTrue(dir.resolve(Engines.USER_PINYIN).delete())
+        Engines(::load, dir).use { engines ->
+            engines.type("engine-wubi", "vbgw")
+            engines.onEvent("engine-wubi", EngineEvent.RESET, 0)
+            assertTrue(engines.userWords().none { it.text == "好你" })
         }
     }
 
@@ -154,5 +158,4 @@ class SharedLexiconTest {
             assertFalse("好你" in engines.type("engine-wubi", "vbw").candidates)
         }
     }
-
 }

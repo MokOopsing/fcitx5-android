@@ -4,24 +4,15 @@
  */
 package org.fcitx.fcitx5.android.engine.host
 
-import org.fcitx.fcitx5.android.engine.data.CodeTable
 import org.fcitx.fcitx5.android.engine.data.CodeTableReader
-import org.fcitx.fcitx5.android.engine.data.DataFormatException
-import org.fcitx.fcitx5.android.engine.data.PinyinData
-import org.fcitx.fcitx5.android.engine.data.SourceException
-import org.fcitx.fcitx5.android.engine.data.WordLayers
-import org.fcitx.fcitx5.android.engine.lattice.LayerPrior
-import org.fcitx.fcitx5.android.engine.lattice.TextWords
 import org.fcitx.fcitx5.android.engine.phrase.CustomPhrases
 import org.fcitx.fcitx5.android.engine.phrase.PhraseBook
-import org.fcitx.fcitx5.android.engine.pinyin.LatinWords
 import org.fcitx.fcitx5.android.engine.pinyin.PinyinSegmenter
+import org.fcitx.fcitx5.android.engine.pinyin.Segmenter
 import org.fcitx.fcitx5.android.engine.pinyin.ShuangpinSegmenter
 import org.fcitx.fcitx5.android.engine.pinyin.T9Segmenter
-import org.fcitx.fcitx5.android.engine.pinyin.Syllables
 import org.fcitx.fcitx5.android.engine.rerank.MatrixKernel
 import org.fcitx.fcitx5.android.engine.rerank.Reranker
-import org.fcitx.fcitx5.android.engine.rerank.SentenceModel
 import org.fcitx.fcitx5.android.engine.rerank.SentenceRefiner
 import org.fcitx.fcitx5.android.engine.session.Action
 import org.fcitx.fcitx5.android.engine.session.Choice
@@ -30,30 +21,18 @@ import org.fcitx.fcitx5.android.engine.session.PinyinSession
 import org.fcitx.fcitx5.android.engine.session.Session
 import org.fcitx.fcitx5.android.engine.session.Snapshot
 import org.fcitx.fcitx5.android.engine.stroke.StrokeLookup
-import org.fcitx.fcitx5.android.engine.stroke.Strokes
-import org.fcitx.fcitx5.android.engine.table.CodedWords
-import org.fcitx.fcitx5.android.engine.table.SharedWords
 import org.fcitx.fcitx5.android.engine.table.TableConf
-import org.fcitx.fcitx5.android.engine.table.TableDictionary
 import org.fcitx.fcitx5.android.engine.table.TableOptions
 import org.fcitx.fcitx5.android.engine.table.TableSession
-import org.fcitx.fcitx5.android.engine.table.TableText
-import org.fcitx.fcitx5.android.engine.table.TableUser
 import org.fcitx.fcitx5.android.engine.user.LibimeImport
-import org.fcitx.fcitx5.android.engine.user.UserModel
-import org.fcitx.fcitx5.android.engine.user.UserModel.Entry
-import org.fcitx.fcitx5.android.engine.user.KeyHabits
-import org.fcitx.fcitx5.android.engine.user.UserStore
 import org.fcitx.fcitx5.android.engine.user.WordLists
 import org.fcitx.fcitx5.android.engine.user.WordPack
 import java.io.BufferedReader
 import java.io.Closeable
 import java.io.File
-import java.io.FileNotFoundException
 import java.io.IOException
-import java.io.RandomAccessFile
 import java.nio.ByteBuffer
-import java.nio.channels.FileChannel
+import java.util.concurrent.Executor
 
 /**
  * The input methods the androidengine addon lists, by name, each with its session made on first
@@ -63,6 +42,10 @@ import java.nio.channels.FileChannel
  * pinyin ([additions]) is read at first need, and again on [reload]; so are the table input methods
  * they added ([userTables]), asked for by a name the engine has none of. The sentence models'
  * int8 weights are multiplied by [kernel], if given (in C++, say); if not, by Kotlin.
+ *
+ * A facade over its collaborators, which it makes and wires: [EngineAssets] (the data read from
+ * the assets), [UserLexicon] (the user's words) and [TableRegistry] (the table input methods);
+ * here are the sessions, made from them, and the settings they are made with.
  *
  * Everything here runs on one thread, the one fcitx runs on.
  */
@@ -108,113 +91,25 @@ class Engines(
          */
         val packs: () -> List<Pack> = { emptyList() },
         /** The lines of the dictionaries turned on that are merged into the new words dictionary. */
-        val newDictionary: () -> List<String> = { emptyList() },
+        val newDictionary: () -> Sequence<String> = { emptySequence() },
         /** The lines of the dictionaries turned on that are merged into the base dictionary. */
-        val dictionary: () -> List<String>,
+        val dictionary: () -> Sequence<String>,
     )
 
     class Pack(val name: String, val lines: Sequence<String>, val intoNew: Boolean = false)
 
-    // the files are signed with the app: no need to read them through for their checksums
-    private val pinyinData by lazy(LazyThreadSafetyMode.NONE) { PinyinData.load(load(PINYIN_DATA), verify = false) }
+    private val assets = EngineAssets(load, onError, kernel)
 
-    // the Latin words full pinyin reads as typed in lower case (iphone for iPhone)
-    private val latinWords by lazy(LazyThreadSafetyMode.NONE) { LatinWords.of(pinyinData.dictionary) }
+    // a thread for each compaction an append makes due, so a key does not wait on the disk: none
+    // kept, so the logs opened again after close() still have one
+    private val compactions = Executor { Thread(it, "record-compaction").apply { isDaemon = true }.start() }
 
-    /** A sentence model, read when first asked for; dropped when turned off, read (or tried) again when turned on. */
-    private inner class ModelFile(private val path: String, private val unpack: Boolean) {
-        private var model: SentenceModel? = null
-        private var tried = false
+    private val lexicon: UserLexicon = UserLexicon(
+        userDir, onError, legacy, additions, assets, compactions,
+        forgetInTables = { tables.forgetInTables(it) }, dropSessions = ::dropSessions,
+    )
 
-        fun get(): SentenceModel? {
-            if (tried) return model
-            tried = true
-            model = try {
-                SentenceModel.load(load(path), unpack, kernel ?: MatrixKernel.JVM)
-            } catch (e: FileNotFoundException) {
-                // a build without them (EngineDataPlugin fetches them): pinyin reads by the decoder alone
-                onError(IOException("cannot open $path: pinyin reads by the decoder alone", e))
-                null
-            } catch (e: IOException) {
-                onError(e)
-                null
-            } catch (e: IllegalArgumentException) {
-                // pinyin reads as well without it as before it was added
-                onError(IOException("cannot read $path", e))
-                null
-            }
-            return model
-        }
-
-        fun drop() {
-            model = null
-            tried = false
-        }
-    }
-
-    // in Kotlin, floats rather than int8 as stored: 17 MB rather than 4.5, and on ART two and a
-    // half times faster; a kernel is faster still on int8
-    private val sentenceModel = ModelFile(SENTENCE_MODEL, unpack = kernel == null)
-    // int8 as stored: as floats it would be 100 MB, half of what an app may take on some phones
-    private val refiningModel = ModelFile(REFINING_MODEL, unpack = false)
-
-    private var added: Additions? = null
-    private var addedRead = false
-
-    private fun added(): Additions? {
-        if (addedRead) return added
-        addedRead = true
-        added = try {
-            additions()
-        } catch (e: IOException) {
-            onError(e)
-            null
-        }
-        return added
-    }
-
-    private var phrases: PhraseBook? = null
-
-    private fun phrases(): PhraseBook = phrases ?: PhraseBook(CustomPhrases.parse(added()?.phrases.orEmpty())) {
-        try {
-            added?.savePhrases?.invoke(it)
-        } catch (e: IOException) {
-            // kept in memory: what the user sees stays as they asked, till the next start
-            onError(e)
-        }
-    }.also { phrases = it }
-
-    private var store: UserStore? = null
-    private var userModel: UserModel? = null
-    private var layerPrior: LayerPrior? = null
-
-    /** Learned with the user model, and kept in its log; one for the life of the engine. */
-    private fun prior(): LayerPrior = layerPrior ?: LayerPrior(pinyinData.layers, extra = { id -> userModel?.layerOf(id) ?: 0 }).also { layerPrior = it }
-
-    // the dictionaries' words go in as words the user added, uncounted: scored as the model's
-    // unknown word until picked, and not kept in the log unless picked
-    private fun user(): UserModel = userModel ?: UserModel(pinyinData.dictionary, pinyinData.vocabulary).also { model ->
-        userModel = model
-        if (userDir != null) {
-            userDir.mkdirs()
-            val file = File(userDir, USER_PINYIN)
-            // a log that cannot be read or moved aside: learn in memory rather than not type
-            store = try {
-                UserStore(file, model, onError = onError, prior = prior(), habits = habits).apply { open(seed = ::importLegacy) }
-            } catch (e: IOException) {
-                onError(e)
-                null
-            }
-        }
-        addDictionaries(model)
-        lists.applyTo(model)
-    }
-
-    // kept in the user model's log, read with it: asked for after user()
-    private val habits = KeyHabits()
-
-    // in the user directory with the log, in memory without one
-    private val lists by lazy(LazyThreadSafetyMode.NONE) { WordLists(userDir, onError) }
+    private val tables = TableRegistry(load, userDir, onError, userTables, compactions, assets, lexicon)
 
     /** A word of the user's, as the settings list them; [pinyin] its syllables apart by spaces. */
     data class UserWord(val text: String, val pinyin: String, val kind: Kind, val count: Float = 0f) {
@@ -230,149 +125,47 @@ class Engines(
         }
     }
 
-    private fun Entry.word(kind: UserWord.Kind, count: Float = 0f) =
-        UserWord(text, syllables.joinToString(" ") { Syllables.spelling(it) }, kind, count)
-
     /** The words the user added, those they made as they typed (most typed first), and those they blocked. */
-    fun userWords(): List<UserWord> =
-        lists.addedWords.map { it.word(UserWord.Kind.ADDED) } +
-            user().ownWords().sortedByDescending { it.second }.map { (entry, count) -> entry.word(UserWord.Kind.LEARNED, count) } +
-            lists.blockedWords.map { it.word(UserWord.Kind.BLOCKED) }
+    fun userWords(): List<UserWord> = lexicon.userWords()
+
+    /** [kind]'s part of [userWords] alone: a list of the settings shows one kind. */
+    fun userWords(kind: UserWord.Kind): List<UserWord> = lexicon.userWords(kind)
+
+    /** How many words of each kind [userWords] lists, with none of them made a [UserWord]. */
+    fun userWordCounts(): Map<UserWord.Kind, Int> = lexicon.userWordCounts()
 
     /**
      * How the dictionary reads [text]: as few of its words as make it up, each read as it most
      * likely is; syllables apart by spaces, null if some character is none of its words. For
-     * the user to check, as a character of several readings may be read the other way.
+     * the user to check, as a character of several readings may be read the other way; a first
+     * character read as a word has it, though it never is so alone (了 liao in 了解).
      */
-    fun pinyinOf(text: String): String? = pinyinsOf(listOf(text))[text]
+    fun pinyinOf(text: String): String? = assets.pinyinOf(text, strayFirst = true)
 
     /**
-     * [pinyinOf] of each of [texts], the dictionary walked once for them all: a walk is the
-     * whole of it, a thousand words imported with no pinyin would be a thousand walks.
+     * [pinyinOf] of each of [texts], the dictionary walked once for them all, and once more for
+     * what those not read whole missed: a walk is the whole of it, a thousand words imported with
+     * no pinyin would be a thousand walks.
      */
-    fun pinyinsOf(texts: Collection<String>): Map<String, String?> {
-        val offsets = texts.associateWith { text ->
-            val chars = text.codePointCount(0, text.length)
-            if (chars == 0 || chars > MAX_WORD_CHARS) null
-            else IntArray(chars + 1) { if (it == chars) text.length else text.offsetByCodePoints(0, it) }
-        }
-        val pieces = HashSet<String>()
-        for ((text, at) in offsets) {
-            if (at == null) continue
-            for (i in 0 until at.size - 1) for (j in i + 1 until at.size) pieces += text.substring(at[i], at[j])
-        }
-        val readings = LibimeImport.readings(pinyinData.dictionary, pinyinData.vocabulary, pieces)
-        return offsets.mapValues { (text, at) -> at?.let { reading(text, it, readings) } }
-    }
-
-    // as few of the dictionary's words as make [text] up, apart at [offsets]
-    private fun reading(text: String, offsets: IntArray, readings: Map<String, IntArray>): String? {
-        val chars = offsets.size - 1
-        // fewest pieces to each character, and the piece that got there
-        val fewest = IntArray(chars + 1) { if (it == 0) 0 else Int.MAX_VALUE }
-        val from = IntArray(chars + 1)
-        for (j in 1..chars) for (i in 0 until j) {
-            if (fewest[i] == Int.MAX_VALUE || text.substring(offsets[i], offsets[j]) !in readings) continue
-            if (fewest[i] + 1 < fewest[j]) {
-                fewest[j] = fewest[i] + 1
-                from[j] = i
-            }
-        }
-        if (fewest[chars] == Int.MAX_VALUE) return null
-        val syllables = ArrayList<Int>()
-        var j = chars
-        while (j > 0) {
-            val i = from[j]
-            syllables.addAll(0, readings.getValue(text.substring(offsets[i], offsets[j])).asList())
-            j = i
-        }
-        return syllables.joinToString(" ") { Syllables.spelling(it) }
-    }
-
-    private val textWords by lazy(LazyThreadSafetyMode.NONE) { TextWords(pinyinData.model, pinyinData.wordIndex) }
+    fun pinyinsOf(texts: Collection<String>): Map<String, String?> = assets.pinyinsOf(texts, strayFirst = true)
 
     /** Where each of [texts] splits into words, as the model finds likeliest: TextWords.boundaries. */
-    fun wordBoundaries(texts: Collection<String>): Map<String, IntArray> = texts.associateWith { textWords.boundaries(it) }
+    fun wordBoundaries(texts: Collection<String>): Map<String, IntArray> = assets.wordBoundaries(texts)
 
     /** log10 P of each of [texts] under the pinyin model (TextWords.logProb): for ranking what voice input heard. */
-    fun logProbs(texts: List<String>): FloatArray = FloatArray(texts.size) { textWords.logProb(texts[it]) }
+    fun logProbs(texts: List<String>): FloatArray = assets.logProbs(texts)
 
     /** Adds [text] read as [pinyin] (see [WordLists.entry]); false if it does not read so. */
-    fun addWord(text: String, pinyin: String): Boolean {
-        val entry = WordLists.entry(text, pinyin) ?: return false
-        add(listOf(entry))
-        return true
-    }
-
-    /** Adds [entries]; how many were not there already. */
-    private fun add(entries: List<Entry>): Int {
-        // unblocked, as the user asks for them
-        blockedTexts = null
-        lists.unblockAll(entries).forEach { userModel?.unblock(it) }
-        val added = lists.addAll(entries)
-        added.forEach { userModel?.list(it) }
-        sessions.clear()
-        keyboards.clear()
-        return added.size
-    }
+    fun addWord(text: String, pinyin: String): Boolean = lexicon.addWord(text, pinyin)
 
     /** Blocks [text] read as [pinyin] from the settings; false if it does not read so. */
-    fun blockWord(text: String, pinyin: String): Boolean {
-        val entry = WordLists.entry(text, pinyin) ?: return false
-        blockAll(listOf(entry))
-        sessions.clear()
-        keyboards.clear()
-        return true
-    }
-
-    // from a long press too, the session that asked going on with its input: not dropped, as the
-    // host fetches its candidates next; the others read the model as they decode
-    private fun block(entry: Entry) = blockAll(listOf(entry))
-
-    /** Blocks [entries]; how many were not already. */
-    private fun blockAll(entries: List<Entry>): Int {
-        blockedTexts = null
-        val blocked = lists.blockAll(entries)
-        val model = user()
-        entries.forEach { model.block(it) }
-        habits.forgetAll(entries.mapTo(HashSet()) { it.text })
-        return blocked.size
-    }
+    fun blockWord(text: String, pinyin: String): Boolean = lexicon.blockWord(text, pinyin)
 
     /** Takes [word] off its list: an added word is no longer typeable, a learned one forgotten, a blocked one offered again. */
     fun removeWord(word: UserWord) = removeWords(listOf(word))
 
     /** [removeWord] for each of [words], a list written once. */
-    fun removeWords(words: Collection<UserWord>) {
-        val byKind = words.groupBy({ it.kind }, { it.entry() })
-        byKind[UserWord.Kind.ADDED]?.let { added ->
-            val removed = lists.removeAll(added.filterNotNull())
-            if (removed.isNotEmpty()) {
-                // or the log's picks of them make them the user's own words again as it is read back
-                user().forgetEach(removed)
-                // and a table's pick of one is read back as its saved phrase
-                forgetInTables(removed.map { it.text })
-                if (removed.size > 1) compactUser()
-                dropUser()
-            }
-        }
-        byKind[UserWord.Kind.LEARNED]?.let { learned ->
-            user().forgetEach(learned.filterNotNull())
-            habits.forgetAll(learned.filterNotNull().mapTo(HashSet()) { it.text })
-            forgetInTables(learned.filterNotNull().map { it.text })
-            // a record a word, each read at a start as a pass over all the counts
-            if (learned.size > 1) compactUser()
-        }
-        byKind[UserWord.Kind.BLOCKED]?.let { entries ->
-            blockedTexts = null
-            lists.unblockAll(entries.filterNotNull()).forEach { userModel?.unblock(it) }
-        }
-        sessions.clear()
-        keyboards.clear()
-    }
-
-    // as listed: one syllable a space, so read back as it was, not split again
-    private fun UserWord.entry() = LibimeImport.entry(text, pinyin.replace(' ', '\''))
+    fun removeWords(words: Collection<UserWord>) = lexicon.removeWords(words)
 
     /** What [importWords] made of the lines: words added and blocked that were not already, lines it could not read. */
     data class Imported(val added: Int, val blocked: Int, val unread: Int)
@@ -381,136 +174,32 @@ class Engines(
      * The words of a list the user imports, a word a line (see [WordLists.line]): added, or
      * blocked where marked so; one with no pinyin read as the dictionary reads it ([pinyinOf]).
      */
-    fun importWords(lines: Sequence<String>): Imported {
-        val add = LinkedHashSet<Entry>()
-        val block = LinkedHashSet<Entry>()
-        var unread = 0
-        val read = lines.mapNotNull { WordLists.line(it) }.toList()
-        val guessed = pinyinsOf(read.filter { it.pinyin == null && it.text.isNotEmpty() }.map { it.text })
-        for (line in read) {
-            val pinyin = line.pinyin ?: guessed[line.text]
-            val entry = pinyin?.let { WordLists.entry(line.text, it) }
-            when {
-                entry == null -> unread++
-                line.blocked -> block += entry
-                else -> add += entry
-            }
-        }
-        // a word the file has both ways: blocked, the safer of the two
-        add -= block
-        val added = if (add.isEmpty()) 0 else add(add.toList())
-        var blocked = 0
-        if (block.isNotEmpty()) {
-            blocked = blockAll(block.toList())
-            sessions.clear()
-            keyboards.clear()
-        }
-        return Imported(added, blocked, unread)
-    }
+    fun importWords(lines: Sequence<String>): Imported = lexicon.importWords(lines)
 
     /**
      * The user's words as [importWords] reads them back: the added and the learned (most typed
      * first) as `幽默 you'mo`, the blocked with a `!` before them.
      */
-    fun exportWords(): List<String> = userWords().map {
-        val line = "${it.text} ${it.pinyin.replace(' ', '\'')}"
-        if (it.kind == UserWord.Kind.BLOCKED) "!$line" else line
-    }
-
-    /**
-     * Makes the user's words again from the log, the dictionaries and the lists: a word listed
-     * cannot be taken out of the model, only left out of the next one. With no log, the model
-     * is all there is of what was learned, so it is kept, the word typeable till the next start.
-     */
-    private fun dropUser() {
-        val log = store ?: return
-        closeQuietly(log)
-        store = null
-        userModel = null
-    }
-
-    /** Rewrites the user's log as the counts now are: a start then reads none of what was forgotten. */
-    private fun compactUser() {
-        try {
-            store?.compact()
-        } catch (_: IllegalStateException) {
-            // a log that stopped taking writes after one failed: nothing of what was forgotten reached it
-        }
-    }
-
-    private fun addDictionaries(model: UserModel) {
-        val lines = try {
-            added()?.dictionary?.invoke().orEmpty()
-        } catch (e: IOException) {
-            onError(e)
-            emptyList()
-        }
-        for (line in lines) LibimeImport.dictionaryEntry(line)?.let { model.list(it) }
-        val modelWords = pinyinData.model.vocabularySize
-        val newLayer = prior().layer(WordLayers.NEW)
-        val newLines = try {
-            added()?.newDictionary?.invoke().orEmpty()
-        } catch (e: IOException) {
-            onError(e)
-            emptyList()
-        }
-        // a dictionary has no scores of its own: its words the model lacks are scored as the new
-        // words dictionary's typical one, and weighed with it
-        for (line in newLines) LibimeImport.dictionaryEntry(line)?.let { model.list(it, NEW_WORD_SCORE, newLayer, modelWords) }
-        val packs = try {
-            added()?.packs?.invoke().orEmpty()
-        } catch (e: IOException) {
-            onError(e)
-            emptyList()
-        }
-        for (imported in packs) {
-            // one that does not read is left out, the rest still go in
-            val pack = try {
-                WordPack.parse(imported.lines, imported.name)
-            } catch (e: SourceException) {
-                onError(IOException(e.message, e))
-                continue
-            }
-            // merged into the layer the user put it in, whatever layer the pack names: one weight
-            // for the new words, however many packs they came in
-            val layer = if (imported.intoNew) newLayer else 0
-            pack.words.forEach { model.list(it.entry, it.score, layer, modelWords) }
-        }
-    }
-
-    /**
-     * What libime learned, into a log with nothing in it yet. Whatever fails is reported and
-     * pinyin goes on without it. Files that cannot be read leave the log empty, for the next
-     * start to try again; a failure while learning them keeps what was learned before it.
-     */
-    private fun importLegacy(model: UserModel) {
-        try {
-            val old = legacy() ?: return
-            LibimeImport.learn(
-                model, pinyinData.dictionary, pinyinData.vocabulary,
-                old.dictionary.asSequence(), old.history.asSequence(), old.decode,
-            )
-        } catch (e: IOException) {
-            onError(e)
-        } catch (@Suppress("TooGenericExceptionCaught") e: RuntimeException) {
-            // old data, however it came to be: no failure reading it should stop typing
-            onError(IOException("cannot import libime's data", e))
-        }
-    }
+    fun exportWords(): List<String> = lexicon.exportWords()
 
     private val keyboards = HashMap<String, Keyboard>()
     private val sessions = HashMap<String, Session>()
+
+    private fun dropSessions() {
+        keyboards.clear()
+        sessions.clear()
+        assets.dropDecoderExtensions()
+    }
 
     /** What the user set; the sessions are made again for a change, what was typed dropped. */
     var settings = EngineSettings()
         set(value) {
             if (value == field) return
             field = value
-            keyboards.clear()
-            sessions.clear()
+            dropSessions()
             if (!value.sentenceModel) {
-                sentenceModel.drop()
-                refiningModel.drop()
+                assets.sentenceModel.drop()
+                assets.refiningModel.drop()
             }
         }
 
@@ -538,400 +227,54 @@ class Engines(
         val s = settings
         when (im) {
             PINYIN -> {
-                val pinyin = PinyinSession(
-                    pinyinData, PinyinSegmenter(s.fuzzy, s.typos, neighbours = s.typos, latin = if (s.latinWords) latinWords else null),
-                    pageSize = s.pageSize, user = user(), prediction = s.prediction, prior = prior(), phraseBook = phrases(),
-                    reranker = reranker(), refiner = refiner(), block = ::block, habits = habits.scope(PINYIN),
-                )
-                ForgetsInTables(StrokeLookup(pinyin, ::strokes, ::charReading, s.pageSize, blocked = ::isBlocked, follow = pinyin::follow))
+                val segmenter = PinyinSegmenter(s.fuzzy, s.typos, neighbours = s.typos, latin = if (s.latinWords) assets.latinWords else null)
+                val pinyin = pinyinSession(segmenter, spell = false, habitScope = PINYIN)
+                ForgetsInTables(StrokeLookup(pinyin, assets::strokes, assets::charReading, s.pageSize, blocked = lexicon::isBlocked, follow = pinyin::follow, retype = pinyin::typeAll))
             }
             // 简拼 only where the digits read nothing else: as common on the evaluation set, and faster
-            T9 -> ForgetsInTables(PinyinSession(
-                pinyinData, T9Segmenter(s.fuzzy, abbreviations = false), spell = true,
-                pageSize = s.pageSize, user = user(), prediction = s.prediction, prior = prior(), phraseBook = phrases(),
-                reranker = reranker(), refiner = refiner(), block = ::block, habits = habits.scope(T9),
-            ))
-            SHUANGPIN -> ForgetsInTables(PinyinSession(
-                pinyinData, ShuangpinSegmenter(s.scheme, s.fuzzy, s.typos), spell = true,
-                pageSize = s.pageSize, user = user(), prediction = s.prediction, prior = prior(), phraseBook = phrases(),
-                reranker = reranker(), refiner = refiner(), block = ::block, habits = habits.scope("$SHUANGPIN/${s.shuangpin}"),
-            ))
+            T9 -> ForgetsInTables(pinyinSession(T9Segmenter(s.fuzzy, abbreviations = false), spell = true, habitScope = T9))
+            SHUANGPIN -> ForgetsInTables(
+                pinyinSession(ShuangpinSegmenter(s.scheme, s.fuzzy, s.typos), spell = true, habitScope = "$SHUANGPIN/${s.shuangpin}"),
+            )
             else -> {
                 val method = TABLES[im]
-                val table = if (method == null) addedTable(im) else table(im)
+                val table = if (method == null) tables.addedTable(im) else tables.table(im)
                 val own = method?.let { s.tables[it.group]?.applyTo(it.options) ?: it.options } ?: checkNotNull(table.options)
                 val options = own.copy(pageSize = s.pageSize)
                 // looking a character up by pinyin learns nothing: it is not how the user writes
-                val lookUp = if (options.pinyinKey == null) null else PinyinSession(pinyinData, PinyinSegmenter(), prediction = false)
-                TableSession(table.dictionary, options, lookUp, table.user, shared(table, im), learns = table.learns)
+                val lookUp = if (options.pinyinKey == null) null else PinyinSession(assets.pinyinData, PinyinSegmenter(), prediction = false)
+                TableSession(table.dictionary, options, lookUp, table.user, tables.shared(table, im), learns = table.learns)
             }
         }
     }
 
-    /**
-     * A table and what the user taught it: both outlive the sessions made over them. [options]:
-     * those of a table the user added, as its `.conf` has them; null for one of [TABLES]. Not
-     * [learns], as libime's table with Learning off, it keeps nothing, not even till the next start.
-     */
-    private class Table(
-        val dictionary: TableDictionary,
-        val user: TableUser,
-        val store: TableUser.Store?,
-        val options: TableOptions? = null,
-        val learns: Boolean = true,
-    ) {
-        var shared: SharedWords? = null
-
-        // the user's words coded for this table: those of their dictionaries, made once a user
-        // model; and those they made or typed, as of its changes then
-        var listed: CodedWords? = null
-        var own: CodedWords? = null
-        var codedFor: UserModel? = null
-        var listedAt = -1
-        var ownAt = -1
+    /** A session of one of the pinyins, alike but for how [segmenter] reads the keys and where their habits are kept ([habitScope]). */
+    private fun pinyinSession(segmenter: Segmenter, spell: Boolean, habitScope: String): PinyinSession {
+        val s = settings
+        return PinyinSession(
+            assets.pinyinData, segmenter, spell = spell,
+            pageSize = s.pageSize, user = lexicon.user(), prediction = s.prediction, prior = lexicon.prior(), phraseBook = lexicon.phrases(),
+            reranker = reranker(), refiner = refiner(), block = lexicon::block, habits = lexicon.habits.scope(habitScope),
+            charReadings = assets::charSyllables, extensions = assets::decoderExtensions,
+        )
     }
 
-    /**
-     * One user lexicon for every input method: [table] offers the words the user made, added or
-     * typed with pinyin, coded by its rules, as of now; the phrases it saves become pinyin's
-     * words (those saved before this, once); what is blocked or forgotten anywhere is so here.
-     */
-    private fun shared(table: Table, im: String): SharedWords = table.shared ?: object : SharedWords {
-        override fun words(prefix: String) = coded().flatMap { it.words(prefix) }
-        override fun leadsAnywhere(prefix: String) = coded().any { it.leadsAnywhere(prefix) }
-        override fun blocked(text: String) = isBlockedWord(text)
-        override fun blockable(text: String) = text.codePointCount(0, text.length) >= 2 && pinyinOf(text) != null
-        override fun block(text: String) = blockText(text)
-        override fun forget(text: String) = forgetEverywhere(text)
-
-        private fun coded(): List<CodedWords> {
-            val model = user()
-            if (table.codedFor !== model) {
-                table.listed = null
-                table.own = null
-                table.codedFor = model
-            }
-            val listed = table.listed?.takeIf { table.listedAt == model.listings }
-                ?: CodedWords(table.dictionary, model.listedTexts()).also {
-                    table.listed = it
-                    table.listedAt = model.listings
-                }
-            val own = table.own?.takeIf { table.ownAt == model.changes }
-                ?: CodedWords(table.dictionary, model.ownTexts()).also {
-                    table.own = it
-                    table.ownAt = model.changes
-                }
-            return listOf(own, listed)
-        }
-    }.also { shared ->
-        table.shared = shared
-        if (table.learns) {
-            table.user.onSaved = { learnSaved(listOf(it), again = true) }
-            tellPinyinOnce(table, im)
-        }
-    }
-
-    /**
-     * What [table] saved before pinyin heard of its phrases, told it once: a phrase the user took
-     * out of pinyin's words later is not put back.
-     */
-    private fun tellPinyinOnce(table: Table, im: String) {
-        val log = if (im in TABLES) userTable(im) else addedTableLog(im)
-        val told = userDir?.let { File(it, log + TOLD) }
-        if (told?.exists() == true) return
-        learnSaved(table.user.savedTexts(), again = false)
-        try {
-            told?.createNewFile()
-        } catch (_: IOException) {
-            // told again next time, harmlessly: pinyin learns only those it lacks; where the log
-            // cannot be kept either, that is reported already
-        }
-    }
-
-    /** Phrases a table saved, as pinyin's words: learned once more [again], else only those pinyin lacks. */
-    private fun learnSaved(texts: Collection<String>, again: Boolean) {
-        if (texts.isEmpty()) return
-        val model = user()
-        for ((text, reading) in pinyinsOf(texts)) {
-            val entry = reading?.let { LibimeImport.entry(text, it.replace(' ', '\'')) } ?: continue
-            if (again || !model.knows(entry)) model.learn(null, listOf(entry))
-        }
-    }
-
-    /** Forgets [text] in pinyin, however read, and in every table that saved it. */
-    private fun forgetEverywhere(text: String) {
-        user().forgetText(text)
-        habits.forgetAll(setOf(text))
-        forgetInTables(listOf(text))
-    }
-
-    // the tables loaded, and those with a log on disk: a phrase saved there would be shared again
-    private fun forgetInTables(texts: Collection<String>) {
-        val logged = TABLES.keys.filter { im -> im in tables || userDir?.let { File(it, userTable(im)).exists() } == true }
-        for (im in logged) {
-            val user = table(im).user
-            texts.forEach(user::forgetText)
-        }
-        for ((im, table) in tables) if (im !in TABLES) texts.forEach(table.user::forgetText)
-        // those the user added, which reload() unloads: forgotten as each loads next, as building
-        // one here would hold up the keys typed after it, for seconds where it changed
-        val dir = userDir ?: return
-        val names = File(dir, USER_TABLES).list().orEmpty().toSet()
-        for (im in names.mapTo(HashSet()) { it.substringBeforeLast('.') }) {
-            if (!forgetsAsItLoads(im, names)) continue
-            keepForgotten(File(dir, addedTableLog(im) + FORGOTTEN), texts)
-        }
-    }
-
-    /**
-     * Whether [im] is an added table with its log among [names] that does not read it now (not
-     * loaded, or loaded with no log open, as when it learns nothing) and may as it loads ([mayReadLog], last).
-     */
-    private fun forgetsAsItLoads(im: String, names: Set<String>): Boolean =
-        im !in TABLES && tables[im]?.store == null && File(addedTableLog(im)).name in names && mayReadLog(im)
-
-    /**
-     * Whether the added table [im] may read its log as it loads, as its `.conf` (read alone) says:
-     * one that learns nothing now does once Learning is on again; not one since removed, nor one
-     * that names no table, for which what is forgotten would be kept for good.
-     */
-    private fun mayReadLog(im: String): Boolean = try {
-        userTables(im)?.let { TableConf.parse(it.conf, it.settings) } != null
-    } catch (_: IOException) {
-        // unreadable now, it may read as it loads, which reports it if not
-        true
-    } catch (_: IllegalArgumentException) {
-        false
-    }
-
-    /** Keeps [texts] in [file], each once, for an added table to forget as it loads ([forgetKept]). */
-    private fun keepForgotten(file: File, texts: Collection<String>) {
-        try {
-            val text = if (file.isFile) file.readText() else ""
-            val kept = forgottenIn(text)
-            // a table's phrase holds no line break
-            val more = texts.filter { '\n' !in it && it !in kept }.distinct()
-            if (more.isEmpty()) return
-            // not run on into a last line cut short by a kill, which would take it with it
-            val start = if (text.isNotEmpty() && !text.endsWith('\n')) "\n" else ""
-            file.appendText(more.joinToString("", prefix = start) { "$it\n" })
-        } catch (e: IOException) {
-            onError(e)
-        }
-    }
-
-    /** What was forgotten while [im]'s table did not read its log ([keepForgotten]), forgotten in [user] now. */
-    private fun forgetKept(im: String, user: TableUser) {
-        val file = userDir?.let { File(it, addedTableLog(im) + FORGOTTEN) }?.takeIf { it.isFile } ?: return
-        try {
-            forgottenIn(file.readText()).forEach(user::forgetText)
-            file.delete()
-        } catch (e: IOException) {
-            // forgotten at the next load
-            onError(e)
-        }
-    }
-
-    // whole lines only: one cut short by a kill is no text that was forgotten
-    private fun forgottenIn(text: String): Set<String> = text.split('\n').dropLast(1).toSet()
-
-    /** [pinyin], what a long press forgets there forgotten in every table too, as [shared] has it. */
+    /** [pinyin], what a long press forgets there forgotten in every table too, as [TableRegistry.shared] has it. */
     private inner class ForgetsInTables(private val pinyin: Session) : Session by pinyin {
         override fun apply(action: Action): Snapshot {
             val forgotten = if (action is Action.Forget && Offer.FORGET in pinyin.offers(action.index)) pinyin.candidates(action.index, 1).firstOrNull() else null
-            return pinyin.apply(action).also { if (forgotten != null) forgetInTables(listOf(forgotten.text)) }
+            return pinyin.apply(action).also { if (forgotten != null) tables.forgetInTables(listOf(forgotten.text)) }
         }
-    }
-
-    // the texts blocked, of any reading: a table has no readings to tell apart
-    private var blockedTexts: Set<String>? = null
-
-    private fun blockedTexts(): Set<String> = blockedTexts ?: lists.blockedWords.mapTo(HashSet()) { it.text }.also { blockedTexts = it }
-
-    /** A character blocked in pinyin, for its strokes: found by strokes, it is the character, any reading. */
-    private fun isBlocked(text: String): Boolean = text in blockedTexts()
-
-    /**
-     * A word blocked, for a table. Not a character: blocked in pinyin under one reading (了 liao),
-     * a table, which has no readings, would lose it under all.
-     */
-    private fun isBlockedWord(text: String): Boolean = text.codePointCount(0, text.length) >= 2 && text in blockedTexts()
-
-    /** Blocks [text] from a table's candidate, as the dictionary reads it and as the user typed it: false if it reads none. */
-    private fun blockText(text: String): Boolean {
-        val read = pinyinOf(text)?.let { LibimeImport.entry(text, it.replace(' ', '\'')) }
-        val entries = (listOfNotNull(read) + user().entriesOf(text)).distinct()
-        if (entries.isEmpty()) return false
-        blockAll(entries)
-        return true
-    }
-
-    private val tables = HashMap<String, Table>()
-
-    // null till asked for; an app without the data has no lookup
-    private var strokeTable: Strokes? = null
-    private var strokesTried = false
-
-    private fun strokes(): Strokes? {
-        if (!strokesTried) {
-            strokesTried = true
-            strokeTable = try {
-                val words = pinyinData.wordIndex
-                val model = pinyinData.model
-                Strokes(CodeTable.load(load(STROKE_DATA), verify = false)) { c ->
-                    val id = words.find(c)
-                    if (id < 0) Float.NEGATIVE_INFINITY else model.score(id)
-                }
-            } catch (e: FileNotFoundException) {
-                onError(IOException("cannot open $STROKE_DATA: no lookup by strokes", e))
-                null
-            } catch (e: IOException) {
-                onError(e)
-                null
-            } catch (e: DataFormatException) {
-                onError(IOException(e))
-                null
-            }
-        }
-        return strokeTable
-    }
-
-    // a character to its readings, the likeliest first, for the stroke lookup to show
-    private val charReadings: Map<String, String> by lazy(LazyThreadSafetyMode.NONE) {
-        val dictionary = pinyinData.dictionary
-        val vocabulary = pinyinData.vocabulary
-        val readings = HashMap<String, MutableList<Pair<Float, String>>>()
-        val first = dictionary.firstChild(dictionary.root)
-        for (node in first until first + dictionary.childCount(dictionary.root)) {
-            for (i in 0 until dictionary.wordCount(node)) {
-                val word = dictionary.word(node, i)
-                if (vocabulary.length(word) != 1) continue
-                readings.getOrPut(vocabulary.word(word)) { ArrayList() } +=
-                    dictionary.weight(node, i) to Syllables.spelling(dictionary.syllable(node))
-            }
-        }
-        readings.mapValues { (_, r) ->
-            r.sortedByDescending { it.first }.map { it.second }.distinct().take(MAX_READINGS).joinToString("/")
-        }
-    }
-
-    private fun charReading(c: String): String = charReadings[c].orEmpty()
-
-    private fun table(im: String): Table = tables.getOrPut(im) {
-        val dictionary = TableDictionary(CodeTable.load(load("$TABLE_DIR/${TABLES.getValue(im).file}"), verify = false))
-        val user = TableUser(dictionary)
-        Table(dictionary, user, userDir?.let { openStore(File(it, userTable(im)), user) })
-    }
-
-    // a log that cannot be read or moved aside: learn in memory rather than not type
-    private fun openStore(file: File, user: TableUser): TableUser.Store? {
-        file.parentFile?.mkdirs()
-        return try {
-            TableUser.Store(file, user, onError).apply { open() }
-        } catch (e: IOException) {
-            onError(e)
-            null
-        }
-    }
-
-    // added tables that failed, not tried again (on every key) until reload
-    private val failed = HashSet<String>()
-
-    /** A table the user added, built from its text unless built already; what fails is reported. */
-    private fun addedTable(im: String): Table = tables.getOrPut(im) {
-        require(im !in failed) { "input method $im failed to load" }
-        // until it loads: not tried again on every key
-        failed += im
-        val table = try {
-            val added = userTables(im) ?: throw IllegalArgumentException("no input method $im")
-            val conf = TableConf.parse(added.conf, added.settings)
-            val dictionary = TableDictionary(built(im, conf.file, added))
-            val user = TableUser(dictionary)
-            val store = if (conf.learning) userDir?.let { openStore(File(it, addedTableLog(im)), user) } else null
-            // with no log read there is nothing to forget: kept for a load that reads one
-            if (store != null) forgetKept(im, user)
-            Table(dictionary, user, store, conf.options, conf.learning)
-        } catch (e: IOException) {
-            throw unreadable(im, e)
-        } catch (e: SourceException) {
-            throw unreadable(im, e)
-        } catch (@Suppress("TooGenericExceptionCaught") e: RuntimeException) {
-            // a table file from anywhere (DataFormatException, say): no failure should go unsaid
-            throw unreadable(im, e)
-        }
-        failed -= im
-        table
-    }
-
-    private fun unreadable(im: String, e: Throwable): UnreadableInputMethod {
-        onError(e as? IOException ?: IOException("cannot read input method $im", e))
-        return UnreadableInputMethod(im, e)
     }
 
     /**
-     * [added]'s table: as built before if its stamp is the same, else built from its text and
-     * kept for next time. One that cannot be kept is built again at the next start.
+     * The one reranker over the model, for every session: they all run on the fcitx thread, one
+     * input typed at a time, and what it ran for one input is started over for another's.
      */
-    private fun built(im: String, file: String, added: UserTable): CodeTable {
-        // built again when the file changes, or how its text is read
-        val stamp = "$BUILD $file ${added.stamp(file)}"
-        val cache = userDir?.let { File(it, addedTableFiles(im).first()) }
-        if (cache != null && cache.isFile) {
-            try {
-                val table = CodeTable.load(map(cache))
-                if (table.header[STAMP] == stamp) return table
-            } catch (e: DataFormatException) {
-                // cut short by a kill, or by a build that writes them otherwise: built again
-                onError(IOException("cannot read $cache", e))
-            } catch (e: IOException) {
-                onError(e)
-            }
-        }
-        val reader = CodeTableReader()
-        added.text(file).use { reader.read(it, file) }
-        TableText.codePhrases(reader)
-        reader.builder.header(STAMP, stamp)
-        val bytes = reader.builder.build().toByteArray()
-        if (cache != null) {
-            try {
-                cache.parentFile?.mkdirs()
-                val next = File(cache.path + ".new")
-                next.writeBytes(bytes)
-                if (!next.renameTo(cache)) throw IOException("cannot replace $cache")
-                // mapped, as at the next start: pages the OS may drop, not a heap the size of the table
-                return CodeTable.load(map(cache), verify = false)
-            } catch (e: IOException) {
-                onError(e)
-            }
-        }
-        return CodeTable.load(ByteBuffer.wrap(bytes), verify = false)
-    }
-
-    private fun map(file: File): ByteBuffer = RandomAccessFile(file, "r").use {
-        it.channel.map(FileChannel.MapMode.READ_ONLY, 0, it.length())
-    }
-
-    /** A reranker of the session's own, over the one model: each keeps what it ran for its input. */
-    private fun reranker(): Reranker? = if (settings.sentenceModel) sentenceModel.get()?.let { Reranker(it) } else null
+    private fun reranker(): Reranker? = if (settings.sentenceModel) assets.sentenceModel.reranker(Reranker.LIMIT) else null
 
     /** As [reranker], over the larger model, which weighs the readings again while the user pauses. */
-    private fun refiner(): SentenceRefiner? = if (settings.sentenceModel) LateRefiner() else null
-
-    /**
-     * The larger model is read at the first pause, not when a session is made: 26 MB copied out
-     * of the asset on the fcitx thread would hold up the switch to pinyin. Unreadable, it has
-     * nothing to say, and the session stops asking.
-     */
-    private inner class LateRefiner : SentenceRefiner {
-        private var reranker: Reranker? = null
-
-        override fun refine(context: String, readings: List<String>, scores: List<Float>, budget: Int): Int? {
-            val r = reranker ?: refiningModel.get()?.let { Reranker(it, limit = Reranker.REFINE_LIMIT) }?.also { reranker = it }
-                ?: return SentenceRefiner.NONE
-            // null is not done yet, more slices to come: not NONE, which would end it after the first
-            return r.refine(context, readings, scores, budget)
-        }
-    }
+    private fun refiner(): SentenceRefiner? = if (settings.sentenceModel) assets.lateRefiner else null
 
     /**
      * Reads [additions] again, for the user changed them: the sessions are made anew, what was
@@ -940,48 +283,22 @@ class Engines(
      * and the removed ones kept till the next start.
      */
     fun reload() {
-        val before = added?.dictionaries.orEmpty()
-        addedRead = false
-        phrases = null
-        keyboards.clear()
-        sessions.clear()
-        // the tables the user added are asked for again: built again only if they changed
-        failed.clear()
-        for (im in tables.keys.filter { it !in TABLES }) tables.remove(im)?.store?.let(::closeQuietly)
-        val model = userModel ?: return
-        if (added()?.dictionaries.orEmpty() == before) return
-        if (store == null) {
-            addDictionaries(model)
-            lists.applyTo(model)
-        } else {
-            // read again from the log all the same: what did not reach it is lost either way
-            dropUser()
-        }
+        val before = lexicon.dropAdditions()
+        dropSessions()
+        tables.unloadAdded()
+        lexicon.reloadDictionaries(before)
     }
 
     override fun close() {
         // each on its own: one that fails to close must not leave the others open
-        (listOfNotNull(store) + tables.values.mapNotNull { it.store }).forEach(::closeQuietly)
+        (listOfNotNull(lexicon.store) + tables.stores()).forEach { closeQuietly(it, onError) }
         // used after all the same: each reads its log again, and appends to it
-        store = null
-        userModel = null
-        tables.clear()
-        sessions.clear()
-        keyboards.clear()
-    }
-
-    private fun closeQuietly(closeable: Closeable) {
-        try {
-            closeable.close()
-        } catch (e: IOException) {
-            onError(e)
-        }
+        lexicon.closed()
+        tables.closed()
+        dropSessions()
     }
 
     companion object {
-        // longer is a sentence, not a word: and the dictionary is walked as deep
-        private const val MAX_WORD_CHARS = 8
-
         // the median score of the new words dictionary's 78 thousand words (words-202610): what a
         // word of a dictionary merged into it, which has no score, is taken to be
         const val NEW_WORD_SCORE = -6.2f
@@ -996,7 +313,6 @@ class Engines(
 
         /** Characters by their strokes (rime-stroke), for pinyin's `u` lookup; read if the app has it. */
         const val STROKE_DATA = "engine/stroke.data"
-        private const val MAX_READINGS = 3
         /** Read if the app has one; without it the engine types by the decoder alone. */
         const val SENTENCE_MODEL = "engine/sentence-model.safetensors"
         /** Six times the work of [SENTENCE_MODEL], and right more often: see [PinyinSession]'s refiner. */
@@ -1013,42 +329,49 @@ class Engines(
         /** Under the user directory: the tables the user added, built, and what each learned. */
         const val USER_TABLES = "tables"
 
-        // the header key a built table keeps its source's stamp under
-        private const val STAMP = "androidengine.stamp"
-
-        // raised when a table's text is read otherwise (CodeTableReader, TableText): built again
-        private const val BUILD = 1
-
         /**
          * Under the user directory, what is kept of a table the user added: the table built, and
          * what it learned, with what is kept beside that ([TOLD], [FORGOTTEN]). Gone with the
          * table, lest another of its name find them.
          */
         fun addedTableFiles(im: String): List<String> =
-            addedTableLog(im).let { listOf("$USER_TABLES/$im.table", it, it + TOLD, it + FORGOTTEN) }
+            addedTableLog(im).let { listOf(addedTableCache(im), it, it + TOLD, it + FORGOTTEN) }
+
+        // under the user directory, a table the user added, built
+        internal fun addedTableCache(im: String) = "$USER_TABLES/$im.table"
 
         // under the user directory, what a table the user added learned
-        private fun addedTableLog(im: String) = "$USER_TABLES/$im.user"
+        internal fun addedTableLog(im: String) = "$USER_TABLES/$im.user"
 
         /** Where what the user taught the table input method [im] is kept: `wubi.user` and so on. */
         fun userTable(im: String) = im.removePrefix("engine-") + ".user"
 
         /** Each table input method. */
         val TABLES: Map<String, TableMethod> = mapOf(
-            "engine-wubi" to TableMethod("wbx.data", "Wubi", TableOptions.WUBI),
-            "engine-cangjie" to TableMethod("cj.data", "Cangjie", TableOptions.CANGJIE),
-            "engine-ziranma" to TableMethod("zrm.data", "Ziranma", TableOptions.ZIRANMA),
-            "engine-erbi" to TableMethod("erbi.data", "Erbi", TableOptions.ERBI),
-            "engine-wubipinyin" to TableMethod("wbpy.data", "WubiPinyin", TableOptions.WUBI_PINYIN),
+            "engine-wubi" to TableMethod("wbx.data", "Wubi", TableOptions.WUBI, "wbx"),
+            "engine-cangjie" to TableMethod("cj.data", "Cangjie", TableOptions.CANGJIE, "cangjie"),
+            "engine-ziranma" to TableMethod("zrm.data", "Ziranma", TableOptions.ZIRANMA, "zrm"),
+            "engine-erbi" to TableMethod("erbi.data", "Erbi", TableOptions.ERBI, "erbi"),
+            "engine-wubipinyin" to TableMethod("wbpy.data", "WubiPinyin", TableOptions.WUBI_PINYIN, "wbpy"),
         )
+    }
+}
+
+/** Closes [closeable], what fails reported to [onError] rather than thrown. */
+internal fun closeQuietly(closeable: Closeable, onError: (IOException) -> Unit) {
+    try {
+        closeable.close()
+    } catch (e: IOException) {
+        onError(e)
     }
 }
 
 /**
  * A table input method: its [file] under [Engines.TABLE_DIR], the [group] of its settings in the
  * addon's config (see [EngineSettings.tables]), and how it behaves unless those say otherwise.
+ * [libime] the name libime's table input method had.
  */
-class TableMethod(val file: String, val group: String, val options: TableOptions)
+class TableMethod(val file: String, val group: String, val options: TableOptions, val libime: String)
 
 /**
  * What [Engines] throws for a table input method the user added that it cannot read: its `.conf`

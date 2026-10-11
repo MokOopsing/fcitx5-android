@@ -13,17 +13,19 @@ import org.fcitx.fcitx5.android.FcitxApplication
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.pinyin.CustomPhraseManager
 import org.fcitx.fcitx5.android.data.pinyin.ImportedDictionaries
-import org.fcitx.fcitx5.android.data.pinyin.customphrase.PinyinCustomPhrase
 import org.fcitx.fcitx5.android.data.pinyin.dict.PinyinDictionary
 import org.fcitx.fcitx5.android.data.restoreDirectory
 import org.fcitx.fcitx5.android.engine.data.DataFormatException
+import org.fcitx.fcitx5.android.engine.data.SourceException
 import org.fcitx.fcitx5.android.engine.host.EngineEvent
 import org.fcitx.fcitx5.android.engine.host.EngineSettings
 import org.fcitx.fcitx5.android.engine.host.Engines
 import org.fcitx.fcitx5.android.engine.host.UnreadableInputMethod
 import org.fcitx.fcitx5.android.engine.libime.LibimeFiles
 import org.fcitx.fcitx5.android.engine.phrase.CustomPhrases
+import org.fcitx.fcitx5.android.engine.session.Choice
 import org.fcitx.fcitx5.android.engine.session.Offer
+import org.fcitx.fcitx5.android.engine.session.Snapshot
 import org.fcitx.fcitx5.android.engine.user.LibimeImport
 import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.toast
@@ -39,16 +41,18 @@ import java.util.concurrent.Executors
 
 /**
  * Where the androidengine addon (native) reaches ime-core's input methods. Called only on the
- * fcitx thread, through JNI: the sessions are that thread's alone, so nothing here locks.
+ * fcitx thread, through JNI: the sessions are that thread's alone, so nothing here locks. Only the
+ * custom phrases the keyboard changes are saved on a thread of their own ([PhraseFile]), which
+ * [additions] waits for before it reads them.
  */
 object EngineBridge {
 
     /**
-     * A snapshot as the addon reads it, field by field. [candidates] run from the first of all,
-     * through the page shown ([shown] of them from [first]), so the list the addon builds indexes
-     * as the session does. [actionable]: whether a long press on one may offer something, asked
-     * of [offers] then. [labels]: the keys picking those shown, empty for the digits. [refines]:
-     * whether the addon is to send [EngineEvent.REFINE] while the user pauses.
+     * One event's outcome, which the addon reads field by field. [candidates] run from [first]:
+     * the page shown ([shown] of them), then more. The addon numbers them from [first], as the
+     * session does. [actionable]: whether a long press on a candidate may offer actions ([offers]).
+     * [labels]: the keys that pick the shown candidates, empty for the digits. [refines]: whether
+     * the addon should send [EngineEvent.REFINE] while the user pauses.
      */
     class Result(
         @JvmField val handled: Boolean,
@@ -74,24 +78,50 @@ object EngineBridge {
     private val t9State = MutableStateFlow(T9State())
     val t9: StateFlow<T9State> = t9State
 
-    private val made = lazy(LazyThreadSafetyMode.NONE) {
-        val userDir = File(appContext.filesDir, "engine")
-        // before the engine makes it anew: a user-data import killed between its two renames left
-        // the engine's files only in engine.old, which the next import would delete
-        try {
-            restoreDirectory(userDir)
-        } catch (e: IOException) {
-            Timber.w(e, "engine user data")
-        }
-        Engines(
-            ::asset, userDir, { Timber.w(it, "engine user data") }, ::legacy, ::additions, ::userTable, NativeMatrixKernel,
-        )
+    private var made: Engines? = null
+
+    /** Made when first used, and again after [close]; on the fcitx thread only, as the addon uses it there. */
+    val engines: Engines
+        get() = made ?: Engines(
+            load = ::asset,
+            userDir = userDir()?.let(::restored),
+            onError = { Timber.w(it, "engine user data") },
+            legacy = ::legacy,
+            additions = { additions(pinyinDir()) },
+            userTables = ::userTable,
+            kernel = NativeMatrixKernel,
+        ).also { made = it }
+
+    // credential-encrypted, unlike fcitx's home: what the user typed is not kept where it can be read
+    // before the phone is first unlocked. Till then the engine learns in memory; the app restarts at unlock.
+    private fun userDir() = if (FcitxApplication.getInstance().isDirectBootMode) null else File(appContext.filesDir, "engine")
+
+    /**
+     * [userDir], put back before the engine makes it anew: a user-data import killed between its
+     * two renames left the engine's files only in engine.old. Null if it cannot be, the engine then
+     * learning in memory: an engine/ made anew would have the next import delete engine.old, the
+     * only copy of them.
+     */
+    internal fun restored(userDir: File): File? = try {
+        restoreDirectory(userDir)
+        userDir
+    } catch (e: IOException) {
+        Timber.e(e, "engine user data cannot be put back: what is learned is kept in memory only")
+        null
     }
-    /** Made when first used; on the fcitx thread only, as the addon uses it there. */
-    val engines by made
+
+    /**
+     * Closes the engine, made anew at its next use: once fcitx has exited, on its thread. An input
+     * method that could not load on this one is tried again on that one.
+     */
+    fun close() {
+        made?.close()
+        made = null
+        unloadable.clear()
+    }
 
     // what cannot load is not loaded again on every key: the keys go to the app, the user told once
-    private val unloadable = Unloadable { im, e ->
+    internal val unloadable = Unloadable { im, e ->
         Timber.e("%s cannot load (%s): not called again till the engine is reloaded", im, e.javaClass.name)
         ContextCompat.getMainExecutor(appContext).execute { appContext.toast(R.string.engine_unloadable, Toast.LENGTH_LONG) }
     }
@@ -141,7 +171,7 @@ object EngineBridge {
 
     // fcitx's data home, as Fcitx starts it: where libime kept its files, and where the app's
     // editors still keep what the user adds
-    private fun fcitxHome(): File {
+    internal fun fcitxHome(): File {
         val context = FcitxApplication.getInstance().directBootAwareContext
         return context.getExternalFilesDir(null) ?: context.filesDir
     }
@@ -186,12 +216,12 @@ object EngineBridge {
     }
 
     /**
-     * The custom phrases and the dictionaries turned on, as the editors keep them; a file that
-     * cannot be read is left out, the rest still read. The dictionaries are read only when the
-     * engine asks, and again only when one of them changed; libime's are turned into text first.
+     * The custom phrases and the dictionaries turned on in [dir], fcitx's pinyin data directory, as
+     * the editors keep them; a file that cannot be read is left out, the rest still read. The
+     * dictionaries are read only when the engine asks, and again only when one of them changed;
+     * libime's are turned into text first.
      */
-    private fun additions(): Engines.Additions {
-        val dir = pinyinDir()
+    internal fun additions(dir: File): Engines.Additions {
         val phraseFile = File(dir, "customphrase")
         // what the keyboard changed just before is in the file as it is read again
         phraseSaves.submit(Runnable {}).get()
@@ -212,17 +242,9 @@ object EngineBridge {
         // a dictionary moved to another layer is a change too
         val seen = (dictionaries + packs).joinToString("\n") { "${it.name} ${it.length()} ${it.lastModified()} ${it.intoNew()}" }
         val save = PhraseFile(phraseFile, phrases, read, phraseSaves)::save
-        val readPacks = {
-            packs.mapNotNull { file ->
-                try {
-                    Engines.Pack(file.name, file.readLines().asSequence(), file.intoNew())
-                } catch (e: IOException) {
-                    Timber.w(e, "word pack %s", file.name)
-                    null
-                }
-            }
-        }
-        fun read(files: List<File>) = files.flatMap { file ->
+        // each read only as the engine parses it, and dropped after: not every pack in the heap at once
+        val readPacks = { packs.map { Engines.Pack(it.name, it.packLines(), it.intoNew()) } }
+        fun read(files: List<File>) = files.asSequence().flatMap { file ->
             try {
                 file.readLines()
             } catch (e: IOException) {
@@ -231,7 +253,24 @@ object EngineBridge {
             }
         }
         val (newDictionaries, baseDictionaries) = dictionaries.partition { it.intoNew() }
-        return Engines.Additions(phrases, seen, save, readPacks, { read(newDictionaries) }) { read(baseDictionaries) }
+        return Engines.Additions(
+            phrases = phrases,
+            dictionaries = seen,
+            savePhrases = save,
+            packs = readPacks,
+            newDictionary = { read(newDictionaries) },
+            dictionary = { read(baseDictionaries) },
+        )
+    }
+
+    // one that cannot be read is left out, as the engine leaves out one that does not parse
+    private fun File.packLines() = Sequence {
+        try {
+            readLines().iterator()
+        } catch (e: IOException) {
+            Timber.w(e, "word pack %s", name)
+            throw SourceException(name, 1, "cannot read", e)
+        }
     }
 
     /**
@@ -240,8 +279,7 @@ object EngineBridge {
      * not run, and what it saved is kept.
      */
     internal fun savePhrases(base: CustomPhrases, phrases: CustomPhrases, file: File) {
-        fun CustomPhrases.items() = all.map { PinyinCustomPhrase(it.key, it.order, it.value) }
-        CustomPhraseManager.saveKeysOver(base.items(), phrases.items(), file)
+        CustomPhraseManager.saveKeysOver(CustomPhraseManager.items(base), CustomPhraseManager.items(phrases), file)
     }
 
     // the engine's phrases saved off the fcitx thread, which takes the keys too; one at a time, in order
@@ -285,22 +323,61 @@ object EngineBridge {
         FileInputStream(fd.fileDescriptor).channel.use { it.map(FileChannel.MapMode.READ_ONLY, fd.startOffset, fd.length) }
     }
 
+    /**
+     * Whether the input method of the last [onEvent] has refining left, its snapshot's
+     * [refines][Snapshot.refines]: the addon then sends it [EngineEvent.REFINE] while the user
+     * pauses. Written on the fcitx thread once an event is answered, and left as it was while one
+     * runs: read off that thread during a refining step (EngineEvalRunner), it is still true.
+     */
+    @Volatile
+    var refining = false
+        private set
+
     /** [learning] is false in a password or other sensitive field: nothing typed there is kept. */
     @JvmStatic
-    fun onEvent(im: String, event: Int, arg: Int, learning: Boolean): Result {
-        if (im in unloadable) return unhandled
-        val s = unloadable.call(im) { engines.onEvent(im, event, arg, learning) }
-        if (im == Engines.T9 && (event != EngineEvent.REFINE || s.handled)) t9State.value = T9State(s.preedit.isNotEmpty(), s.syllables, s.syllablesId)
-        // the page shown and at least a chunk: the list rarely has to come back for more; none
-        // for a slice of refining that changed nothing, which the addon does not show
-        val unshown = s.candidates.isEmpty() || (event == EngineEvent.REFINE && !s.handled)
-        val all = if (unshown) emptyList() else engines.candidates(im, 0, maxOf(CHUNK, s.first + s.candidates.size))
+    fun onEvent(im: String, event: Int, arg: Int, learning: Boolean): Result =
+        answer(im, event, { engines.onEvent(im, event, arg, learning) }) { from, count -> engines.candidates(im, from, count) }
+
+    /** [onEvent] of [im], whose engine [call] answers [event], [fetch] giving its candidates. */
+    internal fun answer(im: String, event: Int, call: () -> Snapshot, fetch: (from: Int, count: Int) -> List<Choice>): Result {
+        if (im in unloadable) {
+            refining = false
+            return unhandled
+        }
+        val answered = try {
+            val s = unloadable.call(im, call)
+            if (im == Engines.T9 && (event != EngineEvent.REFINE || s.handled)) t9State.value = T9State(s.preedit.isNotEmpty(), s.syllables, s.syllablesId)
+            result(event, s, fetch)
+        } catch (@Suppress("TooGenericExceptionCaught") e: Throwable) {
+            // the addon refines no more after a failure (native-lib's engineFailed)
+            refining = false
+            throw e
+        }
+        refining = answered.refines
+        return answered
+    }
+
+    /**
+     * [s] as the addon reads it after [event]: [candidatesSent] of its candidates, from the page's
+     * first, as [fetch] gives them; the addon numbers them from [Result.first] (EngineCandidateList).
+     */
+    internal fun result(event: Int, s: Snapshot, fetch: (from: Int, count: Int) -> List<Choice>): Result {
+        val count = candidatesSent(event, s)
+        val all = if (count == 0) emptyList() else fetch(s.first, count)
         return Result(
             s.handled, s.commit, s.preedit,
             all.map { it.text }.toTypedArray(), all.map { it.hint }.toTypedArray(),
             s.first, s.candidates.size, s.total, s.actionable, s.labels, s.refines,
         )
     }
+
+    /**
+     * How many of [s]'s candidates, from the page's first, go to the addon after [event]: the page
+     * shown and at least a chunk, so the addon seldom asks for more; none when a refining step
+     * changed nothing, which the addon does not show.
+     */
+    internal fun candidatesSent(event: Int, s: Snapshot): Int =
+        if (s.candidates.isEmpty() || (event == EngineEvent.REFINE && !s.handled)) 0 else maxOf(CHUNK, s.candidates.size)
 
     /** The addon's config, flattened as [EngineSettings.parse] reads it; on the fcitx thread too. */
     @JvmStatic
@@ -310,18 +387,18 @@ object EngineBridge {
 
     /**
      * Reads [additions] and the tables the user imported again, the sessions made anew; nothing to
-     * do before the engine is first used. An input method that could not load is tried again.
+     * do while the engine is not made. An input method that could not load is tried again.
      */
     @JvmStatic
     fun reload() {
         unloadable.clear()
-        if (made.isInitialized()) engines.reload()
+        made?.reload()
     }
 
-    /** See [Engines.context]; nothing to tell before the engine is first used. */
+    /** See [Engines.context]; nothing to tell while the engine is not made. */
     @JvmStatic
     fun context(before: String) {
-        if (made.isInitialized()) engines.context(before)
+        made?.context(before)
     }
 
     /** Text and hint of each candidate in [from, from + count), one after the other. */
@@ -329,12 +406,15 @@ object EngineBridge {
     fun candidates(im: String, from: Int, count: Int): Array<String> =
         engines.candidates(im, from, count).flatMap { listOf(it.text, it.hint) }.toTypedArray()
 
-    /** What a long press on the [index]th of [im]'s candidates offers: a bit for each [Offer], by its order. */
+    /** What a long press on the [index]th of [im]'s candidates offers: a bit for each [Offer]. */
     @JvmStatic
-    fun offers(im: String, index: Int): Int = engines.offers(im, index).sumOf { 1 shl it.ordinal }
+    fun offers(im: String, index: Int): Int = offerBits(engines.offers(im, index))
+
+    /** [offers] as the addon reads them (androidengine_public.h's EngineOffer): a bit for each. */
+    internal fun offerBits(offers: Set<Offer>): Int = offers.sumOf { it.bit }
 
     // as when the engine fails: the key is the app's, the panel cleared
     private val unhandled = Result(false, "", "", emptyArray(), emptyArray(), 0, 0, 0, false, "", false)
 
-    private const val CHUNK = 32
+    internal const val CHUNK = 32
 }

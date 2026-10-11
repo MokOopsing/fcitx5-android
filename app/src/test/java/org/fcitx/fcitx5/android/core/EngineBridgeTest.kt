@@ -6,18 +6,30 @@ package org.fcitx.fcitx5.android.core
 
 import org.fcitx.fcitx5.android.FcitxApplication
 import org.fcitx.fcitx5.android.data.pinyin.CustomPhraseManager
+import org.fcitx.fcitx5.android.data.pinyin.ImportedDictionaries
 import org.fcitx.fcitx5.android.data.pinyin.customphrase.PinyinCustomPhrase
+import org.fcitx.fcitx5.android.data.replaceDirectory
 import org.fcitx.fcitx5.android.engine.data.DataFormatException
+import org.fcitx.fcitx5.android.engine.data.SourceException
 import org.fcitx.fcitx5.android.engine.host.EngineEvent
 import org.fcitx.fcitx5.android.engine.host.Engines
 import org.fcitx.fcitx5.android.engine.host.UnreadableInputMethod
 import org.fcitx.fcitx5.android.engine.phrase.CustomPhrases
+import org.fcitx.fcitx5.android.engine.session.Choice
+import org.fcitx.fcitx5.android.engine.session.Offer
+import org.fcitx.fcitx5.android.engine.session.Snapshot
+import org.fcitx.fcitx5.android.engine.user.WordPack
 import org.fcitx.fcitx5.android.utils.appContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeFalse
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -28,12 +40,14 @@ import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
 import java.nio.ByteBuffer
+import java.nio.file.Files
 
 /**
  * The engine's custom phrases saved from the keyboard: never over what the editor saved since it
- * read them. And an input method whose data cannot load, and only that: not called again till the
- * engine is reloaded. And the engine's files a user-data import killed midway left aside: put back
- * before it opens them.
+ * read them, nor over a file it could not read. And an input method whose data cannot load, and
+ * only that: not called again till the engine is reloaded. And the engine's files a user-data
+ * import killed midway left aside: put back before it opens them, or left there. And what the
+ * engine is handed of the user's dictionaries, and what it hands the addon.
  */
 class EngineBridgeTest {
 
@@ -91,9 +105,11 @@ class EngineBridgeTest {
         val saves = EngineBridge.PhraseFile(file, file.readText(), true) { it.run() }
         val pinned = CustomPhrases.parse(file.readText()).pinned("yx", "信箱")
         // where the new file is written first: the save fails
-        File(file.path + ".new").mkdir()
+        val blocker = File(file.path + ".new").apply { mkdir() }
         saves.save(pinned)
         assertEquals(listOf(phone, email), CustomPhraseManager.load(file))
+        // taken away here, not by the failed save: the next save then depends on the base alone
+        blocker.delete()
         saves.save(pinned.without("dh", "电话"))
         assertEquals(listOf(PinyinCustomPhrase("yx", 1, "信箱"), email), CustomPhraseManager.load(file))
     }
@@ -143,8 +159,9 @@ class EngineBridgeTest {
         assertEquals(1, unloadable.call(Engines.PINYIN) { 1 })
     }
 
-    @Test
-    fun causesThatLoopBackAreEachReadOnce() {
+    // a walk that does not end would hang the test, not fail it
+    @Test(timeout = 5_000)
+    fun anIOExceptionWhoseCausesLoopBackStillLatches() {
         val latched = ArrayList<String>()
         val unloadable = EngineBridge.Unloadable { im, _ -> latched += im }
         val first = IOException("cannot read")
@@ -171,18 +188,171 @@ class EngineBridgeTest {
         assertEquals(listOf(Engines.PINYIN, "mine", Engines.T9), latched)
     }
 
-    // the app for its files directory; the engine, once made, stays made for the rest of the run
+    @Test
+    fun whatAnImportKilledBetweenItsRenamesLeftAsideIsPutBack() {
+        val dir = File(folder.root, "engine")
+        val aside = File(dir.path + ".old")
+        File(aside.apply { mkdirs() }, "log").writeText("learned")
+        assertEquals(dir, EngineBridge.restored(dir))
+        assertEquals("learned", File(dir, "log").readText())
+        assertFalse(aside.exists())
+    }
+
+    @Test
+    fun whatCannotBePutBackIsLeftAsideAndTheNextImportDoesNotDeleteIt() {
+        val dir = File(folder.root, "engine")
+        val aside = File(dir.path + ".old")
+        File(aside.apply { mkdirs() }, "log").writeText("learned")
+        // a directory is not renamed over a file: here a link to nothing, so engine/ is not there
+        assumeTrue(runCatching { Files.createSymbolicLink(dir.toPath(), File(folder.root, "none").toPath()) }.isSuccess)
+        assertNull(EngineBridge.restored(dir))
+        assertThrows(IOException::class.java) { replaceDirectory(dir, File(dir.path + ".import")) {} }
+        assertEquals("learned", File(aside, "log").readText())
+    }
+
+    @Test
+    fun customPhrasesThatCannotBeReadAreNotSavedOver() {
+        val file = phraseFile()
+        file.setReadable(false)
+        // as root, every file reads
+        assumeFalse(file.canRead())
+        val added = EngineBridge.additions(folder.root)
+        file.setReadable(true)
+        assertEquals("", added.phrases)
+        assertThrows(IOException::class.java) { added.savePhrases(CustomPhrases.parse("").pinned("yx", "信箱")) }
+        assertEquals(listOf(phone, email), CustomPhraseManager.load(file))
+    }
+
+    @Test
+    fun aDictionaryMovedToTheNewWordsIsReadThereAndIsAChange() {
+        val dictionaries = File(folder.root, "dictionaries").apply { mkdirs() }
+        File(dictionaries, "mine.txt").writeText("你好 ni'hao 0.0\n")
+        val base = EngineBridge.additions(folder.root)
+        assertEquals(listOf("你好 ni'hao 0.0"), base.dictionary().toList())
+        assertEquals(emptyList<String>(), base.newDictionary().toList())
+        ImportedDictionaries.setIntoNew(dictionaries, "mine", true)
+        val moved = EngineBridge.additions(folder.root)
+        assertEquals(emptyList<String>(), moved.dictionary().toList())
+        assertEquals(listOf("你好 ni'hao 0.0"), moved.newDictionary().toList())
+        // the same file, size and time: read again on reload all the same
+        assertNotEquals(base.dictionaries, moved.dictionaries)
+    }
+
+    @Test
+    fun aWordPackIsReadOnlyAsTheEngineParsesItAndOneThatCannotBeIsLeftOut() {
+        val dictionaries = File(folder.root, "dictionaries").apply { mkdirs() }
+        File(dictionaries, "a.words").writeText("# youmo words 1\n搭子 da'zi -5.6\n")
+        val gone = File(dictionaries, "b.words").apply { writeText("# youmo words 1\n躺平 tang'ping -5.0\n") }
+        val packs = EngineBridge.additions(folder.root).packs()
+        assertEquals(listOf("a.words", "b.words"), packs.map { it.name })
+        gone.delete()
+        assertEquals(1, WordPack.parse(packs[0].lines, packs[0].name).words.size)
+        // as the engine catches one that does not parse
+        assertThrows(SourceException::class.java) { WordPack.parse(packs[1].lines, packs[1].name) }
+    }
+
+    @Test
+    fun theAddonIsSentThePageShownAndAtLeastAChunk() {
+        fun shown(first: Int, count: Int, handled: Boolean = true) = Snapshot(
+            commit = "", preedit = "n", candidates = List(count) { "$it" }, page = 0,
+            hasPreviousPage = first > 0, hasNextPage = true, handled = handled, predicting = false, first = first,
+        )
+        assertEquals(EngineBridge.CHUNK, EngineBridge.candidatesSent(EngineEvent.CHAR, shown(0, 5)))
+        // from the page's first: those before it are not sent again
+        assertEquals(EngineBridge.CHUNK, EngineBridge.candidatesSent(EngineEvent.PAGE_DOWN, shown(40, 5)))
+        val longPage = EngineBridge.CHUNK + 8
+        assertEquals(longPage, EngineBridge.candidatesSent(EngineEvent.PAGE_DOWN, shown(40, longPage)))
+        assertEquals(EngineBridge.CHUNK, EngineBridge.candidatesSent(EngineEvent.REFINE, shown(0, 5)))
+        // nothing to show, or a slice of refining that changed nothing: the addon shows none
+        assertEquals(0, EngineBridge.candidatesSent(EngineEvent.CHAR, shown(0, 0)))
+        assertEquals(0, EngineBridge.candidatesSent(EngineEvent.REFINE, shown(0, 5, handled = false)))
+    }
+
+    @Test
+    fun theCandidatesSentRunFromThePagesFirstAsTheAddonNumbersThem() {
+        val s = Snapshot(
+            commit = "", preedit = "n", candidates = listOf("40", "41"), page = 8, hasPreviousPage = true,
+            hasNextPage = true, handled = true, predicting = false, total = 50, first = 40,
+        )
+        val asked = ArrayList<Pair<Int, Int>>()
+        val sent = EngineBridge.result(EngineEvent.PAGE_DOWN, s) { from, count ->
+            asked += from to count
+            (from until minOf(from + count, s.total)).map { Choice("$it") }
+        }
+        assertEquals(listOf(40 to EngineBridge.CHUNK), asked)
+        // EngineCandidateList's offset_: the first sent is the page's first, index 40 of all
+        assertEquals(40, sent.first)
+        assertEquals(listOf("40", "41"), sent.candidates.take(2))
+        assertEquals(10, sent.candidates.size)
+        assertEquals(2, sent.shown)
+    }
+
+    @Test
+    fun aRefineReadsAsRefiningWhileEachOfItsSlicesRuns() {
+        fun refines(refines: Boolean) = Snapshot(
+            commit = "", preedit = "n", candidates = listOf("你"), page = 0, hasPreviousPage = false,
+            hasNextPage = false, handled = true, predicting = false, refines = refines,
+        )
+        val fetch = { _: Int, _: Int -> listOf(Choice("你")) }
+        val during = ArrayList<Boolean>()
+        // a key, then the slices the addon sends for it, the last with nothing left to refine
+        EngineBridge.answer(Engines.PINYIN, EngineEvent.CHAR, { refines(true) }, fetch)
+        assertTrue(EngineBridge.refining)
+        EngineBridge.answer(Engines.PINYIN, EngineEvent.REFINE, { during += EngineBridge.refining; refines(true) }, fetch)
+        EngineBridge.answer(Engines.PINYIN, EngineEvent.REFINE, { during += EngineBridge.refining; refines(false) }, fetch)
+        // as EngineEvalRunner reads it off the fcitx thread while a slice runs
+        assertEquals(listOf(true, true), during)
+        assertFalse(EngineBridge.refining)
+        // the addon sends no refine after a failure
+        EngineBridge.answer(Engines.PINYIN, EngineEvent.CHAR, { refines(true) }, fetch)
+        assertThrows(IllegalStateException::class.java) {
+            EngineBridge.answer(Engines.PINYIN, EngineEvent.REFINE, { error("a bug") }, fetch)
+        }
+        assertFalse(EngineBridge.refining)
+    }
+
+    @Test
+    fun eachOfferIsTheBitTheAddonReadsForIt() {
+        // androidengine_public.h's EngineOffer
+        assertEquals(1, EngineBridge.offerBits(setOf(Offer.FORGET)))
+        assertEquals(2, EngineBridge.offerBits(setOf(Offer.PIN)))
+        assertEquals(4, EngineBridge.offerBits(setOf(Offer.UNPIN)))
+        assertEquals(8, EngineBridge.offerBits(setOf(Offer.BLOCK)))
+        assertEquals(2 or 8, EngineBridge.offerBits(setOf(Offer.PIN, Offer.BLOCK)))
+    }
+
+    // the app for its files directory
     @RunWith(RobolectricTestRunner::class)
     @Config(application = FcitxApplication::class)
     class Made {
         @Test
         fun whatAnImportKilledBetweenItsRenamesLeftAsideIsPutBackBeforeTheEngineOpensIt() {
+            // made here, whichever test of this sandbox made it before
+            EngineBridge.close()
             val dir = File(appContext.filesDir, "engine")
             val aside = File(dir.path + ".old")
             File(aside.apply { mkdirs() }, "log").writeText("learned")
             assertNotNull(EngineBridge.engines)
             assertEquals("learned", File(dir, "log").readText())
             assertFalse(aside.exists())
+            EngineBridge.close()
+        }
+
+        @Test
+        fun aClosedEngineIsMadeAnewAtItsNextUse() {
+            val closed = EngineBridge.engines
+            EngineBridge.close()
+            assertNotSame(closed, EngineBridge.engines)
+            EngineBridge.close()
+        }
+
+        @Test
+        fun anInputMethodThatCouldNotLoadIsTriedAgainOnTheEngineMadeAnew() {
+            val broken = { throw FileNotFoundException("mine") }
+            assertThrows(FileNotFoundException::class.java) { EngineBridge.unloadable.call("mine", broken) }
+            assertTrue("mine" in EngineBridge.unloadable)
+            EngineBridge.close()
+            assertFalse("mine" in EngineBridge.unloadable)
         }
     }
 }

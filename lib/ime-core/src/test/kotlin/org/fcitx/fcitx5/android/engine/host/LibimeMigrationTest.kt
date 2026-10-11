@@ -216,5 +216,8 @@ class LibimeMigrationTest {
         assertEquals("wbx-table", LibimeMigration.importedTableName("wbx"))
         assertEquals("mydb", LibimeMigration.importedTableName("mydb"))
         assertEquals("engine-wubi-table", LibimeMigration.importedTableName("engine-wubi"))
+        // one of the engine's pinyins too, the nine keys' among them, which libime had none of
+        assertEquals("engine-t9-table", LibimeMigration.importedTableName(Engines.T9))
+        assertEquals("engine-pinyin-table", LibimeMigration.importedTableName(Engines.PINYIN))
     }
 }

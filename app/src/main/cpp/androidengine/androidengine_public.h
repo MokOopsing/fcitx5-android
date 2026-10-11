@@ -12,8 +12,8 @@
 
 #include <fcitx/addoninstance.h>
 
-// What the engine shows after an event: ime-core's Snapshot. [candidates] are the first of
-// [total], through the page shown: [shown] of them from [first]. The rest are fetched through
+// What the engine shows after an event: ime-core's Snapshot. [candidates] run from [first] of
+// [total]: the page shown, [shown] of them, then more; those before and after are fetched through
 // EngineCandidatesCallback as the list scrolls. [actionable]: whether a long press on one may
 // offer something, asked of EngineOffersCallback.
 struct EngineSnapshot {
@@ -33,7 +33,7 @@ struct EngineSnapshot {
 };
 
 // What happened, numbered as ime-core's EngineEvent reads them. Which key does what is decided
-// there, not here.
+// there, not here. ime-core's AndroidEngineHeaderTest reads both enums here as they are written.
 enum class EngineEvent : int {
     Char = 0,       // arg: the character's code point
     Backspace = 1,
@@ -43,7 +43,7 @@ enum class EngineEvent : int {
     PageDown = 5,
     Pick = 6,       // arg: the index among all candidates
     Reset = 7,
-    Other = 8,      // any other key: an arrow, Home, Tab, Delete
+    Other = 8,      // any other key: an arrow, Home, Tab, Delete; arg: its keysym
     Forget = 9,     // "Forget word" on a candidate; arg: the index among all candidates
     Refine = 10,    // no key: the user pauses; handled only if the snapshot changed
     Pin = 11,       // "Pin to top as custom phrase" on a candidate; arg: the index among all
@@ -52,7 +52,7 @@ enum class EngineEvent : int {
 };
 
 // What a long press on a candidate offers, as bits of what EngineOffersCallback returns: ime-core's
-// Offer, by its order.
+// Offer.bit.
 enum EngineOffer : int {
     OfferForget = 1 << 0,
     OfferPin = 1 << 1,

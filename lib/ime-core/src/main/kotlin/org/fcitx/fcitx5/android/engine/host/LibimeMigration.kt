@@ -10,6 +10,7 @@ import org.fcitx.fcitx5.android.engine.host.EngineSettings.Companion.PREDICTION
 import org.fcitx.fcitx5.android.engine.host.EngineSettings.Companion.SHUANGPIN_PROFILE
 import org.fcitx.fcitx5.android.engine.host.EngineSettings.Companion.TYPOS
 import org.fcitx.fcitx5.android.engine.pinyin.Fuzzy
+import org.fcitx.fcitx5.android.engine.table.IniText
 
 /**
  * The config of those who used libime's pinyin and tables, as the engine that replaced them
@@ -22,12 +23,7 @@ object LibimeMigration {
     val INPUT_METHODS: Map<String, String> = mapOf(
         "pinyin" to Engines.PINYIN,
         "shuangpin" to Engines.SHUANGPIN,
-        "wbx" to "engine-wubi",
-        "wbpy" to "engine-wubipinyin",
-        "cangjie" to "engine-cangjie",
-        "zrm" to "engine-ziranma",
-        "erbi" to "engine-erbi",
-    )
+    ) + Engines.TABLES.entries.associate { (im, method) -> method.libime to im }
 
     const val ENABLED_IM = "EnabledIM"
     private const val TABLE = "Table"
@@ -92,8 +88,8 @@ object LibimeMigration {
         val sections = sections(config)
         val list = sections.firstOrNull { it.name == section } ?: return null
         // the items are 0=, 1=, …: a comment in among them is not one
-        val items = list.lines.filter { line -> key(line).let { it.isNotEmpty() && it.all(Char::isDigit) } }
-        val names = items.map { it.substringAfter('=').trim().removeSurrounding("\"") }
+        val items = list.lines.filter { line -> IniText.key(line)?.all(Char::isDigit) == true }
+        val names = items.map(IniText::value)
         if (names.none { it in INPUT_METHODS }) return null
         list.lines.removeAll(items)
         names.map { INPUT_METHODS[it] ?: it }.distinct().forEachIndexed { i, name -> list.lines += "$i=$name" }
@@ -115,17 +111,18 @@ object LibimeMigration {
 
     /**
      * The name a table the user imports is kept by: one of libime's own ([INPUT_METHODS]) the
-     * profile would make the engine's at the next start, and one of the engine's would be the
-     * engine's own table, so those are named apart.
+     * profile would make the engine's at the next start, and one of the engine's (a table, or a
+     * pinyin such as [Engines.T9]) would be the engine's own input method, so those are named apart.
      */
     fun importedTableName(name: String): String =
-        if (name in INPUT_METHODS || name in INPUT_METHODS.values) "$name-table" else name
+        if (name in INPUT_METHODS || name in Engines.TABLES || name in listOf(Engines.PINYIN, Engines.SHUANGPIN, Engines.T9)) "$name-table" else name
 
     /**
-     * libime's tables whose settings carry over, kept as `table/<name>.conf` in fcitx's config
-     * home, each under the engine's table it became.
+     * libime's tables (the [TableMethod.libime] of each of [Engines.TABLES]) whose settings
+     * carry over, kept as `table/<name>.conf` in fcitx's config home, each under the engine's
+     * table it became.
      */
-    val TABLE_CONFIGS: List<String> = listOf("wbx", "wbpy", "cangjie", "zrm", "erbi")
+    val TABLE_CONFIGS: List<String> = Engines.TABLES.values.map { it.libime }
 
     /**
      * The androidengine addon's config holding what [pinyinConfig], libime pinyin's, set of it,
@@ -169,18 +166,8 @@ object LibimeMigration {
         return out.values.toList()
     }
 
-    private fun sections(text: String): List<Section> {
-        val out = arrayListOf(Section("", ArrayList()))
-        for (line in text.lines()) {
-            val trimmed = line.trim()
-            if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
-                out += Section(trimmed.substring(1, trimmed.length - 1), ArrayList())
-            } else if (trimmed.isNotEmpty()) {
-                out.last().lines += line
-            }
-        }
-        return out
-    }
+    private fun sections(text: String): List<Section> =
+        IniText.sections(text).map { (name, lines) -> Section(name, lines.toMutableList()) }
 
     private fun write(sections: List<Section>): String = buildString {
         for (section in sections) {
@@ -193,16 +180,12 @@ object LibimeMigration {
         }
     }
 
-    private fun key(line: String) = line.substringBefore('=', "").trim()
+    private fun line(section: Section, key: String): String? = section.lines.firstOrNull { IniText.key(it) == key }
 
-    private fun line(section: Section, key: String): String? = section.lines.firstOrNull { key(it) == key }
-
-    // fcitx quotes a value only when it must; the names here never need it
-    private fun value(section: Section, key: String): String? =
-        line(section, key)?.substringAfter('=')?.trim()?.removeSurrounding("\"")
+    private fun value(section: Section, key: String): String? = line(section, key)?.let(IniText::value)
 
     private fun set(section: Section, key: String, value: String) {
-        val i = section.lines.indexOfFirst { key(it) == key }
+        val i = section.lines.indexOfFirst { IniText.key(it) == key }
         section.lines[i] = "$key=$value"
     }
 }

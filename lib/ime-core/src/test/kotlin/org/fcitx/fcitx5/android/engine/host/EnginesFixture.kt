@@ -15,8 +15,6 @@ import java.nio.ByteBuffer
 /** What [EnginesTest] and [EnginesTablesTest] type with: the data, served as the app's assets serve it ([load]). */
 open class EnginesFixture {
 
-    protected fun syl(vararg s: String) = s.map { Syllables.id(it) }.toIntArray()
-
     private val pinyin = PinyinDataBuilder()
         .unigram("<unk>", -7f, 0f)
         .unigram("你", -2f, 0f)
@@ -60,6 +58,8 @@ open class EnginesFixture {
         // as the app's assets do of a file it has not got
         return ByteBuffer.wrap(bytes ?: throw FileNotFoundException(path))
     }
-
-    protected fun Engines.type(im: String, keys: String) = keys.map { onEvent(im, EngineEvent.CHAR, it.code) }.last()
 }
+
+internal fun syl(vararg s: String) = s.map { Syllables.id(it) }.toIntArray()
+
+internal fun Engines.type(im: String, keys: String) = keys.map { onEvent(im, EngineEvent.CHAR, it.code) }.last()

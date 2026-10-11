@@ -83,7 +83,9 @@ class EnginesTablesTest : EnginesFixture() {
             assertEquals(listOf("工", "式", "工作"), engines.type("my", "ab").candidates)
         }
         assertEquals(2, reads)
-        assertThrows(IllegalArgumentException::class.java) { Engines(::load, dir, userTables = tables).type("nope", "a") }
+        Engines(::load, dir, userTables = tables).use { engines ->
+            assertThrows(IllegalArgumentException::class.java) { engines.type("nope", "a") }
+        }
     }
 
     @Test
@@ -117,17 +119,18 @@ class EnginesTablesTest : EnginesFixture() {
         val errors = ArrayList<IOException>()
         var asked = 0
         var text = "键码=ab\n"
-        val engines = Engines(::load, folder.newFolder("engine"), { errors += it }, userTables = {
+        Engines(::load, folder.newFolder("engine"), { errors += it }, userTables = {
             asked++
             userTable(text = text)
-        })
-        repeat(2) { assertThrows(IllegalArgumentException::class.java) { engines.type("my", "a") } }
-        assertEquals(1, asked)
-        assertEquals(1, errors.size)
-        text = MY_TABLE
-        engines.reload()
-        assertEquals(listOf("工", "式", "工作"), engines.type("my", "ab").candidates)
-        assertEquals(2, asked)
+        }).use { engines ->
+            repeat(2) { assertThrows(IllegalArgumentException::class.java) { engines.type("my", "a") } }
+            assertEquals(1, asked)
+            assertEquals(1, errors.size)
+            text = MY_TABLE
+            engines.reload()
+            assertEquals(listOf("工", "式", "工作"), engines.type("my", "ab").candidates)
+            assertEquals(2, asked)
+        }
         // nor a .conf naming no table
         val noFile = Engines(::load, null, { errors += it }, userTables = { Engines.UserTable("", { "1" }, { MY_TABLE.reader().buffered() }) })
         assertThrows(IllegalArgumentException::class.java) { noFile.type("my", "a") }
@@ -254,6 +257,10 @@ class EnginesTablesTest : EnginesFixture() {
         }
         assertEquals(2, reads)
         assertFalse(added.resolve("my.user${Engines.FORGOTTEN}").exists())
+        // nor at the start after, the file gone: the table's log keeps it forgotten
+        Engines(::load, dir, userTables = tables).use { engines ->
+            assertFalse("你好" in engines.type("my", "abcd").candidates)
+        }
     }
 
     @Test

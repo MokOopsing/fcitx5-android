@@ -4,14 +4,21 @@
  */
 package org.fcitx.fcitx5.android.engine.host
 
+import org.fcitx.fcitx5.android.engine.data.CodeTable
 import org.fcitx.fcitx5.android.engine.data.DataFormatException
+import org.fcitx.fcitx5.android.engine.data.PinyinData
 import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
+import org.fcitx.fcitx5.android.engine.data.WordLayers
+import org.fcitx.fcitx5.android.engine.lattice.LayerPrior
 import org.fcitx.fcitx5.android.engine.pinyin.Fuzzy
 import org.fcitx.fcitx5.android.engine.session.Choice
 import org.fcitx.fcitx5.android.engine.session.Offer
 import org.fcitx.fcitx5.android.engine.session.Snapshot
+import org.fcitx.fcitx5.android.engine.table.TableUser.TableLog
 import org.fcitx.fcitx5.android.engine.user.LibimeImport
 import org.fcitx.fcitx5.android.engine.user.UserLog
+import org.fcitx.fcitx5.android.engine.user.UserModel
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -99,11 +106,7 @@ class EnginesTest : EnginesFixture() {
         val dir = folder.newFolder("engine")
         Engines(::load, dir).use { engines ->
             // picked until it leads
-            repeat(MAX_PICKS) {
-                if (engines.type(Engines.PINYIN, "ni").candidates.first() == "拟") return@repeat
-                engines.onEvent(Engines.PINYIN, EngineEvent.PICK, 1)
-            }
-            engines.onEvent(Engines.PINYIN, EngineEvent.RESET, 0)
+            engines.pickUntilFirst("拟")
         }
         assertTrue(dir.resolve(Engines.USER_PINYIN).length() > 0)
         // and read back: 拟 still comes first
@@ -133,12 +136,14 @@ class EnginesTest : EnginesFixture() {
             }
             assertEquals("你", engines.type(Engines.PINYIN, "ni").candidates.first())
         }
+        // nor on disk: the log as it was made, its header alone
+        assertEquals(UserLog.header().size.toLong(), dir.resolve(Engines.USER_PINYIN).length())
     }
 
     private var dictionaryReads = 0
 
     private fun added(phrases: String, dictionaries: String, vararg lines: String) =
-        Engines.Additions(phrases, dictionaries) { dictionaryReads++; lines.toList() }
+        Engines.Additions(phrases, dictionaries) { dictionaryReads++; lines.asSequence() }
 
     private fun Engines.pickUntilFirst(text: String) {
         repeat(MAX_PICKS) {
@@ -151,11 +156,17 @@ class EnginesTest : EnginesFixture() {
         onEvent(Engines.PINYIN, EngineEvent.RESET, 0)
     }
 
+    /** The layers' priors the log under [dir] keeps, read as a start reads them: a layer a pick moved is among them, back at 0 or not. */
+    private fun priorsKept(dir: File): LayerPrior {
+        val data = PinyinData.load(load(Engines.PINYIN_DATA))
+        return LayerPrior(data.layers).also { UserLog.read(dir.resolve(Engines.USER_PINYIN).readBytes(), UserModel(data.dictionary, data.vocabulary), it) }
+    }
+
     @Test
     fun aDictionaryMergedIntoTheNewWordsIsScoredAsOneOfThem() {
         // no scores in a dictionary: 泥, merged into the new words, at their typical score; 妮,
         // merged into the base, at the unknown word's until picked
-        val additions = Engines.Additions("", "d", newDictionary = { listOf("泥 ni 0") }) { listOf("妮 ni 0") }
+        val additions = Engines.Additions("", "d", newDictionary = { sequenceOf("泥 ni 0") }) { sequenceOf("妮 ni 0") }
         Engines(::load, folder.newFolder("engine"), { throw it }, additions = { additions }).use { engines ->
             assertEquals(listOf("你", "拟", "泥", "妮"), engines.type(Engines.PINYIN, "ni").candidates)
         }
@@ -163,9 +174,12 @@ class EnginesTest : EnginesFixture() {
 
     @Test
     fun aPackMergedIntoTheBaseIsScoredAsItSaysButNotWeighedAsALayer() {
+        val dir = folder.newFolder("engine")
         val pack = "# youmo words 1\n# layer: 2026q1\n泥 ni -2.5\n"
-        val additions = Engines.Additions("", "p", packs = { listOf(Engines.Pack("p.words", pack.lineSequence())) }) { emptyList() }
-        Engines(::load, folder.newFolder("engine"), { throw it }, additions = { additions }).use { engines ->
+        val additions = Engines.Additions("", "p", packs = { listOf(Engines.Pack("p.words", pack.lineSequence())) }) { emptySequence() }
+        Engines(::load, dir, { throw it }, additions = { additions }).use { engines ->
+            // 泥 at -2.5 between 你 (-2) and 拟 (-3)
+            assertEquals(listOf("你", "泥", "拟"), engines.type(Engines.PINYIN, "ni").candidates)
             repeat(10) {
                 engines.onEvent(Engines.PINYIN, EngineEvent.RESET, 0)
                 engines.type(Engines.PINYIN, "ni")
@@ -174,6 +188,8 @@ class EnginesTest : EnginesFixture() {
         }
         // the base's weight is fixed: nothing of the picks but 泥's own counts is kept
         assertFalse(File(folder.root, "engine/${Engines.USER_PINYIN}").readText().contains("2026q1"))
+        // nor any layer's prior but the data's own, the base's here: 泥 picked over 你 would move the new words' were the pack merged there
+        assertEquals(LayerPrior(PinyinData.load(load(Engines.PINYIN_DATA)).layers).count, priorsKept(dir).count)
     }
 
     @Test
@@ -182,8 +198,9 @@ class EnginesTest : EnginesFixture() {
         val pack = "# youmo words 1\n# layer: 2026q1\n泥 ni -2.5\n妮 ni -9\n"
         val additions = Engines.Additions("", "p", packs = {
             listOf(Engines.Pack("new.words", pack.lineSequence(), intoNew = true), Engines.Pack("old.words", "你 ni 0".lineSequence()))
-        }) { emptyList() }
-        Engines(::load, folder.newFolder("engine"), { errors += it }, additions = { additions }).use { engines ->
+        }) { emptySequence() }
+        val dir = folder.newFolder("engine")
+        Engines(::load, dir, { errors += it }, additions = { additions }).use { engines ->
             // 泥 at -2.5 sits between 你 (-2) and 拟 (-3); 妮 under the unknown word's -7
             assertEquals(listOf("你", "泥", "拟", "妮"), engines.type(Engines.PINYIN, "ni").candidates)
             engines.onEvent(Engines.PINYIN, EngineEvent.PICK, 1)
@@ -191,8 +208,10 @@ class EnginesTest : EnginesFixture() {
             assertEquals(1, errors.size)
             assertEquals("old.words:1: not a word pack: expected \"# youmo words 1\"", errors[0].message)
         }
+        // 泥 picked over 你: its layer a step up, in the log
+        priorsKept(dir).let { assertEquals(LayerPrior.STEP, it[it.layer(WordLayers.NEW)], 0f) }
         // the prior learned is kept with the user's words, and the pack's words come back scored
-        Engines(::load, File(folder.root, "engine"), { errors += it }, additions = { additions }).use { engines ->
+        Engines(::load, dir, { errors += it }, additions = { additions }).use { engines ->
             assertEquals(listOf("你", "泥", "拟", "妮"), engines.type(Engines.PINYIN, "ni").candidates)
             repeat(10) {
                 engines.onEvent(Engines.PINYIN, EngineEvent.RESET, 0)
@@ -255,11 +274,30 @@ class EnginesTest : EnginesFixture() {
     }
 
     @Test
+    fun withNoLogADictionaryChangeIsCodedInTheTablesLoaded() {
+        val wubi = CodeTable.Builder()
+            .header("键码", "abcdefghijklmnopqrstuvwxy")
+            .header("码长", "4")
+            .rule("e2", "p11+p12+p21+p22")
+            .entry("wqiy", "你")
+            .entry("vbg", "好")
+            .build()
+            .toByteArray()
+        var additions = added("", "a", "你好 ni'hao 0")
+        val engines = Engines({ if (it == "${Engines.TABLE_DIR}/wbx.data") ByteBuffer.wrap(wubi) else load(it) }, null, additions = { additions })
+        assertEquals(listOf("你好"), engines.type("engine-wubi", "wqv").candidates)
+        // listed into the same user model, not by add(): 五笔, loaded still, codes them all again
+        additions = added("", "b", "你好 ni'hao 0", "好你 hao'ni 0")
+        engines.reload()
+        assertEquals(listOf("好你"), engines.type("engine-wubi", "vbw").candidates)
+    }
+
+    @Test
     fun aCandidatePinnedFromEitherPinyinIsSavedAndOfferedInBoth() {
         val saved = ArrayList<String>()
         val errors = ArrayList<IOException>()
         var fail = false
-        val additions = Engines.Additions("", "", { if (fail) throw IOException("full") else saved += it.all.joinToString(" ") }) { emptyList() }
+        val additions = Engines.Additions("", "", { if (fail) throw IOException("full") else saved += it.all.joinToString(" ") }) { emptySequence() }
         val engines = Engines(::load, null, { errors += it }, additions = { additions })
         assertEquals(emptySet<Offer>(), engines.offers(Engines.PINYIN, 0))
         val shown = engines.type(Engines.PINYIN, "ni")
@@ -437,11 +475,6 @@ class EnginesTest : EnginesFixture() {
         }
     }
 
-    private companion object {
-        const val MAX_PICKS = 10
-        const val MAX_SLICES = 10_000
-    }
-
     @Test
     fun uLooksACharacterUpByItsStrokesShowingItsPinyin() {
         val engines = Engines(::load, null)
@@ -454,7 +487,8 @@ class EnginesTest : EnginesFixture() {
         strokes = null
         val errors = ArrayList<IOException>()
         assertEquals("u", Engines(::load, null, { errors += it }).type(Engines.PINYIN, "u").preedit.replace(" ", ""))
-        assertEquals(listOf(Engines.STROKE_DATA), errors.map { it.cause?.message })
+        assertEquals(1, errors.size)
+        assertTrue(Engines.STROKE_DATA in errors[0].message.orEmpty())
     }
 
     @Test
@@ -481,5 +515,103 @@ class EnginesTest : EnginesFixture() {
         engines.type(Engines.PINYIN, "uz")
         assertEquals("好", engines.onEvent(Engines.PINYIN, EngineEvent.CHAR, ' '.code).commit)
         assertEquals("你", engines.type(Engines.PINYIN, "ni").candidates.first())
+    }
+
+    @Test
+    fun aWordTheDictionaryHasTakenOffTheAddedKeepsWhatWasLearnedOfIt() {
+        val dir = folder.newFolder("engine")
+        Engines(::load, dir).use { engines ->
+            assertTrue(engines.addWord("拟", "ni"))
+            engines.pickUntilFirst("拟")
+            engines.removeWord(Engines.UserWord("拟", "ni", Engines.UserWord.Kind.ADDED))
+            assertEquals("拟", engines.type(Engines.PINYIN, "ni").candidates.first())
+        }
+        // nor forgotten in the log
+        Engines(::load, dir).use { engines ->
+            assertEquals("拟", engines.type(Engines.PINYIN, "ni").candidates.first())
+        }
+    }
+
+    @Test
+    fun oneLearnedWordRemovedIsARecordAppendedNotTheLogRewritten() {
+        val dir = folder.newFolder("engine")
+        val log = dir.resolve(Engines.USER_PINYIN)
+        Engines(::load, dir).use { engines ->
+            // 拟 then 好, over the decoder's 你好: the user's word 拟好
+            engines.type(Engines.PINYIN, "nihao")
+            engines.onEvent(Engines.PINYIN, EngineEvent.PICK, engines.candidates(Engines.PINYIN, 0, 20).indexOfFirst { it.text == "拟" })
+            engines.onEvent(Engines.PINYIN, EngineEvent.PICK, 0)
+            val learned = engines.userWords().single()
+            val before = log.readBytes()
+            // and one whose pinyin does not read: one word forgotten all the same
+            engines.removeWords(listOf(learned, Engines.UserWord("拟好", "zz", Engines.UserWord.Kind.LEARNED)))
+            assertEquals(emptyList<Engines.UserWord>(), engines.userWords())
+            val after = log.readBytes()
+            assertTrue(after.size > before.size)
+            assertArrayEquals(before, after.copyOf(before.size))
+        }
+        // and forgotten still when the log is read back
+        assertEquals(emptyList<Engines.UserWord>(), Engines(::load, dir).use { it.userWords() })
+    }
+
+    @Test
+    fun aCandidateForgottenInAnyPinyinIsForgottenInTheTablesToo() {
+        // an added table with a log, not loaded: what it is to forget is kept for it to forget as it loads
+        val table = Engines.UserTable("[Table]\nFile=table/my.main.dict\n", { "1" }, { throw AssertionError("built to forget") })
+        for ((im, keys) in listOf(Engines.PINYIN to "ni", Engines.T9 to "64", Engines.SHUANGPIN to "ni")) {
+            val dir = folder.newFolder(im)
+            val tables = dir.resolve(Engines.USER_TABLES).apply { mkdirs() }
+            tables.resolve("my.user").writeText("")
+            Engines(::load, dir, userTables = { table }).use { engines ->
+                engines.type(im, keys)
+                val at = engines.candidates(im, 0, 20).indexOfFirst { it.text == "拟" }
+                assertTrue(im, Offer.FORGET in engines.offers(im, at))
+                engines.onEvent(im, EngineEvent.FORGET, at)
+            }
+            assertEquals(im, "拟\n", tables.resolve("my.user${Engines.FORGOTTEN}").readText())
+        }
+    }
+
+    @Test
+    fun whatAnAddedTableForgetsAsItLoadsIsForgottenOnceThoughItsLogReportsTroubleAtEveryOpen() {
+        val dir = folder.newFolder("engine")
+        val tables = dir.resolve(Engines.USER_TABLES).apply { mkdirs() }
+        // 你好 saved, and a pick whose fields run short: skipped, and reported, at every open
+        val log = tables.resolve("my.user").apply {
+            writeBytes(TableLog.FORMAT.header() + TableLog.saved("abcd", "你好") + TableLog.FORMAT.record(1) { writeUTF("ab") })
+        }
+        tables.resolve("my.user${Engines.FORGOTTEN}").writeText("你好\n")
+        val table = Engines.UserTable("[Table]\nFile=table/my.main.dict\n", { "1" }, { "键码=abcd\n码长=4\n[数据]\nab 你\ncd 好\n".reader().buffered() })
+        val errors = ArrayList<IOException>()
+        fun offered() = Engines(::load, dir, { errors += it }, userTables = { table }).use { it.type("my", "abcd").candidates }
+        assertEquals(emptyList<String>(), offered())
+        assertEquals(1, errors.size)
+        // saved again since, as the table saves a phrase picked: not forgotten again for what the log reports as it opens
+        log.appendBytes(TableLog.saved("abcd", "你好"))
+        assertEquals(listOf("你好"), offered())
+        assertEquals(2, errors.size)
+    }
+
+    @Test
+    fun aWordAddedAfterATableCodedTheListedOnesIsCodedThereAloneAndOfferedOnce() {
+        val additions = Engines.Additions("", "d") { sequenceOf("你好 ni'hao 0") }
+        val text = "键码=abcd\n码长=4\n[组词规则]\ne2=p11+p12+p21+p22\n[数据]\nab 你\ncd 好\n"
+        val table = Engines.UserTable("[Table]\nFile=table/my.main.dict\n", { "1" }, { text.reader().buffered() })
+        Engines(::load, null, additions = { additions }, userTables = { table }).use { engines ->
+            // a dictionary's word, coded by the table's rule
+            assertEquals(listOf("你好"), engines.type("my", "abcd").candidates)
+            engines.onEvent("my", EngineEvent.RESET, 0)
+            assertTrue(engines.addWord("好你", "hao ni"))
+            assertEquals(listOf("好你"), engines.type("my", "cdab").candidates)
+            engines.onEvent("my", EngineEvent.RESET, 0)
+            // listed before in another reading: coded already
+            assertTrue(engines.addWord("你好", "li hao"))
+            assertEquals(listOf("你好"), engines.type("my", "abcd").candidates)
+        }
+    }
+
+    private companion object {
+        const val MAX_PICKS = 10
+        const val MAX_SLICES = 10_000
     }
 }

@@ -45,11 +45,27 @@ private:
     int index_;
 };
 
+/** What a long press may offer, in the menu's order: the session's bit for it, the event it sends, its text. */
+struct OfferAction {
+    EngineOffer offer;
+    EngineEvent event;
+    const char *text, *domain;
+};
+
+const OfferAction offerActions[] = {
+        // libime's table words it so; its pinyin says "Forget candidate"
+        {OfferForget, EngineEvent::Forget, "Forget word", "fcitx5-chinese-addons"},
+        {OfferPin, EngineEvent::Pin, "Pin to top as custom phrase", "fcitx5-chinese-addons"},
+        {OfferUnpin, EngineEvent::Unpin, "Delete from custom phrase", "fcitx5-chinese-addons"},
+        {OfferBlock, EngineEvent::Block, N_("Never show this word"), "fcitx5-android"},
+};
+
 /**
- * All the candidates of a snapshot, as a list that scrolls: those it came with, then the rest
- * fetched from the session a chunk at a time as the keyboard asks for them. A new snapshot
- * replaces the list, so what is fetched is always of the input shown. As a page it is the one the
- * session shows: candidate(i) is the (first + i)th of all.
+ * All the candidates of a snapshot, as a list that scrolls: those it came with, from the page's
+ * first on, then the rest fetched from the session as the keyboard asks for them, those after a
+ * chunk at a time and those before the page at once. A new snapshot replaces the list, so what is
+ * fetched is always of the input shown. As a page it is the one the session shows: candidate(i)
+ * is the (first + i)th of all.
  *
  * A long press on a candidate offers what the session says it may do with it, as libime's pinyin
  * and table did: "Forget word", and pinyin's custom phrases pinned or deleted. It is asked on the
@@ -60,18 +76,17 @@ class EngineCandidateList : public CandidateList, public BulkCandidateList, publ
 public:
     EngineCandidateList(AndroidEngine *engine, InputContext *ic, std::string im, const EngineSnapshot &snapshot)
             : engine_(engine), ic_(ic), im_(std::move(im)), total_(snapshot.total), actionable_(snapshot.actionable),
-              composing_(!snapshot.preedit.empty()) {
+              composing_(!snapshot.preedit.empty()), offset_(std::max(snapshot.first, 0)) {
         setBulk(this);
         if (actionable_) setActionable(this);
         // pages turn only while composing, as PageUp and PageDown do (Keyboard): a prediction they drop
         if (composing_) setPageable(this);
         for (size_t i = 0; i < snapshot.candidates.size(); i++) {
             const auto &hint = i < snapshot.hints.size() ? snapshot.hints[i] : std::string();
-            words_.push_back(std::make_unique<EngineCandidateWord>(engine_, im_, static_cast<int>(i), snapshot.candidates[i], hint));
+            words_.push_back(std::make_unique<EngineCandidateWord>(engine_, im_, offset_ + static_cast<int>(i), snapshot.candidates[i], hint));
         }
         const int size = static_cast<int>(words_.size());
-        first_ = std::clamp(snapshot.first, 0, size);
-        shown_ = std::clamp(snapshot.shown, 0, size - first_);
+        shown_ = std::clamp(snapshot.shown, 0, size);
         for (int i = 0; i < shown_; i++) {
             const auto at = static_cast<size_t>(i);
             labels_.emplace_back(at < snapshot.labels.size() ? std::string(1, snapshot.labels[at]) : std::to_string((i + 1) % 10));
@@ -85,7 +100,7 @@ public:
 
     const CandidateWord &candidate(int idx) const override {
         check(idx);
-        return *words_[first_ + idx];
+        return *words_[idx];
     }
 
     int size() const override { return shown_; }
@@ -98,25 +113,38 @@ public:
     const CandidateWord &candidateFromAll(int idx) const override {
         // a total of -1: the session has not counted them, so ask until it runs out
         if (idx < 0 || (total_ >= 0 && idx >= total_)) throw std::invalid_argument("invalid index");
-        while (static_cast<int>(words_.size()) <= idx) {
-            const int from = static_cast<int>(words_.size());
+        if (idx < offset_) {
+            // asked once, whatever came back: a fetch that failed (none) is not made again for each index
+            if (!fetchedBefore_) {
+                fetchedBefore_ = true;
+                auto earlier = engine_->fetch(im_, 0, offset_);
+                for (auto &[text, hint]: earlier) {
+                    before_.push_back(std::make_unique<EngineCandidateWord>(engine_, im_, static_cast<int>(before_.size()), text, hint));
+                }
+            }
+            if (idx >= static_cast<int>(before_.size())) throw std::invalid_argument("invalid index");
+            return *before_[idx];
+        }
+        while (offset_ + static_cast<int>(words_.size()) <= idx) {
+            const int from = offset_ + static_cast<int>(words_.size());
             const int count = std::max(Chunk, idx + 1 - from);
             auto more = engine_->fetch(im_, from, count);
             if (static_cast<int>(more.size()) < count) total_ = from + static_cast<int>(more.size());
-            if (more.empty()) throw std::invalid_argument("invalid index");
             for (auto &[text, hint]: more) {
-                words_.push_back(std::make_unique<EngineCandidateWord>(engine_, im_, static_cast<int>(words_.size()), text, hint));
+                words_.push_back(std::make_unique<EngineCandidateWord>(engine_, im_, offset_ + static_cast<int>(words_.size()), text, hint));
             }
+            // a short chunk was the last: none past it to ask for
+            if (total_ >= 0 && idx >= total_) throw std::invalid_argument("invalid index");
         }
-        return *words_[idx];
+        return *words_[idx - offset_];
     }
 
     int totalSize() const override { return total_; }
 
-    bool hasPrev() const override { return first_ > 0; }
+    bool hasPrev() const override { return offset_ > 0; }
 
     bool hasNext() const override {
-        const int after = first_ + shown_;
+        const int after = offset_ + shown_;
         if (total_ >= 0) return after < total_;
         try {
             candidateFromAll(after);
@@ -131,7 +159,7 @@ public:
 
     void next() override { engine_->send(ic_, im_, EngineEvent::PageDown); }
 
-    bool usedNextBefore() const override { return first_ > 0; }
+    bool usedNextBefore() const override { return offset_ > 0; }
 
     bool hasAction(const CandidateWord &candidate) const override {
         return actionable_ && dynamic_cast<const EngineCandidateWord *>(&candidate);
@@ -139,35 +167,30 @@ public:
 
     std::vector<CandidateAction> candidateActions(const CandidateWord &candidate) const override {
         if (!hasAction(candidate)) return {};
-        engine_->stopRefining();
         const auto &word = static_cast<const EngineCandidateWord &>(candidate);
         asked_ = &word;
         const int offers = engine_->offers(im_, word.index());
         std::vector<CandidateAction> actions;
-        auto add = [&](EngineOffer offer, EngineEvent event, const char *text, const char *domain = "fcitx5-chinese-addons") {
-            if (!(offers & offer)) return;
+        for (const auto &offered: offerActions) {
+            if (!(offers & offered.offer)) continue;
             CandidateAction action;
             // the event it sends
-            action.setId(static_cast<int>(event));
-            action.setText(D_(domain, text));
+            action.setId(static_cast<int>(offered.event));
+            action.setText(D_(offered.domain, offered.text));
             actions.push_back(std::move(action));
-        };
-        // libime's table words it so; its pinyin says "Forget candidate"
-        add(OfferForget, EngineEvent::Forget, "Forget word");
-        add(OfferPin, EngineEvent::Pin, "Pin to top as custom phrase");
-        add(OfferUnpin, EngineEvent::Unpin, "Delete from custom phrase");
-        add(OfferBlock, EngineEvent::Block, N_("Never show this word"), "fcitx5-android");
+        }
+        // a menu shown holds the list still, its choice acted on by index; none, refining goes on
+        if (!actions.empty()) engine_->stopRefining();
         return actions;
     }
 
     void triggerAction(const CandidateWord &candidate, int id) override {
         const auto *word = dynamic_cast<const EngineCandidateWord *>(&candidate);
         const auto event = static_cast<EngineEvent>(id);
-        const int offer = event == EngineEvent::Forget ? OfferForget
-                        : event == EngineEvent::Pin    ? OfferPin
-                        : event == EngineEvent::Unpin  ? OfferUnpin
-                        : event == EngineEvent::Block  ? OfferBlock
-                                                       : 0;
+        int offer = 0;
+        for (const auto &offered: offerActions) {
+            if (offered.event == event) offer = offered.offer;
+        }
         // asked again: only what the session still offers for the candidate at that index, and
         // only on the one this list offered it for: a menu of a list since replaced names another
         if (!actionable_ || !word || word != asked_ || !offer || !(engine_->offers(im_, word->index()) & offer)) return;
@@ -190,9 +213,13 @@ private:
     bool actionable_;
     // what was typed, not a prediction (whose preedit is empty)
     bool composing_;
-    int first_;
+    // the index among all of words_[0], the page's first
+    int offset_;
     int shown_;
     mutable std::vector<std::unique_ptr<EngineCandidateWord>> words_;
+    // those before the page, from the first of all: fetched the first time one of them is asked for
+    mutable std::vector<std::unique_ptr<EngineCandidateWord>> before_;
+    mutable bool fetchedBefore_ = false;
     // as the keys that pick them: 1 to 9, then 0
     std::vector<Text> labels_;
     // the candidate whose actions were last asked of this list
@@ -203,12 +230,13 @@ private:
 void showPreedit(InputContext *ic, const std::string &text) {
     auto &panel = ic->inputPanel();
     // in the app where it can show it, as libime's pinyin does by default (ComposingPinyin)
-    if (ic->capabilityFlags().test(CapabilityFlag::Preedit)) {
-        Text preedit(text, TextFormatFlag::Underline);
-        preedit.setCursor(static_cast<int>(text.size()));
+    const bool client = ic->capabilityFlags().test(CapabilityFlag::Preedit);
+    Text preedit(text, client ? TextFormatFlag::Underline : TextFormatFlag::NoFlag);
+    preedit.setCursor(static_cast<int>(text.size()));
+    if (client) {
         panel.setClientPreedit(preedit);
     } else {
-        panel.setPreedit(Text(text));
+        panel.setPreedit(preedit);
     }
 }
 
@@ -282,9 +310,45 @@ bool endPunctuation(InputContext *ic, bool take) {
     return true;
 }
 
-// the input methods whose pages show config_'s own keys
-bool ofConfig(const std::string &im) {
-    return im == "engine-pinyin" || im == "engine-shuangpin" || im == "engine-t9";
+using TableOption = Option<EngineTableConfig> AndroidEngineConfig::*;
+
+// the input methods, named as ime-core's Engines knows them
+struct Method {
+    const char *name, *label, *text, *icon;
+    // a table's options, in AndroidEngineConfig; null for pinyin, shuangpin and T9, whose options
+    // are config_'s own keys
+    TableOption table;
+};
+
+const Method methods[] = {
+        {"engine-pinyin", "拼", "拼音", "fcitx-pinyin", nullptr},
+        {"engine-shuangpin", "双", "双拼", "fcitx-shuangpin", nullptr},
+        {"engine-t9", "九", "九键拼音", "fcitx-pinyin", nullptr},
+        {"engine-wubi", "五", "五笔", "fcitx-wubi", &AndroidEngineConfig::wubi},
+        {"engine-cangjie", "倉", "仓颉", "fcitx-cangjie", &AndroidEngineConfig::cangjie},
+        {"engine-ziranma", "自", "自然码", "fcitx-ziranma", &AndroidEngineConfig::ziranma},
+        {"engine-erbi", "二", "二笔", "fcitx-erbi", &AndroidEngineConfig::erbi},
+        {"engine-wubipinyin", "五", "五笔拼音", "fcitx-wubi", &AndroidEngineConfig::wubiPinyin},
+};
+
+// the one of methods named [im]; null for a table the user imported
+const Method *listed(const std::string &im) {
+    for (const auto &m: methods) {
+        if (im == m.name) return &m;
+    }
+    return nullptr;
+}
+
+// where AndroidEngineConfig keeps [im]'s options if it is one of the tables listed; else null
+TableOption tableOf(const std::string &im) {
+    const auto *m = listed(im);
+    return m ? m->table : nullptr;
+}
+
+// whether [im]'s page shows config_'s own keys: one listed that is no table
+bool showsConfigKeys(const std::string &im) {
+    const auto *m = listed(im);
+    return m && !m->table;
 }
 
 // what the user set of a table they imported, under [Table]: as fcitx's table addon kept it, and
@@ -309,20 +373,6 @@ EngineTableConfig userTable(const std::string &im) {
 } // namespace
 
 std::vector<InputMethodEntry> AndroidEngine::listInputMethods() {
-    // names as ime-core's Engines knows them
-    struct Method {
-        const char *name, *label, *text, *icon;
-    };
-    static const Method methods[] = {
-            {"engine-pinyin", "拼", "拼音", "fcitx-pinyin"},
-            {"engine-shuangpin", "双", "双拼", "fcitx-shuangpin"},
-            {"engine-t9", "九", "九键拼音", "fcitx-pinyin"},
-            {"engine-wubi", "五", "五笔", "fcitx-wubi"},
-            {"engine-cangjie", "倉", "仓颉", "fcitx-cangjie"},
-            {"engine-ziranma", "自", "自然码", "fcitx-ziranma"},
-            {"engine-erbi", "二", "二笔", "fcitx-erbi"},
-            {"engine-wubipinyin", "五", "五笔拼音", "fcitx-wubi"},
-    };
     std::vector<InputMethodEntry> result;
     for (const auto &m: methods) {
         result.emplace_back(std::move(
@@ -346,26 +396,16 @@ void AndroidEngine::setConfig(const RawConfig &config) {
 }
 
 Option<EngineTableConfig> *AndroidEngine::table(const std::string &im) {
-    // as listInputMethods names them
-    static const std::pair<const char *, Option<EngineTableConfig> AndroidEngineConfig::*> tables[] = {
-            {"engine-wubi", &AndroidEngineConfig::wubi},
-            {"engine-cangjie", &AndroidEngineConfig::cangjie},
-            {"engine-ziranma", &AndroidEngineConfig::ziranma},
-            {"engine-erbi", &AndroidEngineConfig::erbi},
-            {"engine-wubipinyin", &AndroidEngineConfig::wubiPinyin},
-    };
-    for (const auto &[name, option]: tables) {
-        if (im == name) return &(config_.*option);
-    }
-    return nullptr;
+    const auto option = tableOf(im);
+    return option ? &(config_.*option) : nullptr;
 }
 
 const Configuration *AndroidEngine::getConfigForInputMethod(const InputMethodEntry &entry) const {
     const auto &im = entry.uniqueName();
-    if (auto *option = const_cast<AndroidEngine *>(this)->table(im)) {
-        return &option->value();
+    if (const auto option = tableOf(im)) {
+        return &(config_.*option).value();
     }
-    if (!ofConfig(im)) {
+    if (!showsConfigKeys(im)) {
         // filled as it is opened, as the pages below are
         static EngineTableConfig userTablePage;
         userTablePage = userTable(im);
@@ -387,7 +427,7 @@ void AndroidEngine::setConfigForInputMethod(const InputMethodEntry &entry, const
         EngineTableConfig value = option->value();
         value.load(config, true);
         option->setValue(value);
-    } else if (ofConfig(im)) {
+    } else if (showsConfigKeys(im)) {
         // the page's keys are config_'s own
         config_.load(config, true);
     } else {
@@ -494,8 +534,12 @@ void AndroidEngine::keyEvent(const InputMethodEntry &entry, KeyEvent &event) {
     // any key ends a pause, shortcuts too: a refine landing after one would redraw a panel
     // someone else may have put up since
     refine_.reset();
-    // shortcuts are the app's
-    if (key.states().testAny(KeyStates{KeyState::Ctrl, KeyState::Alt, KeyState::Super, KeyState::Hyper})) return;
+    // shortcuts are the app's: a mark on offer goes in first, as before any other key, so that
+    // what the app does (a paste) comes after it
+    if (key.states().testAny(KeyStates{KeyState::Ctrl, KeyState::Alt, KeyState::Super, KeyState::Hyper})) {
+        endPunctuation(event.inputContext(), true);
+        return;
+    }
     // a punctuation key's marks on offer: Backspace takes the key back, any other key takes the
     // first and goes on as typed
     if (key.sym() == FcitxKey_BackSpace && endPunctuation(event.inputContext(), false)) {
@@ -521,6 +565,8 @@ void AndroidEngine::keyEvent(const InputMethodEntry &entry, KeyEvent &event) {
                 arg = static_cast<int>(unicode);
             } else {
                 what = EngineEvent::Other;
+                // which key, for a session to act on (libime moves within the input on an arrow)
+                arg = static_cast<int>(key.sym());
             }
         }
     }

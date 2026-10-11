@@ -5,7 +5,6 @@
 package org.fcitx.fcitx5.android.engine.host
 
 import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
-import org.fcitx.fcitx5.android.engine.pinyin.Syllables
 import org.fcitx.fcitx5.android.engine.rerank.MatrixKernel
 import org.fcitx.fcitx5.android.engine.rerank.TinyModel
 import org.fcitx.fcitx5.android.engine.session.Snapshot
@@ -19,8 +18,6 @@ import java.nio.ByteBuffer
 
 /** The sentence models as [Engines] reads them: when, which for which input method, and without them. */
 class EnginesModelTest {
-
-    private fun syl(vararg s: String) = s.map { Syllables.id(it) }.toIntArray()
 
     private val pinyin = PinyinDataBuilder()
         .unigram("<unk>", -7f, 0f)
@@ -50,8 +47,6 @@ class EnginesModelTest {
         // as the app's assets do of a file it has not got
         return ByteBuffer.wrap(bytes ?: throw FileNotFoundException(path))
     }
-
-    private fun Engines.type(im: String, keys: String) = keys.map { onEvent(im, EngineEvent.CHAR, it.code) }.last()
 
     /** What the addon does while the user pauses after [typed]: refines till there is no more to do. */
     private fun Engines.pause(im: String, typed: Snapshot): List<Snapshot> {
@@ -133,8 +128,10 @@ class EnginesModelTest {
         assertEquals("拟", engines.onEvent(Engines.PINYIN, EngineEvent.PICK, 1).commit)
         assertEquals(listOf(Engines.SENTENCE_MODEL, Engines.REFINING_MODEL), loaded.filter { it.endsWith(".safetensors") })
         // a build that lost them (stored compressed, say) says why pinyin reads worse
-        assertEquals(listOf(Engines.SENTENCE_MODEL, Engines.REFINING_MODEL), errors.map { it.cause?.message })
-        assertTrue(errors.all { it.cause is FileNotFoundException })
+        assertEquals(2, errors.size)
+        assertTrue(Engines.SENTENCE_MODEL in errors[0].message.orEmpty())
+        assertTrue(Engines.REFINING_MODEL in errors[1].message.orEmpty())
+        assertTrue(errors.all { (it.cause ?: it) is FileNotFoundException })
     }
 
     @Test

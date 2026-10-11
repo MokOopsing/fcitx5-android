@@ -5,8 +5,8 @@
 package org.fcitx.fcitx5.android.data.pinyin
 
 import org.fcitx.fcitx5.android.data.pinyin.customphrase.PinyinCustomPhrase
-import org.fcitx.fcitx5.android.data.replaceFile
 import org.fcitx.fcitx5.android.engine.phrase.CustomPhrases
+import org.fcitx.fcitx5.android.engine.store.replaceFile
 import org.fcitx.fcitx5.android.utils.appContext
 import java.io.File
 import java.io.IOException
@@ -22,19 +22,21 @@ object CustomPhraseManager {
      */
     fun load(from: File = file): List<PinyinCustomPhrase> {
         if (!from.isFile) return emptyList()
-        return CustomPhrases.parse(from.readText()).all.map { PinyinCustomPhrase(it.key, it.order, it.value) }
+        return items(CustomPhrases.parse(from.readText()))
     }
+
+    /** [phrases] as the editor lists them, turned off too, in the order of [CustomPhrases.all]. */
+    fun items(phrases: CustomPhrases) = phrases.all.map { PinyinCustomPhrase(it.key, it.order, it.value) }
 
     /** Saves [items] in their order, whole or not at all. */
     fun save(items: List<PinyinCustomPhrase>, to: File = file) =
         write(items.map { CustomPhrases.Phrase(it.key, it.order, it.value) }, to)
 
     /**
-     * Saves [mine], the editor's list of what it loaded as [base]. The keyboard may have pinned or
-     * deleted a phrase since (the engine writes the file too), which the editor's list does not
-     * show: then what the editor added and removed is applied to the file as it is now, rather
-     * than the editor's list written over it. [base] is as [load] gave it, or as this returned:
-     * what the file has now, in its order.
+     * Saves [mine], the editor's list, loaded as [base] by [load] or returned by the last call.
+     * The keyboard writes the file too (a phrase pinned or deleted): if it changed since [base],
+     * only what the editor added and removed is applied to the file as it is now.
+     * Returns what the file then has, the next call's [base].
      * @throws IOException if the file cannot be read or written
      */
     @Synchronized
@@ -44,8 +46,13 @@ object CustomPhraseManager {
             save(mine, to)
         } else {
             val removed = base.toSet() - mine.toSet()
-            val added = mine.toSet() - base.toSet() - theirs.toSet()
-            save(theirs.filter { it !in removed } + added, to)
+            val added = (mine.toSet() - base.toSet() - theirs.toSet()).toMutableList()
+            // one edited or turned on or off takes the place of the one it replaced, not the end of its key
+            val kept = theirs.mapNotNull { phrase ->
+                if (phrase !in removed) phrase
+                else added.firstOrNull { it.key == phrase.key }?.also { added.remove(it) }
+            }
+            save(kept + added, to)
         }
         return load(to)
     }
@@ -72,7 +79,7 @@ object CustomPhraseManager {
     }
 
     /**
-     * Saves [phrases] in their order, whole or not at all: the engine's, changed from the keyboard.
+     * Saves [phrases] in their order, whole or not at all: what [save], and so the merges above, write.
      * One writer at a time, the editor's and the engine's sharing the file next to it.
      */
     @Synchronized
@@ -80,7 +87,6 @@ object CustomPhraseManager {
         to.parentFile?.mkdirs()
         replaceFile(to, File(to.path + ".new")) {
             it.writeText(CustomPhrases.format(phrases))
-            true
         }
     }
 }
