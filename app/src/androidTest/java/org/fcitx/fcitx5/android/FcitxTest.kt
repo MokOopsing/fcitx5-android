@@ -214,6 +214,12 @@ class FcitxTest {
             }
         }
 
+        /** As [awaitQuiet], but the events that came, for a test to see what a key did not do. */
+        private suspend fun eventsTillQuiet(): List<FcitxEvent<*>> {
+            val events = ArrayList<FcitxEvent<*>>()
+            while (true) events += withTimeoutOrNull(QUIET_MS) { fcitxEventChannel.receive() } ?: return events
+        }
+
         /** Where Fcitx starts fcitx: its data/ and config/. */
         private fun fcitxHome(): File =
             FcitxApplication.getInstance().directBootAwareContext.let { it.getExternalFilesDir(null) ?: it.filesDir }
@@ -677,6 +683,18 @@ class FcitxTest {
         fcitx.sendKey("BackSpace")
         Assert.assertEquals("", awaitPanelPreedit(""))
         Assert.assertTrue("the key taken back", fcitx.isEmpty())
+
+        // Space and Return pick the first and type nothing more: no space after it, no message sent
+        for (key in listOf("space", "Return")) {
+            sendString("[")
+            awaitQuiet()
+            fcitx.sendKey(key)
+            Assert.assertEquals(key, "【", receiveFirstCommitString()?.data?.text)
+            // the key itself not passed on to the app (a space typed, a message sent), nor anything more committed
+            val after = eventsTillQuiet()
+            Assert.assertTrue("$key: $after", after.none { it is FcitxEvent.KeyEvent || it is FcitxEvent.CommitStringEvent })
+            Assert.assertTrue(key, fcitx.isEmpty())
+        }
         fcitx.reset()
     }
 

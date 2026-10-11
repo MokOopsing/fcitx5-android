@@ -541,8 +541,15 @@ void AndroidEngine::keyEvent(const InputMethodEntry &entry, KeyEvent &event) {
         return;
     }
     // a punctuation key's marks on offer: Backspace takes the key back, any other key takes the
-    // first and goes on as typed
+    // first and goes on as typed, but for Space and Return below
     if (key.sym() == FcitxKey_BackSpace && endPunctuation(event.inputContext(), false)) {
+        event.filterAndAccept();
+        return;
+    }
+    // Space and Return pick the mark shown, as libime's did, and type nothing more: the first is
+    // highlighted, and a mark that came with a space after it, or sent the message, would surprise
+    const bool picks = key.sym() == FcitxKey_space || key.sym() == FcitxKey_Return || key.sym() == FcitxKey_KP_Enter;
+    if (picks && endPunctuation(event.inputContext(), true)) {
         event.filterAndAccept();
         return;
     }
