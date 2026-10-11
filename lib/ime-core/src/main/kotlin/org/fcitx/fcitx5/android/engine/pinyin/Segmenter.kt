@@ -16,10 +16,4 @@ fun interface Segmenter {
      * input is digits, the syllables shown spelt and taken one by one ([T9Segmenter]).
      */
     val typesLetters: Boolean get() = true
-
-    /**
-     * Whether [keys] can only be 简拼, initials alone (zzz, ng), which the decoder reads at a
-     * penalty a word spelt out does not pay: see KeyHabits.WHOLE.
-     */
-    fun abbreviates(keys: String): Boolean = false
 }

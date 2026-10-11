@@ -51,12 +51,16 @@ class PinyinSessionHabitTest {
     }
 
     @Test
-    fun whatWasPutTogetherFromPiecesIsFirstWhenTheKeysAreTypedAgain() {
+    fun whatWasPutTogetherFromPiecesTwiceIsFirstWhenTheKeysAreTypedAgain() {
         val session = session()
         val before = session.type("nihao").candidates
         session.apply(Reset)
         assertEquals("你好", before.first())
         assertEquals("拟好", session.putTogether())
+        // once may be a slip
+        assertEquals("你好", session.type("nihao").candidates.first())
+        session.apply(Reset)
+        session.putTogether()
         val again = session.type("nihao").candidates
         assertEquals("拟好", again.first())
         // the rest as they were
@@ -64,7 +68,7 @@ class PinyinSessionHabitTest {
     }
 
     @Test
-    fun aWordPickedWholeTwiceForInitialsIsFirstAndTheFirstPickedOnceTakesItBack() {
+    fun aWordPickedWholeTwiceIsFirstAndTheFirstPickedOnceTakesItBack() {
         val session = session()
         val first = session.type("nh").candidates
         session.apply(Reset)
@@ -79,12 +83,12 @@ class PinyinSessionHabitTest {
         assertEquals(first.first(), session.type("nh").candidates.first())
     }
 
-    // spelt out, the user model's, which weighs what came before: 西安 is no habit of xian
+    // spelt out or initials, picked whole or put together: one rule
     @Test
-    fun aWordPickedWholeForKeysSpeltOutIsNoHabit() {
+    fun aWordPickedWholeForKeysSpeltOutIsAHabitAlike() {
         val session = session()
         repeat(2) { session.pick("xian", "西安") }
-        assertEquals(0, habits.size)
+        assertEquals("西安", session.type("xian").candidates.first())
     }
 
     // which character is meant depends on what comes before: the user model's to learn
@@ -98,7 +102,7 @@ class PinyinSessionHabitTest {
     @Test
     fun aHabitTheEngineDoesNotReadIsOfferedAsText() {
         val session = session()
-        scope.learn("nihao", "你号", own = "你好")
+        repeat(2) { scope.learn("nihao", "你号", own = "你好") }
         assertEquals(listOf("你号", "你好"), session.type("nihao").candidates.take(2))
         // forgotten from a long press, though it is no words
         assertTrue(Offer.FORGET in session.offers(0))
@@ -114,7 +118,8 @@ class PinyinSessionHabitTest {
         session.putTogether()
         session.pick("nihao", "拟好")
         assertEquals("拟好", scope.habit("nihao"))
-        // twice counted, twice passed over
+        repeat(2) { session.pick("nihao", "拟好") }
+        // four times counted, halved twice
         session.pick("nihao", "你好")
         assertEquals("拟好", session.type("nihao").candidates.first())
         session.apply(Reset)
@@ -130,7 +135,7 @@ class PinyinSessionHabitTest {
         assertEquals(0, habits.size)
         // nor offered
         session.learning = true
-        session.putTogether()
+        repeat(2) { session.putTogether() }
         session.learning = false
         assertEquals("你好", session.type("nihao").candidates.first())
     }
@@ -138,7 +143,7 @@ class PinyinSessionHabitTest {
     @Test
     fun aWordForgottenTakesItsHabit() {
         val session = session(UserModel(data.dictionary, data.vocabulary))
-        session.putTogether()
+        repeat(2) { session.putTogether() }
         val s = session.type("nihao")
         assertEquals("拟好", s.candidates.first())
         session.apply(Forget(0))
@@ -166,7 +171,7 @@ class PinyinSessionHabitTest {
 
     @Test
     fun aHabitPinnedFirstStaysFirstAndOneAfterAPinnedPhraseFollowsIt() {
-        scope.learn("nihao", "拟好", own = "你好")
+        repeat(2) { scope.learn("nihao", "拟好", own = "你好") }
         // pinned first itself
         assertEquals("拟好", session(phrases = "nihao,1=拟好\nnihao,2=你号").type("nihao").candidates.first())
         // another pinned first: the habit second
@@ -176,7 +181,7 @@ class PinyinSessionHabitTest {
     @Test
     fun aKeyNotReadByThePinyinLeavesTheHabitFirst() {
         val session = session()
-        session.putTogether()
+        repeat(2) { session.putTogether() }
         session.type("nihao")
         // a comma: the first candidate committed, then the comma
         val left = session.apply(Key(','))
@@ -186,7 +191,7 @@ class PinyinSessionHabitTest {
 
     @Test
     fun aHabitOfTheRestIsOfferedAfterAPiece() {
-        scope.learn("hao", "号", own = "好")
+        repeat(2) { scope.learn("hao", "号", own = "好") }
         val session = session()
         val s = session.type("nihao")
         val after = session.select(s, "拟")
@@ -210,7 +215,7 @@ class PinyinSessionHabitTest {
         )
         val prior = LayerPrior(layered.layers, step = 1f, bound = 4f)
         val session = PinyinSession(layered, PinyinSegmenter(), prior = prior, prediction = false, habits = scope)
-        scope.learn("ni", "拟", own = "你")
+        repeat(2) { scope.learn("ni", "拟", own = "你") }
         // the decoder's 你 passed over for the habit: no word of the habit's, so nothing
         assertEquals(listOf("拟", "你"), session.type("ni").candidates)
         session.apply(Select(1))

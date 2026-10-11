@@ -15,7 +15,10 @@ class KeyHabitsTest {
     private val pinyin = habits.scope("pinyin")
 
     @Test
-    fun whatTheUserLookedForIsFirstNextTime() {
+    fun whatTheUserLookedForTwiceIsFirstNextTime() {
+        assertNull(pinyin.habit("ee"))
+        pinyin.learn("ee", "嗯嗯", own = "呃呃")
+        // once may be a slip
         assertNull(pinyin.habit("ee"))
         pinyin.learn("ee", "嗯嗯", own = "呃呃")
         assertEquals("嗯嗯", pinyin.habit("ee"))
@@ -30,19 +33,19 @@ class KeyHabitsTest {
 
     @Test
     fun passedOverOnceAHabitIsNoLonger() {
-        pinyin.learn("ee", "嗯嗯", own = "呃呃")
+        repeat(2) { pinyin.learn("ee", "嗯嗯", own = "呃呃") }
         // the engine's own first picked over it: no habit of that, the other halved
         pinyin.learn("ee", "呃呃", own = "呃呃")
         assertNull(pinyin.habit("ee"))
-        // passed over again, gone
-        pinyin.learn("ee", "呃呃", own = "呃呃")
+        // passed over twice more, gone
+        repeat(2) { pinyin.learn("ee", "呃呃", own = "呃呃") }
         assertEquals(0, habits.size)
     }
 
     @Test
     fun theTextCountedMostIsTheHabit() {
-        repeat(3) { pinyin.learn("ee", "嗯嗯", own = "呃呃") }
-        // a third text once: the habit halved to 1.5, the other 1
+        repeat(4) { pinyin.learn("ee", "嗯嗯", own = "呃呃") }
+        // a third text once: the habit halved to 2, the other 1
         pinyin.learn("ee", "额额", own = "呃呃")
         assertEquals("嗯嗯", pinyin.habit("ee"))
         pinyin.learn("ee", "额额", own = "呃呃")
@@ -59,13 +62,15 @@ class KeyHabitsTest {
 
     @Test
     fun aForgottenWordTakesItsHabitsWithIt() {
-        pinyin.learn("ee", "嗯嗯", own = "呃呃")
-        pinyin.learn("en", "嗯嗯", own = "嗯")
-        pinyin.learn("e", "饿", own = "呃")
+        repeat(2) {
+            pinyin.learn("ee", "嗯嗯", own = "呃呃")
+            pinyin.learn("en", "嗯嗯", own = "嗯")
+            pinyin.learn("e", "饿饿", own = "呃呃")
+        }
         pinyin.forget("嗯嗯")
         assertNull(pinyin.habit("ee"))
         assertNull(pinyin.habit("en"))
-        assertEquals("饿", pinyin.habit("e"))
+        assertEquals("饿饿", pinyin.habit("e"))
     }
 
     @Test
@@ -75,7 +80,7 @@ class KeyHabitsTest {
         s.learn("aa", "啊啊", own = null)
         s.learn("aa", "啊啊", own = null)
         s.learn("bb", "吧吧", own = null)
-        s.learn("cc", "擦擦", own = null)
+        repeat(2) { s.learn("cc", "擦擦", own = null) }
         assertEquals(2, small.size)
         assertEquals("啊啊", s.habit("aa"))
         assertNull(s.habit("bb"))
@@ -86,9 +91,9 @@ class KeyHabitsTest {
     fun countedAlikeTheFirstKeysGo() {
         val small = KeyHabits(limit = 2)
         val s = small.scope("pinyin")
-        s.learn("bb", "吧吧", own = null)
-        s.learn("aa", "啊啊", own = null)
-        s.learn("cc", "擦擦", own = null)
+        repeat(2) { s.learn("bb", "吧吧", own = null) }
+        repeat(2) { s.learn("aa", "啊啊", own = null) }
+        repeat(2) { s.learn("cc", "擦擦", own = null) }
         assertEquals(listOf(null, "吧吧", "擦擦"), listOf("aa", "bb", "cc").map { s.habit(it) })
     }
 
@@ -107,6 +112,7 @@ class KeyHabitsTest {
         s.learn("ee", "嗯嗯", own = null)
         // three over: aa and bb counted least, then cc of the two counted alike; not the one just learned
         assertEquals(2, small.size)
+        s.learn("ee", "嗯嗯", own = null)
         assertEquals(listOf(null, null, null, "哒哒", "嗯嗯"), listOf("aa", "bb", "cc", "dd", "ee").map { s.habit(it) })
     }
 
@@ -119,8 +125,10 @@ class KeyHabitsTest {
 
     @Test
     fun asLongAsTheLimitIsKept() {
-        pinyin.learn("a".repeat(64), "啊", own = null)
-        pinyin.learn("aa", "啊".repeat(32), own = null)
+        repeat(2) {
+            pinyin.learn("a".repeat(64), "啊", own = null)
+            pinyin.learn("aa", "啊".repeat(32), own = null)
+        }
         assertEquals(2, habits.size)
         assertEquals("啊", pinyin.habit("a".repeat(64)))
         assertEquals("啊".repeat(32), pinyin.habit("aa"))

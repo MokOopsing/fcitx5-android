@@ -260,7 +260,7 @@ class UserStoreTest {
         UserStore(file, m, compactAt = 200, prior = prior, habits = habits, background = Executor { deferred += it }).use {
             it.open()
             assertTrue(prior.learn(intArrayOf(1), intArrayOf(2)))
-            habits.scope("pinyin").learn("ee", "嗯嗯", own = "呃呃")
+            repeat(2) { habits.scope("pinyin").learn("ee", "嗯嗯", own = "呃呃") }
             // past 200 bytes the counts are read and handed on, not written here; capped, or a store that never handed them on would hang here
             var learned = 0
             while (deferred.isEmpty() && learned < 100) {
@@ -522,7 +522,7 @@ class UserStoreTest {
         val habits = KeyHabits()
         UserStore(file, model(), habits = habits).use {
             it.open()
-            habits.scope("pinyin").learn("ee", "嗯嗯", own = "呃呃")
+            repeat(2) { habits.scope("pinyin").learn("ee", "嗯嗯", own = "呃呃") }
             habits.scope("pinyin").learn("e", "饿", own = "呃")
             habits.scope("pinyin").forget("饿")
         }

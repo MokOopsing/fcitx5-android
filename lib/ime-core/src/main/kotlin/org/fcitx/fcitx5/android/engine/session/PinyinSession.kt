@@ -326,9 +326,7 @@ class PinyinSession(
             return snapshot()
         }
         val text = pieces.joinToString("") { it.text }
-        // put together from pieces (嗯嗯 for ee), or the habit offered, picked or passed over: see KeyHabits.weight
-        val weight = KeyHabits.weight(pieces.size > 1 || lastRead.habit != null, text, segmenter.abbreviates(input.toString()))
-        if (learning && weight > 0f) input.toString().let { habits?.learn(it, text, ownFirstOf(it), weight) }
+        if (learning && KeyHabits.counts(text)) input.toString().let { habits?.learn(it, text, ownFirstOf(it)) }
         val learned = learn(text)
         // not learned, so no pair with what comes next either
         if (learned == null) lastEntry = null
