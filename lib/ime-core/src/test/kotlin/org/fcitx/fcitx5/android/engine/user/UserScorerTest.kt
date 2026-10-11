@@ -6,9 +6,9 @@ package org.fcitx.fcitx5.android.engine.user
 
 import org.fcitx.fcitx5.android.engine.data.NgramModel.Companion.NO_WORD
 import org.fcitx.fcitx5.android.engine.lattice.WordScorer
-import org.fcitx.fcitx5.android.engine.user.UserModelTest.Companion.data
-import org.fcitx.fcitx5.android.engine.user.UserModelTest.Companion.entry
-import org.fcitx.fcitx5.android.engine.user.UserModelTest.Companion.model
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.data
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.entry
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.model
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -33,7 +33,7 @@ class UserScorerTest {
         val m = model()
         val ni = m.learn(null, listOf(entry("拟", "ni")))[0]
         val scorer = UserScorer(data.model, m, weight = 0.5f)
-        val expected = log10(Math.pow(10.0, plain.score(NO_WORD, NO_WORD, ni).toDouble()) + 0.5 / 21).toFloat()
+        val expected = log10(Math.pow(10.0, plain.score(NO_WORD, NO_WORD, ni).toDouble()) + 0.5 / (1 + UserModel.UNSEEN)).toFloat()
         assertEquals(expected, scorer.score(NO_WORD, NO_WORD, ni), 1e-6f)
         // through a context made once, as the decoder asks
         assertEquals(expected, scorer.scoreAfter(scorer.context(NO_WORD, NO_WORD), ni), 1e-6f)
@@ -45,16 +45,18 @@ class UserScorerTest {
     @Test
     fun aPacksWordTakesItsScoreInPlaceOfTheUnknownWordsUnderTheSameBackoff() {
         val m = model()
+        // as Engines lists a pack's words: the model's own keep their scores
+        val modelWords = data.model.vocabularySize
         val ni = m.id(entry("你", "ni"))
-        val nihao = m.list(entry("拟好", "ni", "hao"), -4f, 1)
+        val nihao = m.list(entry("拟好", "ni", "hao"), -4f, 1, modelWords)
         val scorer = UserScorer(data.model, m)
         assertEquals(-4f, scorer.score(NO_WORD, NO_WORD, nihao), 1e-6f)
         // after 你: the unknown word's score there, moved by the same amount
         assertEquals(plain.score(NO_WORD, ni, nihao) + 3f, scorer.score(NO_WORD, ni, nihao), 1e-6f)
         // a model word listed by a pack scores as the model says
-        assertEquals(-2f, m.list(entry("你", "ni"), -1f, 1).let { scorer.score(NO_WORD, NO_WORD, it) }, 1e-6f)
+        assertEquals(-2f, m.list(entry("你", "ni"), -1f, 1, modelWords).let { scorer.score(NO_WORD, NO_WORD, it) }, 1e-6f)
         // and never above 0
-        assertEquals(0f, UserScorer(data.model, m).score(NO_WORD, NO_WORD, m.list(entry("拟吗", "ni", "ma"), 0f, 1)), 0f)
+        assertEquals(0f, UserScorer(data.model, m).score(NO_WORD, NO_WORD, m.list(entry("拟吗", "ni", "ma"), 0f, 1, modelWords)), 0f)
     }
 
     @Test

@@ -8,10 +8,10 @@ import org.fcitx.fcitx5.android.engine.data.NgramModel.Companion.NO_WORD
 import org.fcitx.fcitx5.android.engine.data.PinyinData
 import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
 import org.fcitx.fcitx5.android.engine.pinyin.Syllables
-import org.fcitx.fcitx5.android.engine.user.UserModelTest.Companion.data
-import org.fcitx.fcitx5.android.engine.user.UserModelTest.Companion.entry
-import org.fcitx.fcitx5.android.engine.user.UserModelTest.Companion.model
-import org.fcitx.fcitx5.android.engine.user.UserModelTest.Companion.syl
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.data
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.entry
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.model
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.syl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -50,12 +50,14 @@ class LibimeImportTest {
         assertNull(LibimeImport.dictionaryEntry("你好"))
         assertNull(LibimeImport.dictionaryEntry("你好 ni'hao x"))
         assertNull(LibimeImport.dictionaryEntry("你好\tni'hao 0 0"))
+        // `#` starts no comment: two values are a word and its reading, whatever the word
+        assertEquals(entry("#", "hao"), LibimeImport.dictionaryEntry("# hao"))
     }
 
     @Test
     fun aDictionaryIsKeptAsTheEngineReadsIt() {
         val text = LibimeImport.dictionaryText(
-            sequenceOf("你好\tni'hao\t0", "绿 lü", "\"你\\\"\" ni'hao -2.5", "你 nii 0", "# a comment", "", "虐 nüe 1e2"),
+            sequenceOf("你好\tni'hao\t0", "绿 lü", "\"你\\\"\" ni'hao -2.5", "你 nii 0", "你好 ni'hao cost", "", "虐 nüe 1e2"),
         ).toList()
         assertEquals(listOf("你好 ni'hao 0.0", "绿 lü 0.0", "\"你\\\"\" ni'hao -2.5", "虐 nüe 100.0"), text)
         assertEquals(listOf(entry("你好", "ni", "hao"), entry("绿", "lv")), text.take(2).map { LibimeImport.dictionaryEntry(it) })
@@ -113,24 +115,6 @@ class LibimeImportTest {
         assertEquals(mapOf("你好(ni hao)" to 1f), counts(m))
     }
 
-    // 行 is read xing more often than hang; 银行 only yin hang
-    private val polyphones = PinyinData.load(
-        ByteBuffer.wrap(
-            PinyinDataBuilder()
-                .unigram("<unk>", -7f, 0f)
-                .unigram("行", -2f, 0f)
-                .unigram("银", -3f, 0f)
-                .unigram("银行", -3f, 0f)
-                .unigram("好", -2.5f, 0f)
-                .entry("行", syl("hang"), -1f)
-                .entry("行", syl("xing"))
-                .entry("银", syl("yin"))
-                .entry("银行", syl("yin", "hang"))
-                .entry("好", syl("hao"))
-                .build().toByteArray(),
-        ),
-    )
-
     @Test
     fun aWordKeptWithoutItsReadingIsReadAsTheDictionaryReadsIt() {
         val d = polyphones
@@ -142,6 +126,45 @@ class LibimeImportTest {
         assertNull(LibimeImport.read("行A", readings))
         assertNull(LibimeImport.read("", readings))
         assertEquals(emptyMap<String, IntArray>(), LibimeImport.readings(d.dictionary, d.vocabulary, emptySet()))
+    }
+
+    @Test
+    fun aTextAloneIsReadByTheSyllablesOfItsCharacters() {
+        val d = polyphones
+        fun reading(text: String) = LibimeImport.readings(d.dictionary, d.vocabulary, setOf(text))[text]?.joinToString(" ") { Syllables.spelling(it) }
+        // only yin then hang or xing walked: 行's rarer reading too
+        assertEquals("yin hang", reading("银行"))
+        assertEquals("xing", reading("行"))
+        assertNull(reading("银好"))
+        // 河 is no word of its own: after yin, every syllable is walked for it
+        assertEquals("yin he", reading("银河"))
+    }
+
+    @Test
+    fun aCharacterIsReadInsideAWordAsItIsNeverAlone() {
+        val d = polyphones
+        fun reading(text: String) = LibimeImport.readings(d.dictionary, d.vocabulary, setOf(text))[text]?.joinToString(" ") { Syllables.spelling(it) }
+        // 儿 alone is er: read char by char, 这儿 would be zhe er
+        assertEquals("zhe r", reading("这儿"))
+        // a character past U+FFFF: two chars, one syllable
+        assertEquals("qiu", reading("\uD840\uDC00"))
+        // neither of 𠀀儿's syllables is its character's alone, more than the walk strays: so 𠀀's own were known, two chars as it is
+        assertNull(reading("\uD840\uDC00儿"))
+    }
+
+    @Test
+    fun aFirstCharacterIsReadAsItIsNeverAloneOnlyInAnImport() {
+        val d = polyphones
+        fun reading(text: String, strayFirst: Boolean) =
+            LibimeImport.readings(d.dictionary, d.vocabulary, setOf(text), strayFirst)[text]?.joinToString(" ") { Syllables.spelling(it) }
+        // 了 alone is le: liao, at the first depth, is walked only as an import asks
+        assertNull(reading("了解", strayFirst = false))
+        assertEquals("liao jie", reading("了解", strayFirst = true))
+        // one stray a path still
+        assertNull(reading("\uD840\uDC00儿", strayFirst = true))
+        val m = UserModel(d.dictionary, d.vocabulary)
+        LibimeImport.learn(m, d.dictionary, d.vocabulary, emptySequence(), sequenceOf("了解"))
+        assertEquals(mapOf("了解(liao jie)" to 1f), counts(m))
     }
 
     @Test
@@ -166,5 +189,35 @@ class LibimeImportTest {
         val decode = { code: String -> if (code == "GAHB") "yin'hang" else "" }
         LibimeImport.learn(m, d.dictionary, d.vocabulary, emptySequence(), sequenceOf("银行\tGAHB 行\tZZ"), decode)
         assertEquals(mapOf("银行(yin hang)" to 1f, "行(xing)" to 1f, "银行(yin hang) 行(xing)" to 1f), counts(m))
+    }
+
+    private companion object {
+        // 行 is read xing more often than hang; 银行 only yin hang; 河 only in 银河; 儿 r only in 这儿;
+        // 𠀀 (U+20000) qiu, and 𠀀儿 as neither of its characters is alone; 了 le alone, liao in 了解
+        val polyphones = PinyinData.load(
+            ByteBuffer.wrap(
+                PinyinDataBuilder()
+                    .unigram("<unk>", -7f, 0f)
+                    .unigram("行", -2f, 0f)
+                    .unigram("银", -3f, 0f)
+                    .unigram("银行", -3f, 0f)
+                    .unigram("好", -2.5f, 0f)
+                    .entry("行", syl("hang"), -1f)
+                    .entry("行", syl("xing"))
+                    .entry("银", syl("yin"))
+                    .entry("银行", syl("yin", "hang"))
+                    .entry("好", syl("hao"))
+                    .entry("银河", syl("yin", "he"))
+                    .entry("这", syl("zhe"))
+                    .entry("儿", syl("er"))
+                    .entry("这儿", syl("zhe", "r"))
+                    .entry("\uD840\uDC00", syl("qiu"))
+                    .entry("\uD840\uDC00儿", syl("ba", "r"))
+                    .entry("了", syl("le"))
+                    .entry("解", syl("jie"))
+                    .entry("了解", syl("liao", "jie"))
+                    .build().toByteArray(),
+            ),
+        )
     }
 }

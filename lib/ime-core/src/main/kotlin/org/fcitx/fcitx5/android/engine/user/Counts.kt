@@ -5,8 +5,8 @@
 package org.fcitx.fcitx5.android.engine.user
 
 /**
- * Counts by a long key, in open addressing: the decoder looks one up for nearly every word it
- * scores, and a HashMap would box each key.
+ * Counts (or other floats) by a long key, in open addressing: the decoder looks one up for
+ * nearly every word it scores, and a HashMap would box each key.
  */
 internal class Counts {
     private var keys = LongArray(INITIAL) { EMPTY }
@@ -15,18 +15,33 @@ internal class Counts {
     var size = 0
         private set
 
-    operator fun get(key: Long): Float {
+    operator fun get(key: Long): Float = getOrDefault(key, 0f)
+
+    /** The count of [key], or [default] if it has none. */
+    fun getOrDefault(key: Long, default: Float): Float {
         val mask = keys.size - 1
         var i = slot(key, mask)
         while (true) {
             val k = keys[i]
             if (k == key) return values[i]
-            if (k == EMPTY) return 0f
+            if (k == EMPTY) return default
             i = (i + 1) and mask
         }
     }
 
     fun add(key: Long, count: Float) {
+        // the slot first: taking it may resize, replacing values
+        val i = slotOf(key)
+        values[i] += count
+    }
+
+    operator fun set(key: Long, count: Float) {
+        val i = slotOf(key)
+        values[i] = count
+    }
+
+    // the slot of key, taken for it if it has none
+    private fun slotOf(key: Long): Int {
         require(key != EMPTY) { "key $key" }
         if ((size + 1) * 4 > keys.size * 3) resize(keys.size * 2)
         val mask = keys.size - 1
@@ -36,7 +51,7 @@ internal class Counts {
             keys[i] = key
             size++
         }
-        values[i] += count
+        return i
     }
 
     fun forEach(visit: (Long, Float) -> Unit) {

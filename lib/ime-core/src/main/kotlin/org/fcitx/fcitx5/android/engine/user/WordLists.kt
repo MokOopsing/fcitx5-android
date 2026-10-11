@@ -6,9 +6,9 @@ package org.fcitx.fcitx5.android.engine.user
 
 import org.fcitx.fcitx5.android.engine.data.escapeValue
 import org.fcitx.fcitx5.android.engine.pinyin.Syllables
+import org.fcitx.fcitx5.android.engine.store.replaceFile
 import org.fcitx.fcitx5.android.engine.user.UserModel.Entry
 import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.charset.CharacterCodingException
@@ -74,20 +74,18 @@ class WordLists(private val dir: File?, private val onError: (IOException) -> Un
 
     private fun write(name: String, entries: Collection<Entry>) {
         val dir = dir ?: return
-        val temp = File(dir, "$name.new")
+        val file = File(dir, name)
+        if (name in unread) {
+            onError(IOException("$file did not read: not written over"))
+            return
+        }
         try {
-            val file = File(dir, name)
-            if (name in unread) throw IOException("$file did not read: not written over")
             dir.mkdirs()
-            FileOutputStream(temp).use { out ->
-                out.write(entries.joinToString("") { "${escapeValue(it.text)} ${code(it.syllables)}\n" }.toByteArray())
-                // on disk before the rename: after a power cut, a list renamed in may otherwise be empty
-                out.fd.sync()
+            // a whole list or the one before it, never half of one, nor an empty one after a power cut
+            replaceFile(file, File(dir, "$name.new")) { temp ->
+                temp.writeBytes(entries.joinToString("") { "${escapeValue(it.text)} ${code(it.syllables)}\n" }.toByteArray())
             }
-            // a whole list or the one before it, never half of one
-            if (!temp.renameTo(file)) throw IOException("cannot write $file")
         } catch (e: IOException) {
-            temp.delete()
             // kept in memory: what the user sees stays as they asked, till the next start
             onError(e)
         }
@@ -112,6 +110,8 @@ class WordLists(private val dir: File?, private val onError: (IOException) -> Un
 
         // not toFloat's: 3D and NaN are words
         private val NUMBER = Regex("-?\\d+(\\.\\d+)?")
+        private val SPACES = Regex("\\s+")
+        private val APART = Regex("[\\s']+")
 
         /**
          * A word list as other input methods write theirs: UTF-8, or UTF-16 with its byte order
@@ -141,7 +141,7 @@ class WordLists(private val dir: File?, private val onError: (IOException) -> Un
             if (blocked) rest = rest.substring(1)
             var text: String? = null
             val pinyin = ArrayList<String>()
-            for (token in rest.split(Regex("\\s+"))) when {
+            for (token in rest.split(SPACES)) when {
                 // a count, a cost, or a word pack's score (-5.6)
                 token.isEmpty() || NUMBER.matches(token) -> {}
                 token.all { it in 'a'..'z' || it in 'A'..'Z' || it == '\'' || it == 'ü' } -> pinyin += token
@@ -165,17 +165,20 @@ class WordLists(private val dir: File?, private val onError: (IOException) -> Un
             val word = text.trim()
             val chars = word.codePointCount(0, word.length)
             // as spelled first: a letter is a syllable of its own (A股 A'gu), lowercased a vowel or none
-            val given = pinyin.trim().replace('ü', 'v').split(Regex("[\\s']+")).filter { it.isNotEmpty() }
+            val given = pieces(pinyin)
             // only where the word has that letter: 啊 A is the syllable a, not the letter
             val letters = given.size == chars && word.isNotEmpty() && given.withIndex().all { (i, part) ->
                 part.none { it.isUpperCase() } || part == String(Character.toChars(word.codePointAt(word.offsetByCodePoints(0, i))))
             }
             if (letters) LibimeImport.entry(word, given.joinToString("'"))?.let { return it }
-            val parts = pinyin.trim().lowercase().replace('ü', 'v').split(Regex("[\\s']+")).filter { it.isNotEmpty() }
+            val parts = pieces(pinyin.lowercase())
             if (word.isEmpty() || parts.isEmpty()) return null
             val syllables = if (parts.size == chars) parts else split(parts.joinToString(""), chars) ?: return null
             return LibimeImport.entry(word, syllables.joinToString("'"))
         }
+
+        // [pinyin]'s syllables, or runs of them, ü as v
+        private fun pieces(pinyin: String) = pinyin.trim().replace('ü', 'v').split(APART).filter { it.isNotEmpty() }
 
         // spelling as [count] syllables, if one way only does it
         private fun split(spelling: String, count: Int): List<String>? {
@@ -187,7 +190,7 @@ class WordLists(private val dir: File?, private val onError: (IOException) -> Un
             val next = Array(n + 1) { IntArray(count + 1) { -1 } }
             ways[n][0] = 1
             for (i in n - 1 downTo 0) for (k in 1..count) for (j in i + 1..minOf(n, i + MAX_SPELLING)) {
-                if (ways[j][k - 1] == 0 || Syllables.id(fixed(spelling.substring(i, j))) < 0) continue
+                if (ways[j][k - 1] == 0 || Syllables.id(LibimeImport.spelling(spelling.substring(i, j))) < 0) continue
                 ways[i][k] = minOf(2, ways[i][k] + ways[j][k - 1])
                 next[i][k] = j
             }
@@ -200,12 +203,6 @@ class WordLists(private val dir: File?, private val onError: (IOException) -> Un
                 i = j
             }
             return result
-        }
-
-        private fun fixed(s: String) = when (s) {
-            "lue" -> "lve"
-            "nue" -> "nve"
-            else -> s
         }
 
         private const val MAX_SPELLING = 6

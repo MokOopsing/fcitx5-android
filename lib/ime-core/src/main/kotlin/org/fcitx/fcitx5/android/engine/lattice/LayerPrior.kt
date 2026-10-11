@@ -25,8 +25,8 @@ class LayerPrior(
     values: FloatArray = FloatArray(layers.count),
     private val step: Float = STEP,
     private val bound: Float = BOUND,
-    /** The layer index of a word past the dictionary's (a pack's, listed with the index from [layer]). */
-    private val extra: (Int) -> Int = { 0 },
+    /** The layer index of a word past the dictionary's (a pack's, listed with the index from [layer]); -1 for a word of no pack. */
+    private val extra: PackLayers = PackLayers { -1 },
 ) {
     init {
         require(values.size == layers.count) { "${values.size} values for ${layers.count} layers" }
@@ -37,6 +37,11 @@ class LayerPrior(
     /** Hears of each value changed by [learn], to keep it. */
     fun interface Journal {
         fun changed(name: String, value: Float)
+    }
+
+    /** Gives [extra]'s answer: an interface of its own, as an (Int) -> Int boxes the id of every word scored. */
+    fun interface PackLayers {
+        fun layerOf(word: Int): Int
     }
 
     var journal: Journal? = null
@@ -53,8 +58,8 @@ class LayerPrior(
     private fun layerOf(word: Int): Int {
         // a pack's word is the pack's layer even when the dictionary has it in a layer of its own,
         // as it is the pack that scores it then
-        val packed = extra(word)
-        return if (packed != 0 || word >= layers.words) packed else layers.layer(word)
+        val packed = extra.layerOf(word)
+        return if (packed >= 0) packed else layers.layer(word)
     }
 
     /** The index of the layer called [name], given one if it is new; at 0 until [restore]d or [learn]ed. */
@@ -123,14 +128,15 @@ class LayerPrior(
          * index in that order, for [extra] to return); a layer not named is 0. Fixed values, for
          * measuring: not held to [BOUND] as learned ones are.
          */
-        fun parse(layers: WordLayers, spec: String, packs: List<String> = emptyList(), extra: (Int) -> Int = { 0 }): LayerPrior {
+        fun parse(layers: WordLayers, spec: String, packs: List<String> = emptyList(), extra: PackLayers = PackLayers { -1 }): LayerPrior {
             val prior = LayerPrior(layers, extra = extra)
             packs.forEach { prior.layer(it) }
             spec.split(',').filter { it.isNotEmpty() }.forEach { part ->
                 val name = part.substringBefore('=')
                 val index = prior.names.indexOf(name)
                 require(index >= 0) { "no layer \"$name\" among ${prior.names}" }
-                prior.values[index] = requireNotNull(part.substringAfter('=', "").toFloatOrNull()) { "bad prior \"$part\"" }
+                // toFloatOrNull takes NaN and Infinity, which would break the decoder's pruning
+                prior.values[index] = requireNotNull(part.substringAfter('=', "").toFloatOrNull()?.takeIf { it.isFinite() }) { "bad prior \"$part\"" }
             }
             return prior
         }

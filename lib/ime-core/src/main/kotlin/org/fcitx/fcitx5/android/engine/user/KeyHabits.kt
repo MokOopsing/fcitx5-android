@@ -71,10 +71,10 @@ class KeyHabits(private val limit: Int = DEFAULT_LIMIT) {
     /** A count as the log has it, not learned again: zero is none. */
     fun restore(scopedKeys: String, text: String, count: Float) {
         if (count < DROP) habits[scopedKeys]?.let { texts ->
-            texts.remove(text)
+            if (texts.remove(text) != null) size--
             if (texts.isEmpty()) habits.remove(scopedKeys)
-        } else {
-            habits.getOrPut(scopedKeys) { HashMap() }[text] = count
+        } else if (habits.getOrPut(scopedKeys) { HashMap() }.put(text, count) == null) {
+            size++
         }
     }
 
@@ -89,11 +89,13 @@ class KeyHabits(private val limit: Int = DEFAULT_LIMIT) {
     }
 
     /** Each count kept, its keys scoped as [restore] takes them. */
-    fun forEach(count: (scopedKeys: String, text: String, count: Float) -> Unit) {
-        for ((key, texts) in habits) for ((text, c) in texts) count(key, text, c)
+    fun forEach(visit: (scopedKeys: String, text: String, count: Float) -> Unit) {
+        for ((key, texts) in habits) for ((text, c) in texts) visit(key, text, c)
     }
 
-    val size: Int get() = habits.values.sumOf { it.size }
+    // counted as they change: summed, it was a pass over every key at each learn at the limit
+    var size: Int = 0
+        private set
 
     private fun set(key: String, text: String, count: Float) {
         val kept = if (count < DROP) 0f else count
@@ -105,12 +107,27 @@ class KeyHabits(private val limit: Int = DEFAULT_LIMIT) {
     private fun trim(key: String, text: String) {
         val over = size - limit
         if (over <= 0) return
-        val order = compareBy<Triple<String, String, Float>>({ it.third }, { it.first }, { it.second })
-        val all = habits.flatMap { (k, texts) -> texts.map { Triple(k, it.key, it.value) } }
-            .filter { it.first != key || it.second != text }
-        // one over, as each learn at the limit is: the least of them, not all of them sorted
-        val least = if (over == 1) listOfNotNull(all.minWithOrNull(order)) else all.sortedWith(order).take(over)
-        least.forEach { (key, text, _) -> set(key, text, 0f) }
+        if (over > 1) {
+            // a log kept with a higher limit, at its first learn: all of them sorted, once
+            val all = ArrayList<Triple<String, String, Float>>(size)
+            for ((k, texts) in habits) for ((t, c) in texts) if (k != key || t != text) all += Triple(k, t, c)
+            all.sortedWith { a, b -> compare(a.third, a.first, a.second, b) }.take(over).forEach { (k, t, _) -> set(k, t, 0f) }
+            return
+        }
+        // one over, as each learn at the limit is: the least of them, a habit copied out only if less than those before
+        var least: Triple<String, String, Float>? = null
+        for ((k, texts) in habits) for ((t, c) in texts) {
+            if (k == key && t == text) continue
+            if (least == null || compare(c, k, t, least) < 0) least = Triple(k, t, c)
+        }
+        least?.let { (k, t, _) -> set(k, t, 0f) }
+    }
+
+    // by count, then keys, then text: the same ones go whatever order the map keeps them in
+    private fun compare(count: Float, key: String, text: String, other: Triple<String, String, Float>): Int = when {
+        count != other.third -> count.compareTo(other.third)
+        key != other.first -> key.compareTo(other.first)
+        else -> text.compareTo(other.second)
     }
 
     companion object {

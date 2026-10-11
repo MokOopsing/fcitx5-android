@@ -11,6 +11,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStream
+import java.util.concurrent.Executor
 
 /**
  * Keeps a [UserModel] in [file], a [UserLog] kept by a [RecordStore]: [open] replays it, then
@@ -27,6 +28,8 @@ class UserStore internal constructor(
     private val prior: LayerPrior? = null,
     /** Kept in the same log, if given. */
     private val habits: KeyHabits? = null,
+    /** Writes a compaction an append made due, if given: see [RecordStore]. */
+    background: Executor? = null,
 ) : Closeable {
     constructor(
         file: File,
@@ -35,9 +38,10 @@ class UserStore internal constructor(
         onError: (IOException) -> Unit = {},
         prior: LayerPrior? = null,
         habits: KeyHabits? = null,
-    ) : this(file, model, compactAt, onError, { FileOutputStream(it, true) }, prior, habits)
+        background: Executor? = null,
+    ) : this(file, model, compactAt, onError, { FileOutputStream(it, true) }, prior, habits, background)
 
-    private val store = RecordStore(file, UserLog.FORMAT, compactAt, onError, openAppend)
+    private val store = RecordStore(file, UserLog.FORMAT, compactAt, onError, openAppend, background)
 
     /**
      * Loads the log into the model, and keeps what the model learns from now on. Once only.

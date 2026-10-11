@@ -8,6 +8,11 @@ import org.fcitx.fcitx5.android.engine.data.NgramModel.Companion.NO_WORD
 import org.fcitx.fcitx5.android.engine.data.PinyinData
 import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
 import org.fcitx.fcitx5.android.engine.pinyin.Syllables
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.data
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.entry
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.inTrie
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.model
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.syl
 import org.fcitx.fcitx5.android.engine.user.UserModel.Entry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -19,39 +24,6 @@ import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 
 class UserModelTest {
-
-    companion object {
-        fun syl(vararg s: String) = s.map { Syllables.id(it) }.toIntArray()
-
-        val data: PinyinData = PinyinData.load(
-            ByteBuffer.wrap(
-                PinyinDataBuilder()
-                    .unigram("<unk>", -7f, 0f)
-                    .unigram("你", -2f, 0f)
-                    .unigram("拟", -5f, 0f)
-                    .unigram("好", -2.5f, 0f)
-                    .unigram("你好", -3f, 0f)
-                    .unigram("吗", -3.5f, 0f)
-                    .entry("你", syl("ni"))
-                    .entry("拟", syl("ni"))
-                    .entry("好", syl("hao"))
-                    .entry("你好", syl("ni", "hao"))
-                    .entry("吗", syl("ma"))
-                    .build().toByteArray(),
-            ),
-        )
-
-        fun model(limit: Float = UserModel.DEFAULT_LIMIT) = UserModel(data.dictionary, data.vocabulary, limit)
-
-        fun entry(text: String, vararg syllables: String) = Entry(text, syl(*syllables))
-
-        /** Whether the decoder finds [text] among [m]'s words, read as [syllables]. */
-        fun inTrie(m: UserModel, text: String, vararg syllables: String): Boolean {
-            var node = m.root
-            for (s in syllables) node = m.child(node, Syllables.id(s)).also { if (it < 0) return false }
-            return (0 until m.wordCount(node)).any { m.text(m.word(node, it)) == text }
-        }
-    }
 
     private fun word(text: String) = (0 until data.vocabulary.size).first { data.vocabulary.word(it) == text }
 
@@ -110,11 +82,12 @@ class UserModelTest {
         val ids = m.learn(null, listOf(entry("你", "ni"), entry("好", "hao")))
         assertEquals(listOf(ni, hao), ids.toList())
         assertEquals(2f, m.total)
-        assertEquals(1f / 22f, m.probability(NO_WORD, ni))
+        // one of two counted, beside what the model keeps for words not yet typed
+        val alone = 1f / (2f + UserModel.UNSEEN)
+        assertEquals(alone, m.probability(NO_WORD, ni))
         // after 你, 好 came every time; after 好, 你 never did
-        val alone = 1f / 22f
-        assertEquals((1f + 2f * alone) / 3f, m.probability(ni, hao))
-        assertEquals((0f + 2f * alone) / 3f, m.probability(hao, ni))
+        assertEquals((1f + UserModel.PRIOR * alone) / (1f + UserModel.PRIOR), m.probability(ni, hao))
+        assertEquals((0f + UserModel.PRIOR * alone) / (1f + UserModel.PRIOR), m.probability(hao, ni))
         // a prev never typed says nothing
         assertEquals(alone, m.probability(word("吗"), hao))
         // the word before a sentence pairs with its first
@@ -159,7 +132,7 @@ class UserModelTest {
         assertEquals(1.375f, m.total)
         // what a compaction writes, a start reads back: the word still there to type
         val restored = model()
-        m.forEachCount({ e, c -> restored.restore(e, c) }, { a, b, c -> restored.restore(a, b, c) })
+        m.forEachCount({ e, c -> restored.addCount(e, c) }, { a, b, c -> restored.addCount(a, b, c) })
         assertTrue(inTrie(restored, "拟好", "ni", "hao"))
         assertEquals(listOf(niHao), restored.ownWords().map { it.first })
     }
@@ -170,12 +143,23 @@ class UserModelTest {
         m.learn(null, listOf(entry("你", "ni"), entry("拟好", "ni", "hao"), entry("吗", "ma")))
         m.learn(entry("吗", "ma"), listOf(entry("你", "ni")))
         val copy = model()
-        m.forEachCount({ e, c -> copy.restore(e, c) }, { a, b, c -> copy.restore(a, b, c) })
+        m.forEachCount({ e, c -> copy.addCount(e, c) }, { a, b, c -> copy.addCount(a, b, c) })
         assertEquals(m.total, copy.total)
         val nihao = copy.id(entry("拟好", "ni", "hao"))
         for (prev in listOf(NO_WORD, word("你"), word("吗"), nihao)) {
             for (w in listOf(word("你"), word("吗"), nihao)) assertEquals(m.probability(prev, w), copy.probability(prev, w))
         }
+    }
+
+    @Test
+    fun everyWordIsWrittenOutBeforeAnyPair() {
+        val m = model()
+        m.learn(null, listOf(entry("你", "ni"), entry("拟好", "ni", "hao"), entry("吗", "ma")))
+        m.learn(entry("吗", "ma"), listOf(entry("你", "ni")))
+        val order = ArrayList<String>()
+        m.forEachCount({ e, _ -> order += e.text }, { a, b, _ -> order += a.text + b.text })
+        assertEquals(setOf("你", "拟好", "吗"), order.take(3).toSet())
+        assertEquals(setOf("你拟好", "拟好吗", "吗你"), order.drop(3).toSet())
     }
 
     @Test
@@ -185,7 +169,7 @@ class UserModelTest {
         m.journal = UserModel.Journal { prev, sentence -> heard += "$prev ${sentence.joinToString()}" }
         m.learn(null, listOf(entry("你", "ni")))
         m.learn(entry("你", "ni"), listOf(entry("好", "hao")))
-        m.restore(entry("吗", "ma"), 1f)
+        m.addCount(entry("吗", "ma"), 1f)
         assertEquals(listOf("null 你(ni)", "你(ni) 好(hao)"), heard)
     }
 
@@ -212,6 +196,20 @@ class UserModelTest {
         assertEquals(1, c.size)
         assertEquals(1.5f, c[7919])
         assertThrows(IllegalArgumentException::class.java) { c.add(Long.MIN_VALUE, 1f) }
+    }
+
+    @Test
+    fun countsAreSetAndTellAKeyWithNone() {
+        val c = Counts()
+        c[5] = -2f
+        c[5] = -1f
+        assertEquals(-1f, c.getOrDefault(5, Float.NaN))
+        assertTrue(c.getOrDefault(6, Float.NaN).isNaN())
+        assertEquals(0f, c[6])
+        // set as the table grows: none lost to a resize
+        for (k in 1L..1000L) c[k * 7919] = k.toFloat()
+        assertTrue((1L..1000L).all { c[it * 7919] == it.toFloat() })
+        assertEquals(1001, c.size)
     }
 
     @Test
@@ -248,13 +246,13 @@ class UserModelTest {
         assertTrue(inTrie(m, "拟好", "ni", "hao"))
         assertEquals(0f, m.probability(NO_WORD, m.id(entry("拟好", "ni", "hao"))))
         m.forget(listOf(entry("拟好", "ni", "hao")))
-        assertTrue(!inTrie(m, "拟好", "ni", "hao"))
+        assertFalse(inTrie(m, "拟好", "ni", "hao"))
         assertTrue(inTrie(m, "好", "ni"))
         // learned again, a new word in the trie again
         val again = m.learn(null, listOf(entry("拟好", "ni", "hao"))).single()
         assertEquals(data.vocabulary.size + 2, again)
         assertTrue(inTrie(m, "拟好", "ni", "hao"))
-        assertEquals(1f / 22f, m.probability(NO_WORD, again))
+        assertEquals(1f / (2f + UserModel.UNSEEN), m.probability(NO_WORD, again))
     }
 
     @Test
@@ -282,11 +280,13 @@ class UserModelTest {
         assertEquals(id, m.list(entry("拟好", "ni", "hao"), -6f, 2))
         assertEquals(-6f, m.score(id), 0f)
         assertEquals(2, m.layerOf(id))
+        // layer 0 is a layer, not the -1 of a word no pack listed
+        assertEquals(0, m.layerOf(m.list(entry("拟吗", "ni", "ma"), -5f, 0)))
         // a word of the model's: the pack's score and layer are not taken
         val ni = m.id(entry("你", "ni"))
         assertEquals(ni, m.list(entry("你", "ni"), -1f, 1, modelWords = ni + 1))
         assertTrue(m.score(ni).isNaN())
-        assertEquals(0, m.layerOf(ni))
+        assertEquals(-1, m.layerOf(ni))
         assertTrue(inTrie(m, "拟好", "ni", "hao"))
         // listed: forgetting it drops nothing but its counts
         m.forget(listOf(entry("拟好", "ni", "hao")))
@@ -341,6 +341,50 @@ class UserModelTest {
     }
 
     @Test
+    fun aPolyphoneIsBlockedInEachReadingApartAndOfferedOnceNoneIs() {
+        val m = UserModel(polyphones.dictionary, polyphones.vocabulary)
+        val hang = entry("行", "hang")
+        val xing = entry("行", "xing")
+        val id = m.learn(null, listOf(hang)).single()
+        val atHang = polyphones.dictionary.find(syl("hang"))
+        val atXing = polyphones.dictionary.find(syl("xing"))
+        m.block(hang)
+        // blocked again in the same reading: still one reading blocked
+        m.block(hang)
+        m.block(xing)
+        assertTrue(m.blocked(id, atHang))
+        assertTrue(m.blocked(id, atXing))
+        m.unblock(xing)
+        // still blocked as hang: not offered so, nor predicted, nor shared
+        assertTrue(m.blocked(id, atHang))
+        assertFalse(m.blocked(id, atXing))
+        assertTrue(m.blockedAnyhow(id))
+        assertEquals(emptyList<String>(), m.ownTexts())
+        m.unblock(hang)
+        assertFalse(m.blocked(id, atHang))
+        assertFalse(m.blockedAnyhow(id))
+        assertEquals(listOf("行"), m.ownTexts())
+    }
+
+    @Test
+    fun aPolyphoneIsReadAsTypedNotAsListedOrBlocked() {
+        val m = UserModel(polyphones.dictionary, polyphones.vocabulary)
+        val hang = entry("行", "hang")
+        val xing = entry("行", "xing")
+        val id = m.learn(null, listOf(hang)).single()
+        m.list(xing)
+        m.block(xing)
+        m.unblock(xing)
+        assertEquals(hang.syllables.toList(), m.reading(id)?.toList())
+        val counted = HashMap<String, Float>()
+        m.forEachCount({ e, c -> counted[e.toString()] = c }, { _, _, _ -> })
+        assertEquals(mapOf("行(hang)" to 1f), counted)
+        // typed the other way, it is read so
+        m.learn(null, listOf(xing))
+        assertEquals(xing.syllables.toList(), m.reading(id)?.toList())
+    }
+
+    @Test
     fun theTextsSharedAreTheUsersTheirDictionariesApartAndChangesSay() {
         val m = model()
         val before = m.changes
@@ -351,24 +395,45 @@ class UserModelTest {
         m.learn(null, listOf(entry("你好", "ni", "hao")))
         assertEquals(setOf("好吗", "你好"), m.ownTexts().toSet())
         val learned = m.changes
-        assertEquals(true, learned > before)
+        assertTrue(learned > before)
         // typed again, nothing new to share
         m.learn(null, listOf(entry("你好", "ni", "hao")))
         assertEquals(learned, m.changes)
         m.block(entry("好吗", "hao", "ma"))
         assertEquals(setOf("你好"), m.ownTexts().toSet())
-        assertEquals(true, m.changes > learned)
+        assertTrue(m.changes > learned)
     }
 
     @Test
     fun aTextIsForgottenHoweverItWasRead() {
         val m = model()
         m.learn(null, listOf(entry("好吗", "hao", "ma")))
-        m.learn(null, listOf(entry("好吗", "hao", "ma"), entry("吗", "ma")))
-        assertEquals(1, m.entriesOf("好吗").size)
+        m.learn(null, listOf(entry("好吗", "hao", "a"), entry("吗", "ma")))
+        assertEquals(2, m.entriesOf("好吗").size)
         m.forgetText("好吗")
-        assertEquals(false, "好吗" in m.ownTexts())
-        assertEquals(false, inTrie(m, "好吗", "hao", "ma"))
+        // each reading: its counts, its pairs, its place in the trie
+        assertEquals(emptyList<Entry>(), m.entriesOf("好吗"))
+        val counted = HashMap<String, Float>()
+        m.forEachCount({ e, c -> counted[e.toString()] = c }, { a, b, c -> counted["$a $b"] = c })
+        assertEquals(mapOf("吗(ma)" to 1f), counted)
+        assertFalse("好吗" in m.ownTexts())
+        assertFalse(inTrie(m, "好吗", "hao", "ma"))
+        assertFalse(inTrie(m, "好吗", "hao", "a"))
+    }
+
+    @Test
+    fun aTextIsHadInAReadingTypedMadeOrListedTillItIsForgotten() {
+        val m = model()
+        // the dictionary's, never typed: no id given it yet
+        assertFalse(m.hasText("你好"))
+        m.learn(null, listOf(entry("你好", "ni", "hao"), entry("好吗", "hao", "ma")))
+        m.list(entry("拟好", "ni", "hao"))
+        assertTrue(m.hasText("你好"))
+        assertTrue(m.hasText("好吗"))
+        assertTrue(m.hasText("拟好"))
+        assertFalse(m.hasText("好"))
+        m.forgetText("好吗")
+        assertFalse(m.hasText("好吗"))
     }
 
     @Test
@@ -399,5 +464,19 @@ class UserModelTest {
         assertEquals(emptyList<Pair<Entry, Float>>(), again.ownWords())
         assertFalse(inTrie(again, "拟好", "ni", "hao"))
         assertEquals(1f, again.total)
+    }
+
+    private companion object {
+        // 行, one word of the dictionary's read two ways
+        val polyphones = PinyinData.load(
+            ByteBuffer.wrap(
+                PinyinDataBuilder()
+                    .unigram("<unk>", -7f, 0f)
+                    .unigram("行", -2f, 0f)
+                    .entry("行", syl("hang"))
+                    .entry("行", syl("xing"))
+                    .build().toByteArray(),
+            ),
+        )
     }
 }

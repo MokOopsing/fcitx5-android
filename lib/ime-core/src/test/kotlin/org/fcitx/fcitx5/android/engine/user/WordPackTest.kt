@@ -5,7 +5,7 @@
 package org.fcitx.fcitx5.android.engine.user
 
 import org.fcitx.fcitx5.android.engine.data.SourceException
-import org.fcitx.fcitx5.android.engine.user.UserModelTest.Companion.entry
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.entry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -27,12 +27,12 @@ class WordPackTest {
 
     @Test
     fun aPackNamesItsLayerAndScoresItsWords() {
-        val pack = parse("﻿# youmo words 1\n# layer: 2026q1\n# from the pipeline\n\n搭子\tda'zi\t-5.6\n绿 lü -4\n")
+        val pack = parse("\uFEFF# youmo words 1\n# layer: 2026q1\n# from the pipeline\n\n搭子\tda'zi\t-5.6\n绿 lü -4\n")
         assertEquals("2026q1", pack.layer)
         assertEquals(listOf(entry("搭子", "da", "zi"), entry("绿", "lv")), pack.words.map { it.entry })
         assertEquals(listOf(-5.6f, -4f), pack.words.map { it.score })
         assertEquals(WordPack.DEFAULT_LAYER, parse("# youmo words 1\n").layer)
-        assertTrue(WordPack.isPack("﻿# youmo words 1\r"))
+        assertTrue(WordPack.isPack("\uFEFF# youmo words 1\r"))
         // a later version is a pack still, so it is not taken for a dictionary; just not one this reads
         assertTrue(WordPack.isPack("# youmo words 2"))
         assertFalse(WordPack.isPack("你 ni 0"))

@@ -44,7 +44,7 @@ class WordPack(val layer: String, val words: List<Word>) {
          */
         fun isPack(firstLine: String) = clean(firstLine).startsWith(KIND)
 
-        private fun clean(line: String) = line.removePrefix("﻿").trimEnd()
+        private fun clean(line: String) = line.removePrefix("\uFEFF").trimEnd()
 
         /**
          * @throws SourceException at the first line that is not as above, naming [source]

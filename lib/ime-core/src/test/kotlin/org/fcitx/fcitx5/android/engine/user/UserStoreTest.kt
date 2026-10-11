@@ -7,9 +7,9 @@ package org.fcitx.fcitx5.android.engine.user
 import org.fcitx.fcitx5.android.engine.data.NgramModel.Companion.NO_WORD
 import org.fcitx.fcitx5.android.engine.data.WordLayers
 import org.fcitx.fcitx5.android.engine.lattice.LayerPrior
-import org.fcitx.fcitx5.android.engine.user.UserModelTest.Companion.entry
-import org.fcitx.fcitx5.android.engine.user.UserModelTest.Companion.inTrie
-import org.fcitx.fcitx5.android.engine.user.UserModelTest.Companion.model
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.entry
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.inTrie
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.model
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -25,6 +25,7 @@ import java.io.FilterOutputStream
 import java.io.IOException
 import java.io.OutputStream
 import java.nio.ByteBuffer
+import java.util.concurrent.Executor
 
 class UserStoreTest {
 
@@ -248,6 +249,47 @@ class UserStoreTest {
         assertEquals(learned.probability(NO_WORD, nihao), restored.probability(NO_WORD, nihao))
     }
 
+    /** As the engine keeps it: the compaction an append makes due written by another executor, here when told. */
+    @Test
+    fun countsPriorAndHabitsCompactedInTheBackgroundComeBackWithWhatWasLearnedMeanwhile() {
+        val deferred = ArrayList<Runnable>()
+        val layers = WordLayers(listOf("base", "places", "new2025"), null, 0)
+        val prior = LayerPrior(layers, step = 0.5f, extra = { it })
+        val habits = KeyHabits()
+        val m = model()
+        UserStore(file, m, compactAt = 200, prior = prior, habits = habits, background = Executor { deferred += it }).use {
+            it.open()
+            assertTrue(prior.learn(intArrayOf(1), intArrayOf(2)))
+            habits.scope("pinyin").learn("ee", "嗯嗯", own = "呃呃")
+            // past 200 bytes the counts are read and handed on, not written here; capped, or a store that never handed them on would hang here
+            var learned = 0
+            while (deferred.isEmpty() && learned < 100) {
+                m.learn(entry("你", "ni"), listOf(entry("拟好", "ni", "hao"), entry("吗", "ma")))
+                learned++
+            }
+            assertEquals(1, deferred.size)
+            m.learn(null, listOf(entry("好", "hao")))
+            deferred.single().run()
+            m.learn(null, listOf(entry("好", "hao")))
+        }
+        // the counts, then the two sentences learned since they were read
+        val sentence = typesOf(UserLog.header() + UserLog.sentence(null, listOf(entry("好", "hao")))).single()
+        val types = typesOf(file.readBytes())
+        assertEquals(2, types.count { it == sentence })
+        assertEquals(listOf(sentence, sentence), types.takeLast(2))
+        val again = model()
+        val restoredPrior = LayerPrior(layers)
+        val restoredHabits = KeyHabits()
+        UserStore(file, again, prior = restoredPrior, habits = restoredHabits).use { it.open() }
+        assertEquals(counts(m), counts(again))
+        assertEquals(0.5f, restoredPrior[1], 0f)
+        assertEquals(-0.5f, restoredPrior[2], 0f)
+        assertEquals("嗯嗯", restoredHabits.scope("pinyin").habit("ee"))
+    }
+
+    /** The types of [log]'s records, as its format reads them: not at an offset of its framing. */
+    private fun typesOf(log: ByteArray): List<Byte> = ArrayList<Byte>().also { types -> UserLog.FORMAT.read(log) { type, _ -> types += type } }
+
     @Test
     fun countsOutgrowingTheLimitDoNotCompactOnEveryWrite() {
         session(compactAt = 10) { m, store ->
@@ -277,11 +319,11 @@ class UserStoreTest {
         UserStore(file, model(), prior = again).use { it.open() }
         assertEquals(0f, again[1], 0f)
         assertEquals(0f, again[2], 0f)
-        // what is learned comes back
-        UserStore(file, model(), prior = prior).use {
+        // what is learned comes back: a pick of a places word past a new2025 one, words 1 and 2
+        val picking = LayerPrior(layers, step = 0.5f, extra = { it })
+        UserStore(file, model(), prior = picking).use {
             it.open()
-            prior.journal!!.changed("places", 0.5f)
-            prior.journal!!.changed("new2025", -0.5f)
+            assertTrue(picking.learn(intArrayOf(1), intArrayOf(2)))
         }
         val fresh = LayerPrior(layers)
         UserStore(file, model(), prior = fresh).use { it.open() }
@@ -360,17 +402,26 @@ class UserStoreTest {
         UserStore(file, model()).use { it.open(counting) }
         assertEquals(1, seeded)
         assertEquals(emptyMap<String, Float>(), counts(session()))
+        // what is learned after the record that marks it emptied is replayed
+        session { m, _ -> m.learn(null, listOf(entry("好", "hao"))) }
+        assertEquals(mapOf("好(hao)" to 1f), counts(session()))
     }
 
     @Test
     fun aSeedThatCannotBeWrittenFailsTheOpenAndIsTriedAgain() {
         // where the counts would be written first
-        val blocker = File(file.path + ".compacting").apply { mkdir() }
+        val blocker = blockCompaction()
         assertThrows(IOException::class.java) { UserStore(file, model()).open(seed) }
         assertFalse(file.exists())
-        blocker.delete()
+        assertTrue(blocker.deleteRecursively())
         UserStore(file, model()).use { it.open(seed) }
         assertEquals(mapOf("你(ni)" to 1f, "拟(ni)" to 1f), counts(session()))
+    }
+
+    /** Where the counts would be written, a directory: not to be written, nor deleted while not empty. */
+    private fun blockCompaction(): File = File(file.path + ".compacting").apply {
+        mkdirs()
+        File(this, "kept").createNewFile()
     }
 
     /** Writes through to [file] but, on write [failing], only half the bytes, then fails. */
@@ -408,15 +459,29 @@ class UserStoreTest {
     @Test
     fun aFailedCompactionKeepsTheLogAndWaitsForItToDouble() {
         val errors = ArrayList<IOException>()
-        // where the compacted log would go, something that cannot be written
-        File(file.path + ".compacting").mkdirs()
+        blockCompaction()
         val m = model()
+        val sentence = UserLog.sentence(null, listOf(entry("你", "ni"))).size
+        var learned = 0
+        fun learn() {
+            m.learn(null, listOf(entry("你", "ni")))
+            learned++
+        }
         UserStore(file, m, 60, { errors += it }).use {
             it.open()
-            repeat(4) { m.learn(null, listOf(entry("你", "ni"))) }
+            // one attempt once past 60 bytes; capped, or a store that never tried would hang here
+            while (errors.isEmpty() && learned < 100) learn()
+            assertEquals(1, errors.size)
+            val failedAt = file.length()
+            // none again before 2 × the log it failed at, which is kept whole meanwhile
+            while (file.length() + sentence <= 2 * failedAt) {
+                learn()
+                assertEquals(1, errors.size)
+            }
+            assertEquals(UserLog.header().size + learned.toLong() * sentence, file.length())
+            learn()
+            assertEquals(2, errors.size)
         }
-        // one attempt past 60 bytes, none again before 2 × the log
-        assertEquals(1, errors.size)
         assertEquals(counts(m), counts(session()))
     }
 
@@ -469,9 +534,17 @@ class UserStoreTest {
             it.compact()
         }
         val compacted = KeyHabits()
-        UserStore(file, model(), habits = compacted).use { it.open() }
+        val m = model()
+        UserStore(file, m, habits = compacted).use {
+            it.open()
+            // after the habits compaction wrote
+            m.learn(null, listOf(entry("你", "ni")))
+        }
         assertEquals("嗯嗯", compacted.scope("pinyin").habit("ee"))
-        // a build without habits reads the rest of the log
-        UserStore(file, model()).use { it.open() }
+        // a build without habits reads the rest of the log, and leaves the habits in it
+        assertEquals(mapOf("你(ni)" to 1f), counts(session()))
+        val after = KeyHabits()
+        UserStore(file, model(), habits = after).use { it.open() }
+        assertEquals("嗯嗯", after.scope("pinyin").habit("ee"))
     }
 }

@@ -86,8 +86,8 @@ object UserLog {
                     val sentence = List(input.readShort().toInt()) { input.entry() }
                     if (sentence.isNotEmpty()) model.learn(prev, sentence)
                 }
-                WORD -> model.restore(input.entry(), input.readFloat())
-                PAIR -> model.restore(input.entry(), input.entry(), input.readFloat())
+                WORD -> model.addCount(input.entry(), input.readFloat())
+                PAIR -> model.addCount(input.entry(), input.entry(), input.readFloat())
                 FORGOT -> model.forget(List(input.readShort().toInt()) { input.entry() })
                 PRIOR -> {
                     val name = input.readUTF()

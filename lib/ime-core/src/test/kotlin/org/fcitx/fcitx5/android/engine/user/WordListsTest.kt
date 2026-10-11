@@ -5,6 +5,9 @@
 package org.fcitx.fcitx5.android.engine.user
 
 import org.fcitx.fcitx5.android.engine.pinyin.Syllables
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.entry
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.inTrie
+import org.fcitx.fcitx5.android.engine.user.UserFixtures.model
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -22,8 +25,6 @@ class WordListsTest {
     @get:Rule
     val folder = TemporaryFolder()
 
-    private fun entry(text: String, vararg s: String) = UserModel.Entry(text, s.map { Syllables.id(it) }.toIntArray())
-
     @Test
     fun pinyinIsReadAsTypedApartOrRunTogether() {
         val nihao = entry("你好", "ni", "hao")
@@ -33,6 +34,8 @@ class WordListsTest {
         assertEquals(entry("西安", "xi", "an"), WordLists.entry("西安", "xi'an"))
         assertEquals(entry("绿", "lv"), WordLists.entry("绿", "lü"))
         assertEquals(entry("略", "lve"), WordLists.entry("略", "lue"))
+        // run together, lue is split out as libime spells it too
+        assertEquals(entry("忽略", "hu", "lve"), WordLists.entry("忽略", "hulue"))
     }
 
     @Test
@@ -47,7 +50,7 @@ class WordListsTest {
     }
 
     @Test
-    fun theListsAreKeptInTheirFilesAndAppliedToAModel() {
+    fun theListsAreKeptInTheirFiles() {
         val dir = folder.newFolder()
         val lists = WordLists(dir)
         assertTrue(lists.add(entry("你好", "ni", "hao")))
@@ -61,6 +64,22 @@ class WordListsTest {
         assertTrue(again.remove(entry("你好", "ni", "hao")))
         assertEquals("", File(dir, WordLists.BLOCKED).readText())
         assertEquals(emptyList<UserModel.Entry>(), WordLists(dir).addedWords)
+    }
+
+    @Test
+    fun theListsReadBackAreAppliedToAModel() {
+        val dir = folder.newFolder()
+        WordLists(dir).apply {
+            add(entry("拟好", "ni", "hao"))
+            block(entry("你好", "ni", "hao"))
+        }
+        val m = model()
+        WordLists(dir).applyTo(m)
+        // a word the dictionary lacks is listed, to type; the dictionary's word blocked is never offered
+        assertEquals(listOf("拟好"), m.listedTexts())
+        assertTrue(inTrie(m, "拟好", "ni", "hao"))
+        assertTrue(m.blockedAnyhow(m.id(entry("你好", "ni", "hao"))))
+        assertFalse(m.blockedAnyhow(m.id(entry("你", "ni"))))
     }
 
     @Test
@@ -86,6 +105,7 @@ class WordListsTest {
         assertEquals(listOf(entry("你好", "ni", "hao")), lists.addedWords)
         assertEquals(2, errors.size)
         assertTrue(Files.isSymbolicLink(link.toPath()))
+        assertFalse(File(dir, "${WordLists.ADDED}.new").exists())
         // the other list is written as ever
         assertTrue(lists.block(entry("拟", "ni")))
         assertEquals("拟 ni\n", File(dir, WordLists.BLOCKED).readText())

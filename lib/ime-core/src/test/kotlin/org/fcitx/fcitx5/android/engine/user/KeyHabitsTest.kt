@@ -83,10 +83,47 @@ class KeyHabitsTest {
     }
 
     @Test
+    fun countedAlikeTheFirstKeysGo() {
+        val small = KeyHabits(limit = 2)
+        val s = small.scope("pinyin")
+        s.learn("bb", "吧吧", own = null)
+        s.learn("aa", "啊啊", own = null)
+        s.learn("cc", "擦擦", own = null)
+        assertEquals(listOf(null, "吧吧", "擦擦"), listOf("aa", "bb", "cc").map { s.habit(it) })
+    }
+
+    @Test
+    fun aLogKeptWithAHigherLimitIsTrimmedAtTheFirstLearn() {
+        val log = ArrayList<Triple<String, String, Float>>()
+        habits.journal = KeyHabits.Journal { keys, text, count -> log += Triple(keys, text, count) }
+        pinyin.learn("aa", "啊啊", own = null)
+        pinyin.learn("bb", "吧吧", own = null)
+        repeat(2) { pinyin.learn("cc", "擦擦", own = null) }
+        repeat(2) { pinyin.learn("dd", "哒哒", own = null) }
+        val small = KeyHabits(limit = 2)
+        log.forEach { (keys, text, count) -> small.restore(keys, text, count) }
+        assertEquals(4, small.size)
+        val s = small.scope("pinyin")
+        s.learn("ee", "嗯嗯", own = null)
+        // three over: aa and bb counted least, then cc of the two counted alike; not the one just learned
+        assertEquals(2, small.size)
+        assertEquals(listOf(null, null, null, "哒哒", "嗯嗯"), listOf("aa", "bb", "cc", "dd", "ee").map { s.habit(it) })
+    }
+
+    @Test
     fun tooLongIsNotKept() {
         pinyin.learn("a".repeat(65), "啊", own = null)
         pinyin.learn("aa", "啊".repeat(33), own = null)
         assertEquals(0, habits.size)
+    }
+
+    @Test
+    fun asLongAsTheLimitIsKept() {
+        pinyin.learn("a".repeat(64), "啊", own = null)
+        pinyin.learn("aa", "啊".repeat(32), own = null)
+        assertEquals(2, habits.size)
+        assertEquals("啊", pinyin.habit("a".repeat(64)))
+        assertEquals("啊".repeat(32), pinyin.habit("aa"))
     }
 
     @Test
@@ -101,6 +138,8 @@ class KeyHabitsTest {
         val again = KeyHabits()
         seen.take(2).forEach { (keys, text, count) -> again.restore(keys, text, count) }
         assertEquals("嗯嗯", again.scope("pinyin").habit("ee"))
+        // the second count in place of the first, not a habit more
+        assertEquals(1, again.size)
         val all = ArrayList<Float>()
         again.forEach { _, _, count -> all += count }
         assertEquals(listOf(2f), all)

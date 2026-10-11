@@ -27,8 +27,11 @@ class LayerPriorTest {
                 .build().toByteArray()
         )
     )
-    private val dazi = 1
-    private val dazi2 = 2
+
+    private fun id(word: String) = (0 until data.vocabulary.size).first { data.vocabulary.word(it) == word }
+
+    private val dazi = id("打字")
+    private val daziPal = id("搭子")
 
     @Test
     fun theLayersWordsAreLiftedAsOneAndHeldToZero() {
@@ -36,13 +39,13 @@ class LayerPriorTest {
         val prior = LayerPrior.parse(data.layers, "places=2.5")
         assertEquals(2.5f, prior[1], 0f)
         assertEquals(0f, prior.of(dazi), 0f)
-        assertEquals(2.5f, prior.of(dazi2), 0f)
+        assertEquals(2.5f, prior.of(daziPal), 0f)
         val scorer = prior.scorer(base)
         assertEquals(base.score(-1, -1, dazi), scorer.score(-1, -1, dazi), 1e-6f)
-        assertEquals(base.score(-1, -1, dazi2) + 2.5f, scorer.score(-1, -1, dazi2), 1e-6f)
-        assertEquals(base.scoreAfter(scorer.context(-1, -1), dazi2) + 2.5f, scorer.scoreAfter(scorer.context(-1, -1), dazi2), 1e-6f)
+        assertEquals(base.score(-1, -1, daziPal) + 2.5f, scorer.score(-1, -1, daziPal), 1e-6f)
+        assertEquals(base.scoreAfter(scorer.context(-1, -1), daziPal) + 2.5f, scorer.scoreAfter(scorer.context(-1, -1), daziPal), 1e-6f)
         // never above 0
-        assertEquals(0f, LayerPrior.parse(data.layers, "places=20").scorer(base).score(-1, -1, dazi2), 0f)
+        assertEquals(0f, LayerPrior.parse(data.layers, "places=20").scorer(base).score(-1, -1, daziPal), 0f)
     }
 
     @Test
@@ -51,19 +54,19 @@ class LayerPriorTest {
         val changes = ArrayList<String>()
         prior.journal = LayerPrior.Journal { name, value -> changes += "$name=$value" }
         // went past 打字 to 搭子: up
-        assertTrue(prior.learn(intArrayOf(dazi2), intArrayOf(dazi)))
+        assertTrue(prior.learn(intArrayOf(daziPal), intArrayOf(dazi)))
         assertEquals(0.25f, prior[1], 0f)
         assertEquals(0f, prior[0], 0f)
         // took what was offered, or both have the layer: nothing
-        assertFalse(prior.learn(intArrayOf(dazi2), intArrayOf(dazi2)))
+        assertFalse(prior.learn(intArrayOf(daziPal), intArrayOf(daziPal)))
         assertFalse(prior.learn(intArrayOf(dazi), intArrayOf(dazi)))
         // left 搭子 for 打字: down
-        assertTrue(prior.learn(intArrayOf(dazi), intArrayOf(dazi2)))
+        assertTrue(prior.learn(intArrayOf(dazi), intArrayOf(daziPal)))
         assertEquals(0f, prior[1], 0f)
         // bounded, and a step that changes nothing says so
-        repeat(3) { prior.learn(intArrayOf(dazi), intArrayOf(dazi2)) }
+        repeat(3) { prior.learn(intArrayOf(dazi), intArrayOf(daziPal)) }
         assertEquals(-0.6f, prior[1], 1e-6f)
-        assertFalse(prior.learn(intArrayOf(dazi), intArrayOf(dazi2)))
+        assertFalse(prior.learn(intArrayOf(dazi), intArrayOf(daziPal)))
         assertEquals(listOf("places=0.25", "places=0.0", "places=-0.25", "places=-0.5", "places=-0.6"), changes)
         assertEquals("places=-0.6", prior.toString())
         // words outside the dictionary (the user's own, NO_WORD) are of the base
@@ -91,7 +94,7 @@ class LayerPriorTest {
     @Test
     fun aPacksLayerIsNamedLaterAndItsWordsToldApartByTheCaller() {
         val layerOf = HashMap<Int, Int>()
-        val prior = LayerPrior(data.layers, step = 0.5f, extra = { layerOf[it] ?: 0 })
+        val prior = LayerPrior(data.layers, step = 0.5f, extra = { layerOf[it] ?: -1 })
         // a value kept before the pack is read waits under its name
         assertTrue(prior.restore("2026q1", 0.25f))
         val q1 = prior.layer("2026q1")
@@ -106,6 +109,8 @@ class LayerPriorTest {
         assertEquals(0.75f, prior[q1], 0f)
         assertEquals("2026q1=0.75", prior.toString())
         assertFalse(prior.restore("base", 1f))
+        // a pack that puts a word of the dictionary's places in the base: the base's, as the pack scores it
+        assertEquals(0f, LayerPrior.parse(data.layers, "places=2.5", extra = { if (it == daziPal) 0 else -1 }).of(daziPal), 0f)
     }
 
     @Test
@@ -118,6 +123,9 @@ class LayerPriorTest {
         assertEquals(2, packed.layer("new"))
         assertEquals(1.5f, packed.of(0), 0f)
         assertThrows(IllegalArgumentException::class.java) { LayerPrior.parse(data.layers, "places=x") }
+        // what toFloat reads but no prior may be
+        assertThrows(IllegalArgumentException::class.java) { LayerPrior.parse(data.layers, "places=NaN") }
+        assertThrows(IllegalArgumentException::class.java) { LayerPrior.parse(data.layers, "places=-Infinity") }
         assertThrows(IllegalArgumentException::class.java) { LayerPrior(data.layers, floatArrayOf(0f)) }
         assertThrows(IllegalArgumentException::class.java) { LayerPrior(data.layers, floatArrayOf(0f, Float.NaN)) }
     }

@@ -58,18 +58,16 @@ class UserModel(
     // words the dictionary lacks, by id from vocabulary.size up
     private val newWords = ArrayList<Entry>()
     private val ids = HashMap<Entry, Int>()
-    // the entry each word was learned as, to write it out again
+    // the entry each word was learned as, to write it out again: one of the dictionary's as last typed
     private val entries = HashMap<Int, Entry>()
     // those of them from the user's dictionaries: see list
     private val listed = HashSet<Int>()
-    // from a word pack: the score of a word the model lacks, and the layer, by id
-    private val packScores = HashMap<Int, Float>()
-    private val packLayers = HashMap<Int, Int>()
+    // from a word pack: the score of a word the model lacks, and the layer (exact as a float), by id
+    private val packScores = Counts()
+    private val packLayers = Counts()
 
-    // the trie of the new words: children by syllable, sorted, per node
-    private val childSyllables = arrayListOf(IntArray(0))
-    private val childNodes = arrayListOf(IntArray(0))
-    private val nodeWords = arrayListOf(IntArray(0))
+    // the new words, by their syllables
+    private val trie = SyllableTrie()
 
     // unigrams under NO_WORD, bigrams under their first word
     private val counts = Counts()
@@ -77,10 +75,11 @@ class UserModel(
     private val followers = HashMap<Int, HashSet<Int>>()
 
     // the words the user blocked (see block): as they read, so a word made later is blocked as
-    // it is made; and as the decoder asks, the dictionary's by node and id, the user's by id
+    // it is made; and as the decoder asks, the dictionary's by node and id, the user's by id, with
+    // how many readings of each are blocked
     private val blockedEntries = HashSet<Entry>()
     private val blockedReadings = HashSet<Long>()
-    private val blockedIds = HashMap<Int, Int>()
+    private val blockedIds = Counts()
 
     /** The sum of the words' counts. */
     var total = 0f
@@ -106,8 +105,9 @@ class UserModel(
      */
     fun learn(prev: Entry?, sentence: List<Entry>): IntArray {
         require(sentence.isNotEmpty()) { "nothing to learn" }
-        val words = IntArray(sentence.size) { id(sentence[it]) }
-        var before = if (prev == null) NO_WORD else known(prev)
+        val words = IntArray(sentence.size) { typed(sentence[it]) }
+        // a word before whose reading is not kept yet takes this one: its pair is written out with it
+        var before = if (prev != null && knows(prev)) id(prev).also { entries.getOrPut(it) { prev } } else NO_WORD
         for (w in words) {
             add(NO_WORD, w, 1f)
             if (before != NO_WORD) add(before, w, 1f)
@@ -121,8 +121,7 @@ class UserModel(
             indexFollowers()
             // a word typed once long ago may be gone from ownTexts
             changes++
-            total = 0f
-            counts.forEach { key, count -> if (first(key) == NO_WORD) total += count }
+            recomputeTotal()
         }
         // after halving: the journal may compact, writing out the counts as they now are
         journal?.record(prev, sentence)
@@ -136,11 +135,11 @@ class UserModel(
      * longer candidate, till the next start.
      */
     fun forget(words: List<Entry>) {
-        val ids = words.mapNotNull { ids[it] }.toSet()
-        if (ids.isEmpty()) return
-        forgetCounts(ids)
+        val forgotten = words.mapNotNull { ids[it] }.toSet()
+        if (forgotten.isEmpty()) return
+        forgetCounts(forgotten)
         val word = words.singleOrNull()
-        val id = word?.let { this.ids[it] } ?: NO_WORD
+        val id = word?.let { ids[it] } ?: NO_WORD
         if (word != null && isOwn(id)) dropOwn(word, id)
         changes++
         journal?.forgot(words)
@@ -163,30 +162,34 @@ class UserModel(
     private fun forgetCounts(forgotten: Set<Int>) {
         counts.removeIf { first(it) in forgotten || second(it) in forgotten }
         indexFollowers()
+        recomputeTotal()
+    }
+
+    private fun recomputeTotal() {
         total = 0f
         counts.forEach { key, count -> if (first(key) == NO_WORD) total += count }
     }
 
     private fun dropOwn(word: Entry, id: Int) {
-        removeFromTrie(word.syllables, id)
+        trie.remove(word.syllables, id)
         // learned again, it is a new word, put back in the trie
         ids.remove(word)
         entries.remove(id)
     }
 
     /** Adds [count] to [entry] as a word; for counts kept, as compaction writes them. */
-    fun restore(entry: Entry, count: Float) = add(NO_WORD, id(entry), count)
+    fun addCount(entry: Entry, count: Float) = add(NO_WORD, typed(entry), count)
 
     /** Adds [count] to [second] after [first]. */
-    fun restore(first: Entry, second: Entry, count: Float) = add(id(first), id(second), count)
+    fun addCount(first: Entry, second: Entry, count: Float) = add(typed(first), typed(second), count)
 
     /** Calls [word] with every word counted, then [pair] with every pair. */
     fun forEachCount(word: (Entry, Float) -> Unit, pair: (Entry, Entry, Float) -> Unit) {
-        val pairs = ArrayList<Pair<Long, Float>>()
+        // twice through the counts, words then pairs: no copy of every pair held while compacting
+        counts.forEach { key, count -> if (first(key) == NO_WORD) word(entries.getValue(second(key)), count) }
         counts.forEach { key, count ->
-            if (first(key) == NO_WORD) word(entries.getValue(second(key)), count) else pairs += key to count
+            if (first(key) != NO_WORD) pair(entries.getValue(first(key)), entries.getValue(second(key)), count)
         }
-        for ((key, count) in pairs) pair(entries.getValue(first(key)), entries.getValue(second(key)), count)
     }
 
     /**
@@ -222,13 +225,16 @@ class UserModel(
             id = vocabulary.size + newWords.size
             newWords += entry
             changes++
-            addToTrie(entry.syllables, id)
+            trie.add(entry.syllables, id)
+            entries[id] = entry
         }
         ids[entry] = id
-        entries[id] = entry
         if (entry in blockedEntries && id >= vocabulary.size) resolveBlock(entry, id, add = true)
         return id
     }
+
+    // the id of entry as typed: a word of the dictionary's is then read so, not as it was listed or blocked
+    private fun typed(entry: Entry): Int = id(entry).also { entries[it] = entry }
 
     /**
      * [id] of a word from the user's dictionaries: one they did not make, so forgetting it drops
@@ -246,17 +252,17 @@ class UserModel(
         require(score <= 0f && score.isFinite()) { "score $score" }
         val id = list(entry)
         if (id >= modelWords) {
-            packScores[id] = score
-            packLayers[id] = layer
+            packScores[id.toLong()] = score
+            packLayers[id.toLong()] = layer.toFloat()
         }
         return id
     }
 
     /** The log10 probability a pack gave word [id], or NaN: [UserScorer] uses it where the model has no word. */
-    fun score(id: Int): Float = packScores[id] ?: Float.NaN
+    fun score(id: Int): Float = packScores.getOrDefault(id.toLong(), Float.NaN)
 
-    /** The layer a pack put word [id] in, 0 (the base) if none did. */
-    fun layerOf(id: Int): Int = packLayers[id] ?: 0
+    /** The layer a pack put word [id] in, -1 if none did. */
+    fun layerOf(id: Int): Int = packLayers.getOrDefault(id.toLong(), -1f).toInt()
 
     // a word the user made, not the dictionary's nor one of their dictionaries'
     private fun isOwn(id: Int) = id >= vocabulary.size && id !in listed
@@ -301,14 +307,13 @@ class UserModel(
             val reading = key(dictionary.find(entry.syllables), id)
             if (add) blockedReadings += reading else blockedReadings -= reading
         }
-        val readings = (blockedIds[id] ?: 0) + if (add) 1 else -1
-        if (readings > 0) blockedIds[id] = readings else blockedIds -= id
+        blockedIds.add(id.toLong(), if (add) 1f else -1f)
     }
 
     override fun blocked(word: Int, node: Int) =
-        word in blockedIds && (word >= vocabulary.size || key(node, word) in blockedReadings)
+        blockedAnyhow(word) && (word >= vocabulary.size || key(node, word) in blockedReadings)
 
-    override fun blockedAnyhow(word: Int) = word in blockedIds
+    override fun blockedAnyhow(word: Int) = blockedIds[word.toLong()] > 0f
 
     /**
      * The words the user made, by putting a reading together from pieces, with how often each
@@ -335,13 +340,16 @@ class UserModel(
         counts.forEach { key, count ->
             val id = second(key)
             val typed = first(key) == NO_WORD && count > 0f
-            if (typed && id < vocabulary.size && id !in blockedIds) texts += vocabulary.word(id)
+            if (typed && id < vocabulary.size && !blockedAnyhow(id)) texts += vocabulary.word(id)
         }
         return texts.toList()
     }
 
     /** Every reading of [text] the model has an id for: those typed, made, listed. */
     fun entriesOf(text: String): List<Entry> = ids.keys.filter { it.text == text }
+
+    /** Whether [entriesOf] lists any reading of [text]: no list made, and gone through only to the first. */
+    fun hasText(text: String): Boolean = ids.keys.any { it.text == text }
 
     /** Forgets [text] however it was read: see [forget]. */
     fun forgetText(text: String) = entriesOf(text).forEach { forget(listOf(it)) }
@@ -352,58 +360,18 @@ class UserModel(
     /** How many words the user added to the dictionary's, forgotten ones too: no id is given twice. */
     val size: Int get() = newWords.size
 
-    override fun child(node: Int, syllable: Int): Int {
-        val syllables = childSyllables[node]
-        val at = syllables.binarySearch(syllable)
-        return if (at >= 0) childNodes[node][at] else -1
-    }
+    override fun child(node: Int, syllable: Int) = trie.child(node, syllable)
 
-    override fun childCount(node: Int) = childSyllables[node].size
+    override fun childCount(node: Int) = trie.childCount(node)
 
-    override fun wordCount(node: Int) = nodeWords[node].size
+    override fun wordCount(node: Int) = trie.wordCount(node)
 
-    override fun word(node: Int, index: Int) = nodeWords[node][index]
+    override fun word(node: Int, index: Int) = trie.word(node, index)
 
     override fun text(word: Int) = newWords[word - vocabulary.size].text
 
     // as learned: a word of the dictionary's too, read as the user typed it (行 as hang)
     override fun reading(word: Int) = entries[word]?.syllables ?: newWords.getOrNull(word - vocabulary.size)?.syllables
-
-    private fun addToTrie(syllables: IntArray, word: Int) {
-        var node = root
-        for (s in syllables) {
-            var next = child(node, s)
-            if (next < 0) {
-                next = nodeWords.size
-                childSyllables += IntArray(0)
-                childNodes += IntArray(0)
-                nodeWords += IntArray(0)
-                val at = -(childSyllables[node].binarySearch(s) + 1)
-                childSyllables[node] = childSyllables[node].inserted(at, s)
-                childNodes[node] = childNodes[node].inserted(at, next)
-            }
-            node = next
-        }
-        nodeWords[node] = nodeWords[node] + word
-    }
-
-    // the nodes stay: a walk down them finds no word, and the next start leaves them out
-    private fun removeFromTrie(syllables: IntArray, word: Int) {
-        var node = root
-        for (s in syllables) {
-            node = child(node, s)
-            if (node < 0) return
-        }
-        nodeWords[node] = nodeWords[node].filter { it != word }.toIntArray()
-    }
-
-    private fun IntArray.inserted(at: Int, value: Int) = IntArray(size + 1) {
-        when {
-            it < at -> this[it]
-            it == at -> value
-            else -> this[it - 1]
-        }
-    }
 
     private fun add(first: Int, second: Int, count: Float) {
         if (first == NO_WORD && counts[key(first, second)] == 0f) changes++
@@ -421,8 +389,8 @@ class UserModel(
         private const val MIN_COUNT = 0.25f
         // counts the model pretends were spent on words not yet typed: one word typed once is
         // not yet all the user will ever type
-        private const val UNSEEN = 20f
+        internal const val UNSEEN = 20f
         // how much a word's own share stands in for pairs not yet seen after prev
-        private const val PRIOR = 2f
+        internal const val PRIOR = 2f
     }
 }
