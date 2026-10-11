@@ -11,6 +11,7 @@ import androidx.annotation.StringRes
 import androidx.core.content.edit
 import org.fcitx.fcitx5.android.BuildConfig
 import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceCategory
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceEnum
@@ -35,13 +36,17 @@ class ThemePrefs(sharedPreferences: SharedPreferences) :
         return pref
     }
 
+    // the keys and defaults the preferences declare: a copy here would drift when one changes
+    private fun defaults(vararg prefs: ManagedPreference.PInt) = prefs.map { it.key to it.defaultValue }
+
     // the size of the keyboard: here, with the preview over it, rather than with the keys'
     // behavior; AppPrefs.Keyboard holds the values, for the input view reads them there
     init {
+        val keyboard = AppPrefs.getInstance().keyboard
         section(R.string.section_size)
         levels(
             R.string.keyboard_height, "keyboard_height_level",
-            listOf("keyboard_height_percent" to 30, "keyboard_height_percent_landscape" to 49),
+            defaults(keyboard.keyboardHeightPercent, keyboard.keyboardHeightPercentLandscape),
             listOf(
                 Level(R.string.level_low, 26, 42),
                 Level(R.string.level_standard, 30, 49),
@@ -51,7 +56,7 @@ class ThemePrefs(sharedPreferences: SharedPreferences) :
         )
         levels(
             R.string.keyboard_side_padding, "keyboard_side_padding_level",
-            listOf("keyboard_side_padding" to 0, "keyboard_side_padding_landscape" to 0),
+            defaults(keyboard.keyboardSidePadding, keyboard.keyboardSidePaddingLandscape),
             listOf(
                 Level(R.string.level_none, 0, 0),
                 Level(R.string.level_narrow, 8, 48),
@@ -60,7 +65,7 @@ class ThemePrefs(sharedPreferences: SharedPreferences) :
         )
         levels(
             R.string.keyboard_bottom_padding, "keyboard_bottom_padding_level",
-            listOf("keyboard_bottom_padding" to 0, "keyboard_bottom_padding_landscape" to 0),
+            defaults(keyboard.keyboardBottomPadding, keyboard.keyboardBottomPaddingLandscape),
             listOf(
                 Level(R.string.level_none, 0, 0),
                 Level(R.string.level_little, 8, 4),
@@ -88,7 +93,7 @@ class ThemePrefs(sharedPreferences: SharedPreferences) :
     val keyVerticalMarginLandscape: ManagedPreference.PInt
 
     init {
-        val (horizontal, horizontalLandscape) = hidden {
+        val (horizontal, horizontalLandscape) = hidden(setByLevels = true) {
             twinInt(
                 R.string.key_horizontal_margin,
                 R.string.portrait,
@@ -104,7 +109,7 @@ class ThemePrefs(sharedPreferences: SharedPreferences) :
         }
         keyHorizontalMargin = horizontal
         keyHorizontalMarginLandscape = horizontalLandscape
-        val (vertical, verticalLandscape) = hidden {
+        val (vertical, verticalLandscape) = hidden(setByLevels = true) {
             twinInt(
                 R.string.key_vertical_margin,
                 R.string.portrait,
@@ -122,10 +127,7 @@ class ThemePrefs(sharedPreferences: SharedPreferences) :
         keyVerticalMarginLandscape = verticalLandscape
         levels(
             R.string.key_spacing, "key_spacing_level",
-            listOf(
-                "key_horizontal_margin" to 3, "key_horizontal_margin_landscape" to 3,
-                "key_vertical_margin" to 7, "key_vertical_margin_landscape" to 4,
-            ),
+            defaults(keyHorizontalMargin, keyHorizontalMarginLandscape, keyVerticalMargin, keyVerticalMarginLandscape),
             listOf(
                 Level(R.string.level_compact, 2, 2, 5, 3),
                 Level(R.string.level_standard, 3, 3, 7, 4),
@@ -134,12 +136,12 @@ class ThemePrefs(sharedPreferences: SharedPreferences) :
         )
     }
 
-    val keyRadius = hidden { int(R.string.key_radius, "key_radius", 4, 0, 48, "dp") }
+    val keyRadius = hidden(setByLevels = true) { int(R.string.key_radius, "key_radius", 4, 0, 48, "dp") }
 
     init {
         levels(
             R.string.key_radius, "key_radius_level",
-            listOf("key_radius" to 4),
+            defaults(keyRadius),
             listOf(
                 Level(R.string.level_square, 0),
                 Level(R.string.level_rounded, 4),
@@ -175,10 +177,10 @@ class ThemePrefs(sharedPreferences: SharedPreferences) :
 
     val navbarBackground = hidden {
         enumList(
-        R.string.navbar_background,
-        "navbar_background",
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) NavbarBackground.Full else NavbarBackground.ColorOnly,
-        // 35+ forces edge to edge
+            R.string.navbar_background,
+            "navbar_background",
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) NavbarBackground.Full else NavbarBackground.ColorOnly,
+            // 35+ forces edge to edge
             enableUiOn = { Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM }
         )
     }.apply {

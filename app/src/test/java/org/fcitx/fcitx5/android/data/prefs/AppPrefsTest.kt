@@ -6,6 +6,9 @@ package org.fcitx.fcitx5.android.data.prefs
 
 import android.content.Context
 import androidx.core.content.edit
+import org.fcitx.fcitx5.android.FcitxApplication
+import org.fcitx.fcitx5.android.data.theme.ThemeManager
+import org.fcitx.fcitx5.android.data.theme.ThemePrefs
 import org.fcitx.fcitx5.android.input.keyboard.LangSwitchBehavior
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -15,6 +18,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 
 /**
  * A setting moved out of the settings page kept what an older version or a backup set, with
@@ -49,25 +53,49 @@ class AppPrefsTest {
         assertFalse(prefs.advanced.ignoreSystemCursor.getValue())
     }
 
+    // the real application: ThemePrefs, which has the keyboard's size levels, is read through ThemeManager
     @Test
+    @Config(application = FcitxApplication::class)
     fun whatTheSettingsPageStillSetsIsKept() {
-        // each a level's: the keyboard's size on the theme page, the long press, the vibration, the sound
-        val levels = mapOf(
-            "keyboard_height_percent" to 38, "keyboard_height_percent_landscape" to 60,
-            "keyboard_side_padding" to 8, "keyboard_side_padding_landscape" to 48,
-            "keyboard_bottom_padding" to 20, "keyboard_bottom_padding_landscape" to 12,
-            "keyboard_long_press_delay" to 450,
-            "button_vibration_press_milliseconds" to 35, "button_vibration_long_press_milliseconds" to 45,
-            "button_vibration_press_amplitude" to 220, "button_vibration_long_press_amplitude" to 255,
-            "button_sound_volume" to 90,
-        )
+        val prefs = AppPrefs(sp)
+        val categories = listOf(prefs.keyboard, prefs.candidates, prefs.clipboard, prefs.symbols, prefs.advanced)
+        // AppPrefs' keys alone: ThemeManager.prefs is registered with the application's AppPrefs, not this one.
+        // ThemePrefsTest and aCategoryRegisteredAfterTheResetIsResetAsItRegisters check that its reset keeps what its levels set
+        val own = categories.flatMapTo(HashSet()) { it.managedPreferences.keys }
+        // what every level sets, one off its default: the keyboard's size on the theme page, the long press, the vibration, the sound
+        val levels = (categories + ThemeManager.prefs)
+            .flatMap { it.managedPreferencesUi }
+            .filterIsInstance<ManagedPreferenceUi.Levels>()
+            .flatMap { it.keys }
+            .filter { it.first in own }
+            .associate { (key, default) -> key to default + 1 }
+        assertTrue(levels.keys.containsAll(listOf("keyboard_height_percent", "keyboard_long_press_delay")))
         sp.edit {
             levels.forEach { (key, value) -> putInt(key, value) }
             putBoolean("popup_on_key_press", false)
         }
-        val prefs = AppPrefs(sp)
         prefs.resetHiddenSettings()
         assertEquals(levels, levels.mapValues { sp.getInt(it.key, -1) })
         assertFalse("shown", prefs.keyboard.popupOnKeyPress.getValue())
+    }
+
+    // ThemeManager registers ThemePrefs after the reset at the start: what it hides goes back then
+    @Test
+    @Config(application = FcitxApplication::class)
+    fun aCategoryRegisteredAfterTheResetIsResetAsItRegisters() {
+        sp.edit {
+            putBoolean("key_ripple_effect", true)
+            putInt("key_radius", 9)
+        }
+        val prefs = AppPrefs(sp)
+        prefs.resetHiddenSettings()
+        val theme = prefs.registerProvider(::ThemePrefs)
+        assertFalse(theme.keyRippleEffect.getValue())
+        assertEquals("a level sets it", 9, theme.keyRadius.getValue())
+        // a later start, the reset done before it: nothing registered then is reset
+        sp.edit { putBoolean("key_ripple_effect", true) }
+        val later = AppPrefs(sp)
+        later.resetHiddenSettings()
+        assertTrue(later.registerProvider(::ThemePrefs).keyRippleEffect.getValue())
     }
 }

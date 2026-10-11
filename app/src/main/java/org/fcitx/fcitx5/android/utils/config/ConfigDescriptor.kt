@@ -7,6 +7,7 @@ package org.fcitx.fcitx5.android.utils.config
 import android.os.Parcelable
 import arrow.core.Either
 import arrow.core.flatMap
+import arrow.core.raise.Raise
 import arrow.core.raise.either
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
@@ -211,9 +212,9 @@ sealed class ConfigDescriptor<T, U> : Parcelable {
         private val RawConfig.enumI18n
             get() = findByName("EnumI18n")?.subItems?.map { it.value }
         private val RawConfig.intMin
-            get() = findByName("IntMin")?.value?.toInt()
+            get() = findByName("IntMin")?.value
         private val RawConfig.intMax
-            get() = findByName("IntMax")?.value?.toInt()
+            get() = findByName("IntMax")?.value
         private val RawConfig.tooltip
             get() = findByName("Tooltip")?.value
 
@@ -226,6 +227,10 @@ sealed class ConfigDescriptor<T, U> : Parcelable {
             data class BadFormList(val type: ConfigType<*>) : ParseException()
             data class BadFormDesc(val config: RawConfig) : ParseException()
         }
+
+        // toInt() would throw out of parse, which promises a ParseException instead
+        private fun Raise<ParseException>.intOf(raw: RawConfig, value: String): Int =
+            value.toIntOrNull() ?: raise(ParseException.BadFormDesc(raw))
 
         override fun parse(raw: RawConfig): Either<ParseException, ConfigDescriptor<*, *>> =
             ((raw.type?.mapLeft { ParseException.TypeNoParse(it) })
@@ -257,10 +262,10 @@ sealed class ConfigDescriptor<T, U> : Parcelable {
                         ConfigType.TyInt -> ConfigInt(
                             raw.name,
                             raw.description,
-                            raw.defaultValue?.toInt(),
+                            raw.defaultValue?.let { v -> intOf(raw, v) },
                             raw.tooltip,
-                            raw.intMax,
-                            raw.intMin
+                            raw.intMax?.let { v -> intOf(raw, v) },
+                            raw.intMin?.let { v -> intOf(raw, v) }
                         )
                         ConfigType.TyKey -> ConfigKey(
                             raw.name,
@@ -290,7 +295,7 @@ sealed class ConfigDescriptor<T, U> : Parcelable {
                                                 ele.value.toBoolean()
                                             )
                                             ConfigType.TyInt -> ConfigListValue.IntValue(
-                                                ele.value.toInt()
+                                                intOf(raw, ele.value)
                                             )
                                             ConfigType.TyKey -> ConfigListValue.KeyValue(
                                                 ele.value

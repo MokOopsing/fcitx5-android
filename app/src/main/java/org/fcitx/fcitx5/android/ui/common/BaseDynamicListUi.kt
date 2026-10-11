@@ -159,8 +159,13 @@ abstract class BaseDynamicListUi<T>(
             override fun onItemRemovedBatch(indexed: List<Pair<Int, T>>) {
                 updateFAB()
                 showSnackbar(ctx.getString(R.string.removed_n_items, indexed.size)) {
-                    indexed.sortedBy { it.first }.forEach {
-                        addItem(it.first, it.second)
+                    val removed = indexed.sortedBy { it.first }
+                    // the undo of a batch added: one insertion again, not thousands, each drawn and told
+                    val tail = removedTail(entries.size, removed)
+                    if (tail != null) {
+                        addItems(tail)
+                    } else {
+                        removed.forEach { addItem(it.first, it.second) }
                     }
                 }
             }
@@ -168,9 +173,7 @@ abstract class BaseDynamicListUi<T>(
             override fun onItemAddedBatch(indexed: List<Pair<Int, T>>) {
                 updateFAB()
                 showSnackbar(ctx.getString(R.string.added_n_items, indexed.size)) {
-                    indexed.sortedByDescending { it.first }.forEach {
-                        removeItem(it.first)
-                    }
+                    removeItems(indexed.first().first, indexed.size)
                 }
             }
         })
@@ -382,3 +385,11 @@ abstract class BaseDynamicListUi<T>(
     }
 
 }
+
+/**
+ * The items of [removed], lowest index first, if they were the end of a list now [size] long, as
+ * the undo of a batch added leaves them: to be put back in one insertion. Null for others, put
+ * back where each was.
+ */
+internal fun <T> removedTail(size: Int, removed: List<Pair<Int, T>>): List<T>? =
+    if (removed.firstOrNull()?.first == size && removed.last().first - size == removed.lastIndex) removed.map { it.second } else null

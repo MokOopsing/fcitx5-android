@@ -5,9 +5,7 @@
 package org.fcitx.fcitx5.android.data.prefs
 
 import android.content.Context
-import android.content.ContextWrapper
 import android.content.SharedPreferences
-import android.content.res.Resources
 import androidx.core.content.edit
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
@@ -15,6 +13,8 @@ import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceManager
 import androidx.preference.PreferenceScreen
 import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.ui.main.settings.PlaceholderStrings
+import org.fcitx.fcitx5.android.ui.main.settings.placeholder
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -27,21 +27,6 @@ class ManagedPreferenceSectionsTest {
 
     private lateinit var ctx: Context
     private lateinit var sp: SharedPreferences
-
-    /**
-     * :app unit tests run without the app's resources (see isIncludeAndroidResources in
-     * build.gradle.kts), yet every preference resolves its title eagerly; answer string lookups
-     * with "#<id>" so titles can still be compared.
-     */
-    private class PlaceholderStrings(base: Context) : ContextWrapper(base) {
-        private val res = object : Resources(base.assets, base.resources.displayMetrics, base.resources.configuration) {
-            override fun getText(id: Int): CharSequence = placeholder(id)
-            override fun getString(id: Int): String = placeholder(id)
-            override fun getString(id: Int, vararg formatArgs: Any?): String = placeholder(id)
-        }
-
-        override fun getResources(): Resources = res
-    }
 
     @Before
     fun setUp() {
@@ -115,6 +100,5 @@ class ManagedPreferenceSectionsTest {
 
     private companion object {
         fun sectionKey(title: Int) = ManagedPreferenceCategory.sectionKey(title)
-        fun placeholder(id: Int) = "#$id"
     }
 }

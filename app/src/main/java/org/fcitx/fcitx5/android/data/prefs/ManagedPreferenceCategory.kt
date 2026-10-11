@@ -187,6 +187,8 @@ abstract class ManagedPreferenceCategory(
     }
 
     override fun createUi(screen: PreferenceScreen) {
+        // a section with nothing after it would silently drop its title
+        require(managedPreferencesUi.size !in sections) { "empty section at the end" }
         val ctx = screen.context
         var group: PreferenceGroup = screen
         managedPreferencesUi.forEachIndexed { index, it ->

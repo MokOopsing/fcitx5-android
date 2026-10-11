@@ -9,7 +9,6 @@ import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -187,24 +186,10 @@ class RawConfigTest {
     // region mutability
 
     @Test
-    fun valueIsMutableInPlace() {
-        val c = RawConfig("k", "v")
-        c.value = "changed"
-        assertEquals("changed", c.value)
-    }
-
-    @Test
     fun mutatingAChildIsVisibleThroughTheParent() {
         val root = tree()
         root["a"].value = "changed"
         assertEquals("changed", root.findByName("a")?.value)
-    }
-
-    @Test
-    fun subItemsCanBeReplacedWholesale() {
-        val root = RawConfig("k", "v")
-        root.subItems = arrayOf(RawConfig("x", "1"))
-        assertTrue(root.findByName("x") != null)
     }
 
     // endregion

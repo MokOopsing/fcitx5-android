@@ -28,8 +28,9 @@ class TwinSeekBarPreferenceTest {
         sp.edit { clear() }
     }
 
-    private fun twin(unit: String, defaultLabel: String? = null): TwinSeekBarPreference {
-        sp.edit {
+    // as ManagedPreferenceUi.TwinSeekBarInt builds it: the defaults as a Pair, what a fresh install reads
+    private fun twin(unit: String, defaultLabel: String? = null, stored: Boolean = true): TwinSeekBarPreference {
+        if (stored) sp.edit {
             putInt("primary", 6)
             putInt("secondary", 8)
         }
@@ -42,8 +43,7 @@ class TwinSeekBarPreferenceTest {
             label = "Portrait"
             secondaryLabel = "Landscape"
             this.unit = unit
-            default = 6
-            secondaryDefault = 0
+            setDefaultValue(6 to 0)
             this.defaultLabel = defaultLabel
             // attaching loads both stored values
             screen.addPreference(this)
@@ -69,6 +69,11 @@ class TwinSeekBarPreferenceTest {
             "Portrait System default · Landscape 8 ms",
             summaryOf(twin(unit = "ms", defaultLabel = "System default"))
         )
+    }
+
+    @Test
+    fun aFreshInstallShowsBothDefaults() {
+        assertEquals("Portrait 6 % · Landscape 0 %", summaryOf(twin(unit = "%", stored = false)))
     }
 
     private companion object {

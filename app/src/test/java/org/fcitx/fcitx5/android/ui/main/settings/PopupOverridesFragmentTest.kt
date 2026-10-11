@@ -38,4 +38,14 @@ class PopupOverridesFragmentTest {
         assertNull(after["Q"])
         assertArrayEquals(arrayOf("X", "Y"), after.resolve("Q", presetUpper))
     }
+
+    // a label that named no key closed the add-key dialog with nothing said
+    @Test
+    fun aLabelForAnotherKeyIsOneWordOfTheStoredFormat() {
+        assertEquals(".", keyLabel(" . "))
+        assertNull(keyLabel(""))
+        assertNull(keyLabel("  \u3000"))
+        assertNull(keyLabel("a b"))
+        assertNull(keyLabel("a\u3000b"))
+    }
 }

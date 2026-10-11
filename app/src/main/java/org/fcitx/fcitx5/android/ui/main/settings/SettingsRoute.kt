@@ -28,7 +28,6 @@ import org.fcitx.fcitx5.android.ui.main.settings.behavior.CandidatesSettingsFrag
 import org.fcitx.fcitx5.android.ui.main.settings.behavior.ClipboardSettingsFragment
 import org.fcitx.fcitx5.android.ui.main.settings.behavior.KeyboardSettingsFragment
 import org.fcitx.fcitx5.android.ui.main.settings.behavior.SymbolSettingsFragment
-import org.fcitx.fcitx5.android.ui.main.settings.global.GlobalConfigFragment
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodConfigFragment
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodListFragment
 import org.fcitx.fcitx5.android.ui.main.settings.search.SettingsSearchFragment
@@ -46,9 +45,6 @@ sealed class SettingsRoute : Parcelable {
     data object Index : SettingsRoute()
 
     /* ========== Fcitx ========== */
-
-    @Serializable
-    data object GlobalConfig : SettingsRoute()
 
     @Serializable
     data object InputMethodList : SettingsRoute()
@@ -197,7 +193,6 @@ sealed class SettingsRoute : Parcelable {
 
             /* ========== Fcitx ========== */
 
-            fragment<GlobalConfigFragment, GlobalConfig>()
             fragment<InputMethodListFragment, InputMethodList> {
                 label = ctx.getString(R.string.input_methods)
             }

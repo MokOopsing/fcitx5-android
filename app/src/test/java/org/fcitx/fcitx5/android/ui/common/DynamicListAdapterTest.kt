@@ -68,4 +68,29 @@ class DynamicListAdapterTest {
         // a listener with no batch of its own still hears of each item
         assertEquals(listOf(1 to "b", 2 to "c"), added)
     }
+
+    @Test
+    fun itemsAddedTogetherAreRemovedAsOneRemovalAndOneBatch() {
+        val adapter = object : DynamicListAdapter<String>(listOf("a")) {
+            override fun showEntry(x: String) = x
+        }
+        adapter.addItems(listOf("b", "c"))
+        val removed = mutableListOf<Pair<Int, Int>>()
+        adapter.registerAdapterDataObserver(object : RecyclerView.AdapterDataObserver() {
+            override fun onItemRangeRemoved(positionStart: Int, itemCount: Int) {
+                removed += positionStart to itemCount
+            }
+        })
+        val batches = mutableListOf<List<Pair<Int, String>>>()
+        adapter.addOnItemChangedListener(object : OnItemChangedListener<String> {
+            override fun onItemRemovedBatch(indexed: List<Pair<Int, String>>) {
+                batches += indexed
+            }
+        })
+        adapter.removeItems(1, 2)
+        adapter.removeItems(1, 0)
+        assertEquals(listOf("a"), adapter.entries)
+        assertEquals(listOf(1 to 2), removed)
+        assertEquals(listOf(listOf(2 to "c", 1 to "b")), batches)
+    }
 }

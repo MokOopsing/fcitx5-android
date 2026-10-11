@@ -6,6 +6,7 @@ package org.fcitx.fcitx5.android.core
 
 import android.content.Context
 import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.engine.host.Engines
 
 /**
  * An input method's name in the app's language. fcitx names them in its own (the phone's, read as
@@ -14,16 +15,20 @@ import org.fcitx.fcitx5.android.R
  */
 object InputMethodNames {
 
+    /** fcitx's English (US) keyboard. */
+    const val KEYBOARD = "keyboard-us"
+
+    // the tables' ids are the keys of Engines.TABLES, which has no constant for each: the test holds them together
     private val names = mapOf(
-        "engine-pinyin" to R.string.im_pinyin,
-        "engine-shuangpin" to R.string.im_shuangpin,
-        "engine-t9" to R.string.im_t9,
+        Engines.PINYIN to R.string.im_pinyin,
+        Engines.SHUANGPIN to R.string.im_shuangpin,
+        Engines.T9 to R.string.im_t9,
         "engine-wubi" to R.string.im_wubi,
         "engine-cangjie" to R.string.im_cangjie,
         "engine-ziranma" to R.string.im_ziranma,
         "engine-erbi" to R.string.im_erbi,
         "engine-wubipinyin" to R.string.im_wubipinyin,
-        "keyboard-us" to R.string.im_english,
+        KEYBOARD to R.string.im_english,
     )
 
     fun of(context: Context, uniqueName: String, fallback: String): String =

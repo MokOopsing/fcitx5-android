@@ -36,7 +36,7 @@ abstract class ManagedPreferenceUi<T : Preference>(
         val title: Int,
         key: String,
         private val store: SharedPreferences,
-        private val keys: List<Pair<String, Int>>,
+        val keys: List<Pair<String, Int>>,
         private val levels: List<Level>,
         enableUiOn: (() -> Boolean)? = null
     ) : ManagedPreferenceUi<ListPreference>(key, enableUiOn) {
@@ -55,11 +55,11 @@ abstract class ManagedPreferenceUi<T : Preference>(
             }
         }
 
-        /** Sets the keys to level [index]; false if there is none such. */
-        fun pick(index: Int): Boolean {
+        /** Sets the keys to level [index], the nearest too if [again]; false if there is none such. */
+        fun pick(index: Int, again: Boolean = false): Boolean {
             val level = levels.getOrNull(index) ?: return false
             // the nearest, as the list shows it when the page opens: not written over what is there
-            if (index == current()) return true
+            if (!again && index == current()) return true
             store.edit {
                 keys.forEachIndexed { k, (name, _) -> putInt(name, level.values[k]) }
             }
@@ -70,6 +70,13 @@ abstract class ManagedPreferenceUi<T : Preference>(
             override fun getPersistedString(defaultReturnValue: String?) = current().toString()
 
             override fun persistString(value: String?) = pick(value?.toIntOrNull() ?: -1)
+
+            // the user's pick of the level shown (an older value's nearest): setValue sees no change
+            override fun callChangeListener(newValue: Any?): Boolean {
+                if (!super.callChangeListener(newValue)) return false
+                if (newValue == value) pick((newValue as? String)?.toIntOrNull() ?: -1, again = true)
+                return true
+            }
         }.apply {
             key = this@Levels.key
             isIconSpaceReserved = false
@@ -121,6 +128,13 @@ abstract class ManagedPreferenceUi<T : Preference>(
                 val stored = super.getPersistedString(defaultReturnValue)
                 if (stored == null || findIndexOfValue(stored) >= 0) return stored
                 return codec.encode(this@StringList.defaultValue)
+            }
+
+            // the user's pick of that default: setValue sees no change, and persistString would see it stored
+            override fun callChangeListener(newValue: Any?): Boolean {
+                if (!super.callChangeListener(newValue)) return false
+                if (newValue == value && newValue is String) sharedPreferences?.edit { putString(key, newValue) }
+                return true
             }
         }.apply {
             key = this@StringList.key

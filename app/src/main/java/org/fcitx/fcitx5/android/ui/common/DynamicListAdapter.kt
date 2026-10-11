@@ -216,6 +216,19 @@ abstract class DynamicListAdapter<T>(
         mainViewModel?.toolbarButton?.value = ButtonMode.EDIT
     }
 
+    /** Removes the [count] items from [start], drawn as one removal: the undo of [addItems]. */
+    fun removeItems(start: Int, count: Int) {
+        if (count == 0) return
+        val range = _entries.subList(start, start + count)
+        // highest index first, as deleteSelected passes them
+        val indexed = range.mapIndexed { i, item -> start + i to item }.asReversed()
+        range.clear()
+        notifyItemRangeRemoved(start, count)
+        listener?.onItemRemovedBatch(indexed)
+        if (entries.isEmpty())
+            mainViewModel?.toolbarButton?.value = ButtonMode.NONE
+    }
+
     @CallSuper
     open fun removeItem(idx: Int): T {
         val item = _entries.removeAt(idx)

@@ -4,7 +4,6 @@
  */
 package org.fcitx.fcitx5.android
 
-import android.content.Context
 import android.os.Build
 import app.cash.turbine.test
 import io.mockk.every
@@ -79,15 +78,20 @@ class TestHarnessSmokeTest {
     /** MockK: stub a final Kotlin class, which Mockito cannot do without extra setup. */
     @Test
     fun mockkStubsFinalClasses() {
-        val ctx = mockk<Context>()
-        every { ctx.packageName } returns "org.fcitx.fcitx5.android.test"
-        Assert.assertEquals("org.fcitx.fcitx5.android.test", ctx.packageName)
+        val greeting = mockk<Greeting>()
+        every { greeting.text() } returns "stubbed"
+        Assert.assertEquals("stubbed", greeting.text())
+    }
+
+    // final, as a Kotlin class is unless declared open
+    private class Greeting(private val name: String) {
+        fun text() = "hello, $name"
     }
 
     /**
      * Robolectric: a real Context and real framework behaviour on the JVM.
      *
-     * The SDK is pinned to 35 for every Robolectric test by `robolectric.properties`; see there
+     * `robolectric.properties` sets SDK 35 for every Robolectric test that pins no other; see there
      * for why.
      */
     @RunWith(RobolectricTestRunner::class)

@@ -9,7 +9,9 @@ import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import com.mikepenz.aboutlibraries.Libs
 import com.mikepenz.aboutlibraries.entity.License
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.input.voice.VoiceFeature
 import org.fcitx.fcitx5.android.ui.common.PaddingPreferenceFragment
@@ -19,18 +21,16 @@ import org.fcitx.fcitx5.android.utils.openUrl
 class LicensesFragment : PaddingPreferenceFragment() {
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+        val res = resources
+        // the engine's data: whose text its words and model are counted from
+        val engineData = listOf(
+            VoiceFeature.Credit(getString(R.string.engine_data_libime), "LGPL-2.1-or-later", "https://github.com/fcitx/libime"),
+            VoiceFeature.Credit(getString(R.string.engine_data_fineweb), "ODC-By-1.0", "https://huggingface.co/datasets/HuggingFaceFW/fineweb-2"),
+        )
         lifecycleScope.launch {
-            preferenceScreen = preferenceManager.createPreferenceScreen(requireContext()).apply {
-                // the engine's data: whose text its words and model are counted from
-                ENGINE_DATA.forEach { (title, licence, url) ->
-                    addPreference(title = getString(title), summary = licence) { requireContext().openUrl(url) }
-                }
-                VoiceFeature.credits(requireContext()).forEach { credit ->
-                    addPreference(title = credit.title, summary = credit.licence) {
-                        requireContext().openUrl(credit.url)
-                    }
-                }
-                val jsonString = resources.openRawResource(R.raw.aboutlibraries)
+            // a few hundred libraries' entries: read and parsed off the main thread
+            val libraries = withContext(Dispatchers.IO) {
+                val jsonString = res.openRawResource(R.raw.aboutlibraries)
                     .bufferedReader()
                     .use { it.readText() }
                 Libs.Builder()
@@ -40,14 +40,21 @@ class LicensesFragment : PaddingPreferenceFragment() {
                     .sortedBy {
                         if (it.tag == "native") it.uniqueId.uppercase() else it.uniqueId.lowercase()
                     }
-                    .forEach {
-                        addPreference(
-                            title = "${it.uniqueId}:${it.artifactVersion}",
-                            summary = it.licenses.joinToString { l -> l.spdxId ?: l.name }
-                        ) {
-                            showLicenseDialog(it.uniqueId, it.licenses)
-                        }
+            }
+            preferenceScreen = preferenceManager.createPreferenceScreen(requireContext()).apply {
+                (engineData + VoiceFeature.credits(requireContext())).forEach { credit ->
+                    addPreference(title = credit.title, summary = credit.licence) {
+                        requireContext().openUrl(credit.url)
                     }
+                }
+                libraries.forEach {
+                    addPreference(
+                        title = "${it.uniqueId}:${it.artifactVersion}",
+                        summary = it.licenses.joinToString { l -> l.spdxId ?: l.name }
+                    ) {
+                        showLicenseDialog(it.uniqueId, it.licenses)
+                    }
+                }
             }
         }
     }
@@ -73,13 +80,5 @@ class LicensesFragment : PaddingPreferenceFragment() {
 
     private fun showLicenseContent(license: License) {
         license.url?.takeIf { it.isNotBlank() }?.let { requireContext().openUrl(it) }
-    }
-
-
-    private companion object {
-        val ENGINE_DATA = listOf(
-            Triple(R.string.engine_data_libime, "LGPL-2.1-or-later", "https://github.com/fcitx/libime"),
-            Triple(R.string.engine_data_fineweb, "ODC-By-1.0", "https://huggingface.co/datasets/HuggingFaceFW/fineweb-2"),
-        )
     }
 }

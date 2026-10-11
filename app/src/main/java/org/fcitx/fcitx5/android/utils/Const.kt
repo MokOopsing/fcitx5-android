@@ -16,6 +16,6 @@ object Const {
     const val privacyPolicyUrl = "$githubRepo/blob/HEAD/PRIVACY.md"
     const val faqUrl = "$githubRepo#readme"
     const val releasesUrl = "$githubRepo/releases"
-    // the monthly word packs, words-YYYYMM (dev/TRAINING-PLAN.md 12.3), and nothing else
+    // the monthly word packs, tagged words-YYYYMM (as words-202610), and nothing else
     const val wordPacksUrl = "$releasesUrl?q=words-&expanded=true"
 }

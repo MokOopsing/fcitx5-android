@@ -44,7 +44,11 @@ class DialogSeekBarPreference @JvmOverloads constructor(
     private var value = 0
     var min: Int
     var max: Int
-    var step: Int
+    var step: Int = 1
+        // a step of 0 would divide by zero in progressForValue
+        set(value) {
+            field = value.coerceAtLeast(1)
+        }
     var unit: String
 
     var default: Int = 0

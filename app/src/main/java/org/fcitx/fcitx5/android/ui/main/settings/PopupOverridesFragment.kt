@@ -15,8 +15,8 @@ import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
+import androidx.annotation.StringRes
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -31,8 +31,16 @@ import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.input.popup.PopupEditor
 import org.fcitx.fcitx5.android.input.popup.PopupOverrides
 import org.fcitx.fcitx5.android.input.popup.PopupPreset
+import org.fcitx.fcitx5.android.utils.onPositiveButtonClick
 import org.fcitx.fcitx5.android.utils.styledColor
 import splitties.dimensions.dp
+import splitties.views.dsl.core.add
+import splitties.views.dsl.core.horizontalLayout
+import splitties.views.dsl.core.lParams
+import splitties.views.dsl.core.matchParent
+import splitties.views.dsl.core.verticalLayout
+import splitties.views.dsl.core.wrapContent
+import splitties.views.dsl.core.wrapInScrollView
 
 /**
  * Edits what a long press on a key offers, on a keyboard drawn as the user sees it: each key
@@ -51,14 +59,12 @@ class PopupOverridesFragment : Fragment() {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val ctx = requireContext()
-        content = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
+        content = ctx.verticalLayout {
             val pad = ctx.dp(16)
             setPadding(pad, ctx.dp(8), pad, pad)
         }
-        return ScrollView(ctx).apply {
+        return content.wrapInScrollView {
             clipToPadding = false
-            addView(content)
             ViewCompat.setOnApplyWindowInsetsListener(this) { view, insets ->
                 view.setPadding(0, 0, 0, insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom)
                 insets
@@ -67,6 +73,7 @@ class PopupOverridesFragment : Fragment() {
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
         rebuild()
     }
 
@@ -81,49 +88,57 @@ class PopupOverridesFragment : Fragment() {
     private fun rebuild() {
         val ctx = requireContext()
         val current = overrides
-        content.removeAllViews()
-        content.addView(text(ctx, getString(R.string.long_press_page_hint), body = true))
+        content.apply {
+            removeAllViews()
+            add(text(ctx, getString(R.string.long_press_page_hint), body = true), lParams(matchParent))
 
-        content.addView(heading(ctx, R.string.letters))
-        Rows.forEachIndexed { i, row ->
-            content.addView(LinearLayout(ctx).apply {
-                // the rows staggered as on the keyboard: half a key in, then one and a half
-                weightSum = Rows[0].length.toFloat()
-                gravity = Gravity.CENTER_HORIZONTAL
-                row.forEach { addView(key(ctx, it.toString(), current), keyParams(ctx, weight = 1f)) }
-            }, LinearLayout.LayoutParams(-1, -2).apply { if (i > 0) topMargin = ctx.dp(6) })
-        }
+            add(heading(ctx, R.string.letters), lParams(matchParent))
+            Rows.forEachIndexed { i, row ->
+                add(ctx.horizontalLayout {
+                    // the rows staggered as on the keyboard: half a key in, then one and a half
+                    weightSum = Rows[0].length.toFloat()
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    row.forEach { add(key(ctx, it.toString(), current), keyParams(ctx, weight = 1f)) }
+                }, lParams(matchParent) { if (i > 0) topMargin = ctx.dp(6) })
+            }
 
-        content.addView(heading(ctx, R.string.other_keys))
-        content.addView(FlexboxLayout(ctx).apply {
-            flexWrap = FlexWrap.WRAP
-            current.labels.filter { it !in Letters }.forEach { addView(key(ctx, it, current), otherParams(ctx)) }
-            addView(KeyCaps.key(ctx, "+", "", marked = false, dimmed = false).apply {
-                contentDescription = getString(R.string.add_key)
-                setOnClickListener { askLabel() }
-            }, otherParams(ctx))
-        })
+            add(heading(ctx, R.string.other_keys), lParams(matchParent))
+            add(FlexboxLayout(ctx).apply {
+                flexWrap = FlexWrap.WRAP
+                current.labels.filter { it !in Letters }.forEach { add(key(ctx, it, current), otherParams(ctx)) }
+                add(KeyCaps.key(ctx, "+", "", marked = false, dimmed = false).apply {
+                    contentDescription = getString(R.string.add_key)
+                    setOnClickListener { askLabel() }
+                }, otherParams(ctx))
+            }, lParams(matchParent))
 
-        content.addView(text(ctx, getString(R.string.long_press_legend), body = false).apply {
-            setPadding(0, ctx.dp(16), 0, 0)
-        })
-        if (!current.isEmpty) {
-            content.addView(MaterialButton(ctx, null, MaterialR.attr.materialButtonOutlinedStyle).apply {
-                setText(R.string.reset_all)
-                setOnClickListener { confirmResetAll() }
-            }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = ctx.dp(12) })
+            add(text(ctx, getString(R.string.long_press_legend), body = false).apply {
+                setPadding(0, ctx.dp(16), 0, 0)
+            }, lParams(matchParent))
+            if (!current.isEmpty) {
+                add(MaterialButton(ctx, null, MaterialR.attr.materialButtonOutlinedStyle).apply {
+                    setText(R.string.reset_all)
+                    setOnClickListener { confirmResetAll() }
+                }, lParams { topMargin = ctx.dp(12) })
+            }
         }
     }
 
     private fun key(ctx: Context, label: String, current: PopupOverrides): View {
         val shown = current.resolve(label, PopupPreset[label])?.toList().orEmpty()
         val custom = current[label]
-        return KeyCaps.key(ctx, label, shown.firstOrNull().orEmpty(), marked = custom != null, dimmed = shown.isEmpty()).apply {
+        // the outline and the fading, said
+        val state = listOfNotNull(
+            custom?.let { getString(R.string.edited_x, label) },
+            getString(R.string.long_press_none).takeIf { shown.isEmpty() },
+        ).joinToString(" ").ifEmpty { null }
+        return KeyCaps.key(ctx, label, shown.firstOrNull().orEmpty(), marked = custom != null, dimmed = shown.isEmpty(), state = state).apply {
             setOnClickListener { edit(label) }
         }
     }
 
-    private fun keyParams(ctx: Context, weight: Float) = LinearLayout.LayoutParams(0, ctx.dp(KeyHeight), weight).apply {
+    private fun LinearLayout.keyParams(ctx: Context, weight: Float) = lParams(0, ctx.dp(KeyHeight)) {
+        this.weight = weight
         marginStart = ctx.dp(2)
         marginEnd = ctx.dp(2)
     }
@@ -161,24 +176,24 @@ class PopupOverridesFragment : Fragment() {
         lateinit var render: () -> Unit
         // each button with when it applies
         val buttons = listOf(
-            R.string.long_press_make_first to (editor::canMakeFirst to editor::makeFirst),
-            R.string.long_press_move_left to (editor::canMoveLeft to editor::moveLeft),
-            R.string.long_press_move_right to (editor::canMoveRight to editor::moveRight),
-            R.string.delete to (editor::canDelete to editor::delete),
-        ).map { (text, action) ->
+            Action(R.string.long_press_make_first, editor::canMakeFirst, editor::makeFirst),
+            Action(R.string.long_press_move_left, editor::canMoveLeft, editor::moveLeft),
+            Action(R.string.long_press_move_right, editor::canMoveRight, editor::moveRight),
+            Action(R.string.delete, editor::canDelete, editor::delete),
+        ).map { action ->
             val button = MaterialButton(ctx, null, MaterialR.attr.materialButtonOutlinedStyle).apply {
-                setText(text)
-                setOnClickListener { action.second(); render() }
+                setText(action.text)
+                setOnClickListener { action.run(); render() }
             }
-            actions.addView(button, FlexboxLayout.LayoutParams(-2, -2).apply { marginEnd = ctx.dp(8) })
-            button to action.first
+            with(actions) { add(button, FlexboxLayout.LayoutParams(wrapContent, wrapContent).apply { marginEnd = ctx.dp(8) }) }
+            button to action.enabled
         }
         render = {
             keys.removeAllViews()
             editor.items.forEachIndexed { i, item ->
                 val key = KeyCaps.key(ctx, item, "", marked = i == 0, dimmed = false, selected = i == editor.selected)
                 key.setOnClickListener { editor.tap(i); render() }
-                keys.addView(key, otherParams(ctx))
+                keys.add(key, otherParams(ctx))
             }
             empty.isVisible = editor.items.isEmpty()
             buttons.forEach { (button, enabled) -> button.isEnabled = enabled() }
@@ -189,34 +204,33 @@ class PopupOverridesFragment : Fragment() {
             imeOptions = EditorInfo.IME_ACTION_DONE
             isSingleLine = true
         }
-        fun add() {
+        fun addTyped() {
             editor.add(field.text.toString())
             field.text = null
             render()
         }
-        field.setOnEditorActionListener { _, _, _ -> add(); true }
-        val addRow = LinearLayout(ctx).apply {
+        field.setOnEditorActionListener { _, _, _ -> addTyped(); true }
+        val addRow = ctx.horizontalLayout {
             gravity = Gravity.CENTER_VERTICAL
-            addView(field, LinearLayout.LayoutParams(0, -2, 1f))
-            addView(MaterialButton(ctx, null, androidx.appcompat.R.attr.borderlessButtonStyle).apply {
+            add(field, lParams(0, wrapContent) { weight = 1f })
+            add(MaterialButton(ctx, null, androidx.appcompat.R.attr.borderlessButtonStyle).apply {
                 setText(R.string.add)
-                setOnClickListener { add() }
-            })
+                setOnClickListener { addTyped() }
+            }, lParams())
         }
-        val layout = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
+        val layout = ctx.verticalLayout {
             val pad = ctx.dp(24)
             setPadding(pad, ctx.dp(8), pad, 0)
-            addView(text(ctx, getString(R.string.long_press_editor_hint), body = false))
-            addView(keys, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ctx.dp(12) })
-            addView(empty)
-            addView(actions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ctx.dp(4) })
-            addView(addRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = ctx.dp(8) })
+            add(text(ctx, getString(R.string.long_press_editor_hint), body = false), lParams(matchParent))
+            add(keys, lParams(matchParent) { topMargin = ctx.dp(12) })
+            add(empty, lParams(matchParent))
+            add(actions, lParams(matchParent) { topMargin = ctx.dp(4) })
+            add(addRow, lParams(matchParent) { topMargin = ctx.dp(8) })
         }
         render()
         val builder = AlertDialog.Builder(ctx)
             .setTitle(getString(R.string.long_press_of, label))
-            .setView(ScrollView(ctx).apply { addView(layout) })
+            .setView(layout.wrapInScrollView())
             .setPositiveButton(android.R.string.ok) { _, _ ->
                 // a word left typed in the field counts as added
                 editor.add(field.text.toString())
@@ -240,20 +254,28 @@ class PopupOverridesFragment : Fragment() {
             inputType = InputType.TYPE_CLASS_TEXT
             isSingleLine = true
         }
-        val box = LinearLayout(ctx).apply {
+        val box = ctx.horizontalLayout {
             val pad = ctx.dp(24)
             setPadding(pad, ctx.dp(8), pad, 0)
-            addView(field, LinearLayout.LayoutParams(-1, -2))
+            add(field, lParams(matchParent))
         }
         AlertDialog.Builder(ctx)
             .setTitle(R.string.add_key)
             .setView(box)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                val label = field.text.toString().trim()
-                if (label.isNotEmpty() && PopupOverrides.tokens(label).size == 1) edit(label)
-            }
+            .setPositiveButton(android.R.string.ok, null)
             .setNegativeButton(android.R.string.cancel, null)
             .show()
+            // a label that is no one key is said so, not dropped with the dialog
+            .onPositiveButtonClick onClick@{
+                val label = keyLabel(field.text.toString())
+                if (label == null) {
+                    field.error = getString(R.string.invalid_value)
+                    field.requestFocus()
+                    return@onClick false
+                }
+                edit(label)
+                true
+            }
     }
 
     private fun confirmResetAll() {
@@ -267,6 +289,8 @@ class PopupOverridesFragment : Fragment() {
             .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
+
+    private class Action(@StringRes val text: Int, val enabled: () -> Boolean, val run: () -> Unit)
 
     companion object {
         private val Rows = listOf("qwertyuiop", "asdfghjkl", "zxcvbnm")
@@ -285,3 +309,6 @@ internal fun PopupOverrides.withEdit(label: String, items: List<String>, preset:
     val unedited = without(label)
     return if (unedited.resolve(label, preset)?.toList().orEmpty() == items) unedited else with(label, items)
 }
+
+/** The key [text] names, or null: a label is one word of the stored format, so none or two name no key. */
+internal fun keyLabel(text: String): String? = PopupOverrides.tokens(text).singleOrNull()

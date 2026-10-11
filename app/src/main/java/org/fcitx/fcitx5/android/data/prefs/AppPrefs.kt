@@ -27,6 +27,7 @@ import org.fcitx.fcitx5.android.input.voice.VoiceFeature
 import org.fcitx.fcitx5.android.utils.DeviceUtil
 import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.vibrator
+import timber.log.Timber
 
 class AppPrefs(private val sharedPreferences: SharedPreferences) {
 
@@ -57,20 +58,26 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val ignoreSystemCursor = hidden { switch(R.string.ignore_sys_cursor, "ignore_system_cursor", false) }
         val hideKeyConfig = hidden { switch(R.string.hide_key_config, "hide_key_config", true) }
         val disableAnimation = switch(R.string.disable_animation, "disable_animation", false)
-        val vivoKeypressWorkaround = hidden { switch(
-            R.string.vivo_keypress_workaround,
-            "vivo_keypress_workaround",
-            // there's some feedback that this workaround is no longer necessary on Origin OS 4, which based on Android 14
-            Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE && DeviceUtil.isVivoOriginOS
-        ) }
-        val ignoreSystemWindowInsets = hidden { switch(
-            R.string.ignore_system_window_insets, "ignore_system_window_insets", false
-        ) }
-        val keyboardHeightPercentBase = hidden { enumList(
-            R.string.keyboard_height_percent_base,
-            "keyboard_height_percent_base",
-            KeyboardHeightPercentBase.DisplayMetrics
-        ) }
+        val vivoKeypressWorkaround = hidden {
+            switch(
+                R.string.vivo_keypress_workaround,
+                "vivo_keypress_workaround",
+                // there's some feedback that this workaround is no longer necessary on Origin OS 4, which based on Android 14
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE && DeviceUtil.isVivoOriginOS
+            )
+        }
+        val ignoreSystemWindowInsets = hidden {
+            switch(
+                R.string.ignore_system_window_insets, "ignore_system_window_insets", false
+            )
+        }
+        val keyboardHeightPercentBase = hidden {
+            enumList(
+                R.string.keyboard_height_percent_base,
+                "keyboard_height_percent_base",
+                KeyboardHeightPercentBase.DisplayMetrics
+            )
+        }
     }
 
     inner class Keyboard : ManagedPreferenceCategory(R.string.virtual_keyboard, sharedPreferences) {
@@ -79,11 +86,13 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         }
 
         val popupOnKeyPress = switch(R.string.popup_on_key_press, "popup_on_key_press", true)
-        val keepLettersUppercase = hidden { switch(
-            R.string.keep_keyboard_letters_uppercase,
-            "keep_keyboard_letters_uppercase",
-            false
-        ) }
+        val keepLettersUppercase = hidden {
+            switch(
+                R.string.keep_keyboard_letters_uppercase,
+                "keep_keyboard_letters_uppercase",
+                false
+            )
+        }
         val expandKeypressArea =
             hidden { switch(R.string.expand_keypress_area, "expand_keypress_area", false) }
         val swipeSymbolDirection = enumList(
@@ -91,20 +100,22 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             "swipe_symbol_behavior",
             SwipeSymbolDirection.Down
         )
-        val longPressDelay = hidden(setByLevels = true) { int(
-            R.string.keyboard_long_press_delay,
-            "keyboard_long_press_delay",
-            300,
-            100,
-            700,
-            "ms",
-            10
-        ) }
+        val longPressDelay = hidden(setByLevels = true) {
+            int(
+                R.string.keyboard_long_press_delay,
+                "keyboard_long_press_delay",
+                300,
+                100,
+                700,
+                "ms",
+                10
+            )
+        }
 
         init {
             levels(
                 R.string.keyboard_long_press_delay, "keyboard_long_press_delay_level",
-                listOf("keyboard_long_press_delay" to 300),
+                listOf(longPressDelay.key to longPressDelay.defaultValue),
                 listOf(Level(R.string.level_short, 200), Level(R.string.level_medium, 300), Level(R.string.level_long, 450))
             )
         }
@@ -120,11 +131,13 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val autoPairs = switch(R.string.auto_pairs, "auto_pairs", true)
         val showLangSwitchKey =
             switch(R.string.show_lang_switch_key, "show_lang_switch_key", true)
-        val langSwitchKeyBehavior = hidden { enumList(
-            R.string.lang_switch_key_behavior,
-            "lang_switch_key_behavior",
-            LangSwitchBehavior.Enumerate
-        ) { showLangSwitchKey.getValue() } }
+        val langSwitchKeyBehavior = hidden {
+            enumList(
+                R.string.lang_switch_key_behavior,
+                "lang_switch_key_behavior",
+                LangSwitchBehavior.Enumerate
+            ) { showLangSwitchKey.getValue() }
+        }
 
         val focusChangeResetKeyboard =
             hidden { switch(R.string.reset_keyboard_on_focus_change, "reset_keyboard_on_focus_change", true) }
@@ -135,16 +148,20 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val toolbarNumRowOnPassword =
             hidden { switch(R.string.toolbar_num_row_on_password, "toolbar_num_row_on_password", true) }
 
-        val horizontalCandidateStyle = hidden { enumList(
-            R.string.horizontal_candidate_style,
-            "horizontal_candidate_style",
-            HorizontalCandidateMode.AutoFillWidth
-        ) }
-        val expandedCandidateStyle = hidden { enumList(
-            R.string.expanded_candidate_style,
-            "expanded_candidate_style",
-            ExpandedCandidateStyle.Grid
-        ) }
+        val horizontalCandidateStyle = hidden {
+            enumList(
+                R.string.horizontal_candidate_style,
+                "horizontal_candidate_style",
+                HorizontalCandidateMode.AutoFillWidth
+            )
+        }
+        val expandedCandidateStyle = hidden {
+            enumList(
+                R.string.expanded_candidate_style,
+                "expanded_candidate_style",
+                ExpandedCandidateStyle.Grid
+            )
+        }
 
         val expandedCandidateGridSpanCount: ManagedPreference.PInt
         val expandedCandidateGridSpanCountLandscape: ManagedPreference.PInt
@@ -244,11 +261,13 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
                 "haptic_on_keypress",
                 InputFeedbackMode.FollowingSystem
             )
-        val hapticOnKeyUp = hidden { switch(
-            R.string.button_up_haptic_feedback,
-            "haptic_on_keyup",
-            false
-        ) { hapticOnKeyPress.getValue() != InputFeedbackMode.Disabled } }
+        val hapticOnKeyUp = hidden {
+            switch(
+                R.string.button_up_haptic_feedback,
+                "haptic_on_keyup",
+                false
+            ) { hapticOnKeyPress.getValue() != InputFeedbackMode.Disabled }
+        }
         val hapticOnRepeat = hidden { switch(R.string.haptic_on_repeat, "haptic_on_repeat", false) }
 
         val buttonPressVibrationMilliseconds: ManagedPreference.PInt
@@ -295,7 +314,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
                             // hide this if using default duration
                             && (buttonPressVibrationMilliseconds.getValue() != 0 || buttonLongPressVibrationMilliseconds.getValue() != 0)
                             && (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && appContext.vibrator.hasAmplitudeControl())
-            }
+                }
             }
             buttonPressVibrationAmplitude = primary
             buttonLongPressVibrationAmplitude = secondary
@@ -303,9 +322,9 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             levels(
                 R.string.vibration_strength, "vibration_strength_level",
                 listOf(
-                    "button_vibration_press_milliseconds" to 0, "button_vibration_long_press_milliseconds" to 0,
-                    "button_vibration_press_amplitude" to 0, "button_vibration_long_press_amplitude" to 0,
-                ),
+                    buttonPressVibrationMilliseconds, buttonLongPressVibrationMilliseconds,
+                    buttonPressVibrationAmplitude, buttonLongPressVibrationAmplitude,
+                ).map { it.key to it.defaultValue },
                 listOf(
                     Level(R.string.system_default, 0, 0, 0, 0),
                     Level(R.string.level_light, 10, 20, 60, 90),
@@ -320,22 +339,24 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             "sound_on_keypress",
             InputFeedbackMode.FollowingSystem
         )
-        val soundOnKeyPressVolume = hidden(setByLevels = true) { int(
-            R.string.button_sound_volume,
-            "button_sound_volume",
-            0,
-            0,
-            100,
-            "%",
-            defaultLabel = R.string.system_default
-        ) {
-            soundOnKeyPress.getValue() != InputFeedbackMode.Disabled
-        } }
+        val soundOnKeyPressVolume = hidden(setByLevels = true) {
+            int(
+                R.string.button_sound_volume,
+                "button_sound_volume",
+                0,
+                0,
+                100,
+                "%",
+                defaultLabel = R.string.system_default
+            ) {
+                soundOnKeyPress.getValue() != InputFeedbackMode.Disabled
+            }
+        }
 
         init {
             levels(
                 R.string.button_sound_volume, "button_sound_volume_level",
-                listOf("button_sound_volume" to 0),
+                listOf(soundOnKeyPressVolume.key to soundOnKeyPressVolume.defaultValue),
                 listOf(
                     Level(R.string.system_default, 0),
                     Level(R.string.level_quiet, 20),
@@ -360,15 +381,17 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             FloatingCandidatesOrientation.Automatic
         )
 
-        val windowMinWidth = hidden { int(
-            R.string.candidates_window_min_width,
-            "candidates_window_min_width",
-            0,
-            0,
-            640,
-            "dp",
-            10
-        ) }
+        val windowMinWidth = hidden {
+            int(
+                R.string.candidates_window_min_width,
+                "candidates_window_min_width",
+                0,
+                0,
+                640,
+                "dp",
+                10
+            )
+        }
 
         val windowPadding =
             hidden { int(R.string.candidates_window_padding, "candidates_window_padding", 4, 0, 32, "dp") }
@@ -412,17 +435,21 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val clipboardSuggestion = switch(
             R.string.clipboard_suggestion, "clipboard_suggestion", true
         ) { clipboardListening.getValue() }
-        val clipboardItemTimeout = hidden { int(
-            R.string.clipboard_suggestion_timeout,
-            "clipboard_item_timeout",
-            30,
-            -1,
-            Int.MAX_VALUE,
-            "s"
-        ) { clipboardListening.getValue() && clipboardSuggestion.getValue() } }
-        val clipboardReturnAfterPaste = hidden { switch(
-            R.string.clipboard_return_after_paste, "clipboard_return_after_paste", false
-        ) { clipboardListening.getValue() } }
+        val clipboardItemTimeout = hidden {
+            int(
+                R.string.clipboard_suggestion_timeout,
+                "clipboard_item_timeout",
+                30,
+                -1,
+                Int.MAX_VALUE,
+                "s"
+            ) { clipboardListening.getValue() && clipboardSuggestion.getValue() }
+        }
+        val clipboardReturnAfterPaste = hidden {
+            switch(
+                R.string.clipboard_return_after_paste, "clipboard_return_after_paste", false
+            ) { clipboardListening.getValue() }
+        }
         val clipboardMaskSensitive = switch(
             R.string.clipboard_mask_sensitive, "clipboard_mask_sensitive", true
         ) { clipboardListening.getValue() }
@@ -435,11 +462,13 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
     }
 
     inner class Symbols : ManagedPreferenceCategory(R.string.emoji_and_symbols, sharedPreferences) {
-        val hideUnsupportedEmojis = hidden { switch(
-            R.string.hide_unsupported_emojis,
-            "hide_unsupported_emojis",
-            true
-        ) }
+        val hideUnsupportedEmojis = hidden {
+            switch(
+                R.string.hide_unsupported_emojis,
+                "hide_unsupported_emojis",
+                true
+            )
+        }
 
         val defaultEmojiSkinTone = enumList(
             R.string.default_emoji_skin_tone,
@@ -450,11 +479,17 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
 
     private val providers = mutableListOf<ManagedPreferenceProvider>()
 
+    // resetHiddenSettings ran in this process: a category registered after it is reset as it registers
+    private var hiddenResetInProcess = false
+
     fun <T : ManagedPreferenceProvider> registerProvider(
         providerF: (SharedPreferences) -> T
     ): T {
         val provider = providerF(sharedPreferences)
         providers.add(provider)
+        if (hiddenResetInProcess && provider is ManagedPreferenceCategory) {
+            sharedPreferences.edit(commit = true) { provider.resetHidden(this) }
+        }
         return provider
     }
 
@@ -509,15 +544,18 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
     /**
      * Puts the settings that have no UI back to their defaults ([ManagedPreferenceCategory.hidden]):
      * once, and [again] after an import of the user's data, for what an older version or a backup
-     * set there could not be changed back.
+     * set there could not be changed back. Every category registered here is reset, ThemePrefs too:
+     * ThemeManager registers it after this has run at the start, and [registerProvider] resets it then.
      */
     fun resetHiddenSettings(again: Boolean = false) {
         if (!again && internal.hiddenSettingsReset.getValue()) return
         // on disk before an import's marker goes
         sharedPreferences.edit(commit = true) {
-            listOf(keyboard, candidates, clipboard, symbols, advanced).forEach { it.resetHidden(this@edit) }
+            providers.filterIsInstance<ManagedPreferenceCategory>().forEach { it.resetHidden(this@edit) }
             putBoolean(internal.hiddenSettingsReset.key, true)
         }
+        hiddenResetInProcess = true
+        Timber.i("settings without a UI reset to their defaults%s", if (again) " after an import" else "")
     }
 
     companion object {

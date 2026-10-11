@@ -49,7 +49,7 @@ object DeviceInfo {
         appendLine("Version Name: ${pkgInfo.versionName}")
         appendLine("--------- Build Info")
         appendLine("Build Type: ${BuildConfig.BUILD_TYPE}")
-        appendLine("Build Time: ${iso8601UTCDateTime(BuildConfig.BUILD_TIME)}")
+        appendLine("Commit Time: ${iso8601UTCDateTime(BuildConfig.BUILD_TIME)}")
         appendLine("Build Git Hash: ${BuildConfig.BUILD_GIT_HASH}")
     }
 }

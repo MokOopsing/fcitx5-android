@@ -10,13 +10,18 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.widget.FrameLayout
-import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.view.ViewCompat
 import com.google.android.material.R as MaterialR
 import org.fcitx.fcitx5.android.data.theme.ThemeManager
 import org.fcitx.fcitx5.android.data.theme.ThemePrefs.PunctuationPosition
 import org.fcitx.fcitx5.android.utils.styledColor
 import splitties.dimensions.dp
+import splitties.views.dsl.core.add
+import splitties.views.dsl.core.lParams
+import splitties.views.dsl.core.matchParent
+import splitties.views.dsl.core.verticalLayout
+import splitties.views.dsl.core.wrapContent
 
 /**
  * Keys drawn as keys in the settings that edit what a key does (long press, Chinese punctuation),
@@ -42,16 +47,22 @@ object KeyCaps {
     /**
      * A key with [text] on it and [hint] small where the keyboard puts the first long-press
      * character (the theme's [PunctuationPosition], as [KeyView][org.fcitx.fcitx5.android.input.keyboard.KeyView]
-     * places it); [dimmed] for a key whose long press is turned off.
+     * places it); [dimmed] for a key whose long press is turned off. [state] is what a screen
+     * reader says of what the outline and the fading show, which only the caller knows.
      */
-    fun key(ctx: Context, text: String, hint: String, marked: Boolean, dimmed: Boolean, selected: Boolean = false) = FrameLayout(ctx).apply {
+    fun key(
+        ctx: Context, text: String, hint: String, marked: Boolean, dimmed: Boolean, selected: Boolean = false,
+        state: String? = null,
+    ) = FrameLayout(ctx).apply {
         background = background(ctx, marked, selected = selected)
         isClickable = true
         isFocusable = true
         foreground = ctx.obtainStyledAttributes(intArrayOf(android.R.attr.selectableItemBackground)).run {
             getDrawable(0).also { recycle() }
         }
-        contentDescription = text
+        contentDescription = listOf(text, hint).filter { it.isNotEmpty() }.joinToString(", ")
+        ViewCompat.setStateDescription(this, state)
+        isSelected = selected
         val label = label(ctx, text, 20f).apply { alpha = if (dimmed) 0.4f else 1f }
         val small = TextView(ctx).apply {
             this.text = hint
@@ -61,18 +72,17 @@ object KeyCaps {
         }
         when (hintPosition(ctx)) {
             PunctuationPosition.TopRight -> {
-                addView(label)
-                addView(small, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply {
+                add(label, lParams(matchParent, matchParent))
+                add(small, lParams(wrapContent, wrapContent, Gravity.TOP or Gravity.END) {
                     setMargins(0, ctx.dp(2), ctx.dp(4), 0)
                 })
             }
-            PunctuationPosition.Bottom -> addView(LinearLayout(ctx).apply {
-                orientation = LinearLayout.VERTICAL
+            PunctuationPosition.Bottom -> add(ctx.verticalLayout {
                 gravity = Gravity.CENTER_HORIZONTAL
-                addView(label, LinearLayout.LayoutParams(-2, -2))
-                if (hint.isNotEmpty()) addView(small, LinearLayout.LayoutParams(-2, -2))
-            }, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
-            PunctuationPosition.None -> addView(label)
+                add(label, lParams(wrapContent, wrapContent))
+                if (hint.isNotEmpty()) add(small, lParams(wrapContent, wrapContent))
+            }, lParams(wrapContent, wrapContent, Gravity.CENTER))
+            PunctuationPosition.None -> add(label, lParams(matchParent, matchParent))
         }
     }
 

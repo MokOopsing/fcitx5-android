@@ -31,6 +31,7 @@ import org.fcitx.fcitx5.android.utils.setupForest
 import org.fcitx.fcitx5.android.utils.startActivity
 import org.fcitx.fcitx5.android.utils.userManager
 import timber.log.Timber
+import java.io.File
 import kotlin.system.exitProcess
 
 class FcitxApplication : Application() {
@@ -130,11 +131,7 @@ class FcitxApplication : Application() {
         Timber.d("isDirectBootMode=$isDirectBootMode")
 
         AppPrefs.init(sharedPrefs)
-        // the settings without a UI back to their defaults: once, and after an import of the user's
-        // data (in direct boot these are the device's copy, and the import's marker cannot be read)
-        val imported = if (isDirectBootMode) null else importedUserDataMarker(this).takeIf { it.exists() }
-        AppPrefs.getInstance().resetHiddenSettings(again = imported != null)
-        imported?.delete()
+        resetHiddenSettings(AppPrefs.getInstance(), isDirectBootMode) { importedUserDataMarker(this) }
         // record last pid for crash logs
         AppPrefs.getInstance().internal.pid.apply {
             val currentPid = Process.myPid()
@@ -173,6 +170,18 @@ class FcitxApplication : Application() {
             instance ?: throw IllegalStateException("FcitxApplication has not been created!")
 
         fun getLastPid() = lastPid
+
+        /**
+         * The settings without a UI back to their defaults: once, and after an import of the user's
+         * data, whose [marker] then goes (in [directBoot] these are the device's copy, and the
+         * import's marker cannot be read)
+         */
+        internal fun resetHiddenSettings(prefs: AppPrefs, directBoot: Boolean, marker: () -> File) {
+            val imported = if (directBoot) null else marker().takeIf { it.exists() }
+            prefs.resetHiddenSettings(again = imported != null)
+            imported?.delete()
+        }
+
         private const val MAX_STACKTRACE_SIZE = 128000
 
         const val ACTION_RESTART_FCITX_INSTANCE =
@@ -182,7 +191,7 @@ class FcitxApplication : Application() {
          * This permission is requested by com.android.shell, makes it possible to restart
          * fcitx instance from `adb shell am` command:
          * ```sh
-         * adb shell am broadcast -a org.fcitx.fcitx5.android.action.RESTART_FCITX_INSTANCE
+         * adb shell am broadcast -a io.github.sraw.youmo.action.RESTART_FCITX_INSTANCE
          * ```
          * https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-7.0.0_r1/packages/Shell/AndroidManifest.xml#67
          *

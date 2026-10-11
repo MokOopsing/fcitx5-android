@@ -10,9 +10,7 @@ import android.view.inputmethod.EditorInfo
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.Lifecycle
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.fcitx.fcitx5.android.FcitxApplication
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.quickphrase.QuickPhrase
 import org.fcitx.fcitx5.android.data.quickphrase.QuickPhraseData
@@ -21,6 +19,7 @@ import org.fcitx.fcitx5.android.ui.common.BaseDynamicListUi
 import org.fcitx.fcitx5.android.ui.common.OnItemChangedListener
 import org.fcitx.fcitx5.android.ui.main.EditDeleteMenuProvider
 import org.fcitx.fcitx5.android.ui.main.MainViewModel.ButtonMode
+import org.fcitx.fcitx5.android.ui.main.launchOutlivingPage
 import org.fcitx.fcitx5.android.utils.NaiveDustman
 import org.fcitx.fcitx5.android.utils.lazyRoute
 import org.fcitx.fcitx5.android.utils.materialTextInput
@@ -161,10 +160,13 @@ class QuickPhraseEditFragment : ProgressFragment(), OnItemChangedListener<QuickP
         resetDustman()
         // taken now: a popped page is detached by the time the save is done
         val parent = parentFragmentManager
+        // copied now, on the main thread: the list can be edited while the save reads it, back on a stopped page
+        val data = QuickPhraseData(ui.entries.toList())
         // the app's scope: a pop ends the page's right after onStop, and with it the result
-        FcitxApplication.getInstance().coroutineScope.launch {
+        // a failed save is logged and shown by launchOutlivingPage, and the parent is not told to reload
+        launchOutlivingPage("quick phrase") {
             withContext(Dispatchers.IO) {
-                quickPhrase.saveData(QuickPhraseData(ui.entries))
+                quickPhrase.saveData(data)
             }
             // tell parent that we need to reload
             parent.setFragmentResult(

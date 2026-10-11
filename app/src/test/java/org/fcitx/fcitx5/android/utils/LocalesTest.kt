@@ -7,6 +7,8 @@ package org.fcitx.fcitx5.android.utils
 import android.app.LocaleManager
 import android.content.res.Configuration
 import android.os.LocaleList
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import org.fcitx.fcitx5.android.FcitxApplication
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.ui.main.AppLanguage
@@ -123,5 +125,54 @@ class LocalesTest {
         val system = app.getSystemService(LocaleManager::class.java).systemLocales
         assertEquals(Locales.fcitxLocales((0..<system.size()).map { system[it] }).joinToString(":"), Locales.fcitxLocale)
         assertNotEquals("zh_TW", Locales.languageWithCountry)
+    }
+
+    // picked(): below Android 13 appcompat's pick, else the app's copy; from 13 on the system's alone
+    @Test
+    @Config(sdk = [23], application = FcitxApplication::class)
+    fun nothingPickedBeforeAndroid13IsThePhonesLanguages() {
+        assertEquals("", Locales.picked(appContext).toLanguageTags())
+    }
+
+    @Test
+    @Config(sdk = [23], application = FcitxApplication::class)
+    fun theAppsCopyStandsInBeforeAndroid13UntilAppcompatKnowsThePick() {
+        val copy = AppPrefs.getInstance().internal.appLanguage
+        copy.setValue("zh-TW")
+        try {
+            assertEquals("zh-TW", Locales.picked(appContext).toLanguageTags())
+        } finally {
+            copy.setValue("")
+        }
+    }
+
+    @Test
+    @Config(sdk = [23], application = FcitxApplication::class)
+    fun appcompatsPickComesBeforeTheAppsCopyBeforeAndroid13() {
+        val copy = AppPrefs.getInstance().internal.appLanguage
+        copy.setValue("zh-TW")
+        AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("en"))
+        try {
+            assertEquals("en", Locales.picked(appContext).toLanguageTags())
+        } finally {
+            AppCompatDelegate.setApplicationLocales(LocaleListCompat.getEmptyLocaleList())
+            copy.setValue("")
+        }
+    }
+
+    @Test
+    @Config(application = FcitxApplication::class)
+    fun fromAndroid13ThePickIsTheSystemsAndTheAppsCopyIsNotRead() {
+        val copy = AppPrefs.getInstance().internal.appLanguage
+        val system = appContext.getSystemService(LocaleManager::class.java)
+        copy.setValue("zh-TW")
+        try {
+            system.applicationLocales = LocaleList.getEmptyLocaleList()
+            assertEquals("", Locales.picked(appContext).toLanguageTags())
+            system.applicationLocales = LocaleList.forLanguageTags("en")
+            assertEquals("en", Locales.picked(appContext).toLanguageTags())
+        } finally {
+            copy.setValue("")
+        }
     }
 }

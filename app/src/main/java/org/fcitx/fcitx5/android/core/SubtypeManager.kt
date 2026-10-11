@@ -18,7 +18,7 @@ object SubtypeManager {
 
     private const val MODE_KEYBOARD = "keyboard"
 
-    private const val IM_KEYBOARD = "keyboard-us"
+    private const val IM_KEYBOARD = InputMethodNames.KEYBOARD
 
     // replaced whole, never changed in place: the main thread reads it while another thread syncs
     @Volatile

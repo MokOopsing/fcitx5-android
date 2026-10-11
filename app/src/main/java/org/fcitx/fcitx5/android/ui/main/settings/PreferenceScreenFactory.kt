@@ -52,8 +52,11 @@ object PreferenceScreenFactory {
         val cfg = raw["cfg"]
         val desc = raw["desc"]
         val store = FcitxRawConfigStore(cfg)
-        // TODO: needs some error handling
-        val topLevelDesc = ConfigDescriptor.parseTopLevel(desc).getOrElse { throw it }
+        // a description that does not parse: a page with no options (FcitxPreferenceFragment says so), not a crash
+        val topLevelDesc = ConfigDescriptor.parseTopLevel(desc).getOrElse {
+            Timber.w(it, "Cannot read the config description")
+            return screen
+        }
         screen.title = topLevelDesc.name
         topLevelDesc.values.forEach {
             general(context, fragmentManager, cfg.findByName(it.name), screen, it, store, save)

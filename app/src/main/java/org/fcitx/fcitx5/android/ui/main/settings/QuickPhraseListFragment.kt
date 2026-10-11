@@ -22,9 +22,10 @@ import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.fcitx.fcitx5.android.FcitxApplication
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.reloadQuickPhrase
 import org.fcitx.fcitx5.android.data.quickphrase.BuiltinQuickPhrase
@@ -36,6 +37,7 @@ import org.fcitx.fcitx5.android.ui.common.OnItemChangedListener
 import org.fcitx.fcitx5.android.ui.main.EditDeleteMenuProvider
 import org.fcitx.fcitx5.android.ui.main.MainViewModel
 import org.fcitx.fcitx5.android.ui.main.MainViewModel.ButtonMode
+import org.fcitx.fcitx5.android.ui.main.launchOutlivingPage
 import org.fcitx.fcitx5.android.utils.NaiveDustman
 import org.fcitx.fcitx5.android.utils.importErrorDialog
 import org.fcitx.fcitx5.android.utils.item
@@ -54,6 +56,7 @@ import splitties.views.dsl.core.matchParent
 import splitties.views.dsl.core.verticalLayout
 import splitties.views.imageDrawable
 import splitties.views.setPaddingDp
+import timber.log.Timber
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -259,7 +262,7 @@ class QuickPhraseListFragment : Fragment(), OnItemChangedListener<QuickPhrase> {
                 .setOngoing(true)
                 .setProgress(100, 0, true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .build().let { nm.notify(id, it) }
+                .build().let { nm.notify(IMPORT_TAG, id, it) }
             try {
                 val imported = withContext(Dispatchers.IO) {
                     val inputStream = cr.openInputStream(uri)!!
@@ -269,7 +272,7 @@ class QuickPhraseListFragment : Fragment(), OnItemChangedListener<QuickPhrase> {
             } catch (e: Exception) {
                 ctx.importErrorDialog(e)
             }
-            nm.cancel(id)
+            nm.cancel(IMPORT_TAG, id)
         }
     }
 
@@ -281,7 +284,7 @@ class QuickPhraseListFragment : Fragment(), OnItemChangedListener<QuickPhrase> {
         val nm = requireContext().notificationManager
         // the app's scope: leaving the page ends the page's right after onStop, and with it the
         // reload and the cancel; immediate as that one is, so what reads the fragment runs now
-        FcitxApplication.getInstance().coroutineScope.launch(Dispatchers.Main.immediate) {
+        launchOutlivingPage("quick phrase") {
             if (busy.compareAndSet(false, true)) {
                 val id = RELOAD_ID++
                 NotificationCompat.Builder(requireContext(), CHANNEL_ID)
@@ -291,13 +294,15 @@ class QuickPhraseListFragment : Fragment(), OnItemChangedListener<QuickPhrase> {
                     .setOngoing(true)
                     .setProgress(100, 0, true)
                     .setPriority(NotificationCompat.PRIORITY_HIGH)
-                    .build().let { nm.notify(id, it) }
+                    .build().let { nm.notify(RELOAD_TAG, id, it) }
                 try {
                     viewModel.fcitx.runOnReady {
-                        reloadQuickPhrase()
+                        reloadingUnlessStopped({ isReady }, { Timber.w(it, "quick phrase reload") }) {
+                            reloadQuickPhrase()
+                        }
                     }
                 } finally {
-                    nm.cancel(id)
+                    nm.cancel(RELOAD_TAG, id)
                     busy.set(false)
                 }
             }
@@ -372,6 +377,9 @@ class QuickPhraseListFragment : Fragment(), OnItemChangedListener<QuickPhrase> {
     companion object {
         private var RELOAD_ID = 0
         private var IMPORT_ID = 0
+        // a notification is its tag and id, app-wide: untagged, ids each counting from 0 cancelled one another's
+        private const val RELOAD_TAG = "quickphrase_reload"
+        private const val IMPORT_TAG = "quickphrase_import"
         const val CHANNEL_ID = "quickphrase"
     }
 }
@@ -383,4 +391,28 @@ internal fun newQuickPhraseNameError(name: String, taken: List<String>): Int? = 
     // two rows over one file, removing either deletes both; the phone's storage ignores case
     taken.any { it.equals(name, ignoreCase = true) } -> R.string.quickphrase_already_exists
     else -> null
+}
+
+/**
+ * Runs [reload], handing [onStopped] the IllegalStateException FcitxDispatcher.dispatch throws when
+ * fcitx stopped as the reload was handed to it: it reads the saved files anew as it starts. While
+ * fcitx is still [ready], such an exception is a bug and is rethrown for the crash handler; a
+ * cancellation is rethrown as well, and ends the coroutine quietly. A restart reaching READY between
+ * the throw and that check would be taken for a bug too, which does not happen in practice: READY
+ * comes only after fcitx's native startup, which begins once the dispatcher runs again, and the check
+ * is a few statements after the throw on the same thread.
+ */
+internal suspend fun reloadingUnlessStopped(
+    ready: () -> Boolean,
+    onStopped: (IllegalStateException) -> Unit,
+    reload: suspend () -> Unit
+) {
+    try {
+        reload()
+    } catch (e: IllegalStateException) {
+        // a CancellationException is an IllegalStateException too
+        currentCoroutineContext().ensureActive()
+        if (ready()) throw e
+        onStopped(e)
+    }
 }
