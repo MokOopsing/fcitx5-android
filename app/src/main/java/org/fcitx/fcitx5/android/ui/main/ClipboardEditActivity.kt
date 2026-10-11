@@ -15,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.clipboard.ClipboardManager
 import org.fcitx.fcitx5.android.data.clipboard.db.ClipboardEntry
 import org.fcitx.fcitx5.android.databinding.ActivityClipboardEditBinding
@@ -22,6 +23,8 @@ import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.clipboardManager
 import org.fcitx.fcitx5.android.utils.inputMethodManager
 import org.fcitx.fcitx5.android.utils.str
+import org.fcitx.fcitx5.android.utils.toast
+import timber.log.Timber
 
 class ClipboardEditActivity : Activity() {
 
@@ -49,10 +52,16 @@ class ClipboardEditActivity : Activity() {
         val str = editText.str
         val id = entryId
         // the app's scope, not this one: onDestroy cancels it right after finish(), losing the edit and the copy
-        ClipboardManager.launch {
+        launchOutlivingPage("clipboard edit") {
             ClipboardManager.updateText(id, str)
             if (copy) {
-                appContext.clipboardManager.setPrimaryClip(ClipData.newPlainText("", str))
+                copyingClip({
+                    Timber.w(it, "clipboard edit copy")
+                    // not its message, the binder's "TransactionTooLargeException: data parcel size N bytes"
+                    appContext.toast(R.string.clipboard_copy_too_large)
+                }) {
+                    appContext.clipboardManager.setPrimaryClip(ClipData.newPlainText("", str))
+                }
             }
         }
         finish()
@@ -93,5 +102,19 @@ class ClipboardEditActivity : Activity() {
     companion object {
         const val ENTRY_ID = "id"
         const val LAST_ENTRY = "last_entry"
+    }
+}
+
+/**
+ * Runs [copy], handing [onRefused] what the clipboard service throws for a clip it does not take:
+ * one too big for a binder transaction comes as a RuntimeException around a
+ * TransactionTooLargeException. That is the user's text, not a bug, so it is shown, not left to
+ * the crash handler past [launchOutlivingPage], which would take the keyboard down with the app.
+ */
+internal fun copyingClip(onRefused: (RuntimeException) -> Unit, copy: () -> Unit) {
+    try {
+        copy()
+    } catch (@Suppress("TooGenericExceptionCaught") e: RuntimeException) {
+        onRefused(e)
     }
 }

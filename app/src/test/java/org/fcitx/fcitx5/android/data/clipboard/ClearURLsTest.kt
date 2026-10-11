@@ -11,7 +11,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import java.io.File
 
-// Robolectric for the real android.net.Uri and UrlQuerySanitizer the rules are applied with
+// Robolectric for the real android.net.Uri the rules are applied with
 @RunWith(RobolectricTestRunner::class)
 class ClearURLsTest {
 
@@ -27,6 +27,17 @@ class ClearURLsTest {
             "https://example.com/page?id=42#top",
             clearUrls.transform("https://example.com/page?utm_source=news&id=42&fbclid=abc#top")
         )
+    }
+
+    @Test
+    fun aUrlLeftWithNoParametersEndsWithoutQuestionMarkOrHash() {
+        assertEquals("https://example.com/p", clearUrls.transform("https://example.com/p?utm_source=x"))
+        assertEquals("https://example.com/p", clearUrls.transform("https://example.com/p?utm_source=x#utm_campaign=y"))
+    }
+
+    @Test
+    fun anEscapedKeyIsMatchedAsItReads() {
+        assertEquals("https://example.com/p?id=1", clearUrls.transform("https://example.com/p?utm%5Fsource=x&id=1"))
     }
 
     @Test
@@ -154,6 +165,11 @@ class ClearURLsTest {
 
     @Test
     fun aRedirectTargetInAQueryValueIsDecodedOnceThoughItsSchemeIsPlain() {
+        // its own %26 stays escaped: decoding until nothing changes would split q's value at it
+        assertEquals(
+            "https://example.com/s?q=a%26b",
+            clearUrls.transform("https://www.google.com/url?q=https://example.com/s?q%3Da%2526b&sa=D")
+        )
         assertEquals(
             "https://example.com/p?a=1&b=2",
             clearUrls.transform("https://www.google.com/url?q=https://example.com/p?a%3D1%26b%3D2&sa=D")
@@ -205,6 +221,41 @@ class ClearURLsTest {
     }
 
     @Test
+    fun anUnwrappedTargetIsCleanedInTurn() {
+        assertEquals(
+            "https://example.com/a?id=1",
+            clearUrls.transform("https://www.google.com/url?q=https%3A%2F%2Fexample.com%2Fa%3Fid%3D1%26utm_source%3Dx&sa=D")
+        )
+        // facebook's redirect inside google's
+        assertEquals(
+            "https://example.com/a?id=1",
+            clearUrls.transform(
+                "https://www.google.com/url?q=https%3A%2F%2Fl.facebook.com%2Fl.php%3Fu%3Dhttps%253A%252F%252F" +
+                    "example.com%252Fa%253Fid%253D1%2526utm_source%253Dx%26h%3DAT0&sa=D"
+            )
+        )
+    }
+
+    @Test
+    fun onlySoManyRedirectsDeepAreUnwrapped() {
+        val target = "https://example.com/a"
+        // href.li's raw tail: each layer the next, as it is
+        fun wrapped(layers: Int) = "https://href.li/?".repeat(layers) + target
+        // MAX_REDIRECTS: the sixth layer is the last unwrapped, a seventh stays
+        assertEquals(target, clearUrls.transform(wrapped(6)))
+        assertEquals(wrapped(1), clearUrls.transform(wrapped(7)))
+    }
+
+    @Test
+    fun aRedirectTargetThatDoesNotDecodeIsLeftWrapped() {
+        // its stray % would decode to U+FFFD, and the redirect still takes the user where it leads
+        assertEquals(
+            "https://www.google.com/url?q=https://example.com/50%off",
+            clearUrls.transform("https://www.google.com/url?q=https://example.com/50%off&sa=D")
+        )
+    }
+
+    @Test
     fun providerExceptionsAreHonoured() {
         // docs.google.com is on the google provider's exception list, so its "ved" stays
         val url = "https://docs.google.com/document/d/x/edit?ved=abc"
@@ -220,11 +271,15 @@ class ClearURLsTest {
     companion object {
         private lateinit var clearUrls: ClearURLs
 
-        // :app unit tests run without merged resources, so read the bundled rules from the source tree
+        // :app unit tests run without merged resources, so read the bundled rules from the source tree:
+        // from the module dir, where Gradle runs them, or the repo root, where an IDE run may start
         @BeforeClass
         @JvmStatic
         fun loadRules() {
-            clearUrls = ClearURLs(File("src/main/res/raw/clearurls_rules.json").readText())
+            val rules = listOf("src/main/res/raw/clearurls_rules.json", "app/src/main/res/raw/clearurls_rules.json")
+                .map { File(it) }
+                .first { it.exists() }
+            clearUrls = ClearURLs(rules.readText())
         }
     }
 }

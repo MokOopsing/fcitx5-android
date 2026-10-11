@@ -7,6 +7,7 @@ package org.fcitx.fcitx5.android.data.clipboard.db
 import androidx.room.Room
 import kotlinx.coroutines.test.runTest
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -38,11 +39,41 @@ class ClipboardDaoTest {
         val markedSince = add("b")
         val kept = add("c")
         dao.markAsDeleted(shown, markedSince)
-        dao.realDelete(shown, kept)
+        dao.purgeMarked(shown, kept)
         dao.undoDelete(shown, markedSince)
         assertNull(dao.get(shown))
         assertNotNull(dao.get(markedSince))
         assertNotNull(dao.get(kept))
+    }
+
+    @Test
+    fun aPurgeOfNoIdsTakesNoneAndOneOfAllMarkedTakesEvery() = runTest {
+        val marked = add("a")
+        val kept = add("b")
+        dao.markAsDeleted(marked)
+        dao.purgeMarked()
+        dao.undoDelete(marked)
+        assertNotNull(dao.get(marked))
+        dao.markAsDeleted(marked)
+        dao.purgeAllMarked()
+        dao.undoDelete(marked)
+        assertNull(dao.get(marked))
+        assertNotNull(dao.get(kept))
+    }
+
+    @Test
+    fun theLastKeptGoesByWhenLastCopied() = runTest {
+        // copied at 100, 200, 300 and 500, and the second again at 450: room for 3 keeps it, the third and the fourth
+        add("a", timestamp = 100L)
+        val copiedAgain = add("b", timestamp = 200L)
+        add("c", timestamp = 300L)
+        add("d", timestamp = 500L)
+        dao.updateTime(copiedAgain, 450L)
+        add("pinned", timestamp = 900L, pinned = true)
+        dao.markAsDeleted(add("deleted", timestamp = 800L))
+        assertEquals(300L, dao.unpinnedTimestampAt(2))
+        // room for 5: none is outdated
+        assertNull(dao.unpinnedTimestampAt(4))
     }
 
     @Test

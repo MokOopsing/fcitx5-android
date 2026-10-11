@@ -43,10 +43,11 @@ class ClipboardEntryUi(override val ctx: Context, private val theme: Theme, radi
     }
 
     val pin = imageView {
-        imageDrawable = drawable(R.drawable.ic_baseline_push_pin_24)!!.apply {
+        // mutated: the popup menu tints this same icon its own way
+        imageDrawable = drawable(R.drawable.ic_baseline_push_pin_24)!!.mutate().apply {
             setTint(theme.altKeyTextColor)
-            setAlpha(0.3f)
         }
+        alpha = 0.3f
     }
 
     val layout = constraintLayout {

@@ -4,8 +4,10 @@
  */
 package org.fcitx.fcitx5.android.ui.main
 
+import android.content.Context
 import android.os.Bundle
 import android.os.Debug
+import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
 import androidx.appcompat.app.AlertDialog
@@ -40,7 +42,7 @@ class DeveloperFragment : PaddingPreferenceFragment() {
         val cacheDir = requireContext().cacheDir
         hprofFile = savedInstanceState?.getString(HPROF_FILE)?.let { cacheDir.resolve(it) }
         // a dump no export is waiting on: the whole heap, typed text and clipboard with it
-        cacheDir.listFiles()?.filter { it.name.endsWith(".hprof") && it != hprofFile }?.forEach { it.delete() }
+        cacheDir.listFiles()?.let { staleDumps(it.asList(), hprofFile) }?.forEach { it.delete() }
         launcher = registerForActivityResult(CreateDocument("application/octet-stream")) { uri ->
             val file = hprofFile ?: return@registerForActivityResult
             hprofFile = null
@@ -135,10 +137,10 @@ class DeveloperFragment : PaddingPreferenceFragment() {
                     .setMessage(R.string.clear_clp_db_confirm)
                     .setPositiveButton(android.R.string.ok) { _, _ ->
                         lifecycleScope.launch {
-                            withContext(Dispatchers.IO) {
+                            val cleared = withContext(Dispatchers.IO) {
                                 ClipboardManager.nukeTable()
                             }
-                            context.toast(R.string.done)
+                            context.toastCleared(cleared)
                         }
                     }
                     .setNegativeButton(android.R.string.cancel, null)
@@ -161,3 +163,11 @@ class DeveloperFragment : PaddingPreferenceFragment() {
     }
 
 }
+
+/** The heap dumps among [files] but the one [keep] (the dump an export is waiting on), to delete. */
+internal fun staleDumps(files: List<File>, keep: File?): List<File> =
+    files.filter { it.name.endsWith(".hprof") && it != keep }
+
+// a clearing that left clips to come back says so, long enough to read
+private fun Context.toastCleared(cleared: Boolean) =
+    if (cleared) toast(R.string.done) else toast(R.string.clear_clp_db_not_all, Toast.LENGTH_LONG)

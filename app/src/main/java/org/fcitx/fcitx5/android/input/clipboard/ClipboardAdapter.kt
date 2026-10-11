@@ -46,7 +46,8 @@ abstract class ClipboardAdapter(
          * @param str text to excerpt
          * @param mask mask text content with "•"
          * @param lines max output lines
-         * @param chars max chars per output line
+         * @param chars max chars per output line; a longer line is cut there. No more of [str] is
+         * looked at than [lines] full lines and their breaks: a line reaching past that ends the excerpt
          */
         fun excerptText(
             str: String,
@@ -54,14 +55,15 @@ abstract class ClipboardAdapter(
             lines: Int = 4,
             chars: Int = 128
         ): String = buildString {
-            val length = str.length
+            // a very long text is not scanned to its end, yet the lines after a long one still show
+            val scanEnd = min(str.length, lines * (chars + 1))
             var lineBreak = -1
             for (i in 1..lines) {
                 val start = lineBreak + 1   // skip previous '\n'
-                val excerptEnd = min(start + chars, length)
-                lineBreak = str.indexOf('\n', start)
+                val excerptEnd = min(start + chars, scanEnd)
+                lineBreak = (start until scanEnd).firstOrNull { str[it] == '\n' } ?: -1
                 if (lineBreak < 0) {
-                    // no line breaks remaining, substring to end of text
+                    // no line break within what is scanned, substring to the excerpt's end
                     if (mask) {
                         append(ClipboardEntry.BULLET.repeat(excerptEnd - start))
                     } else {
@@ -72,7 +74,7 @@ abstract class ClipboardAdapter(
                     val end = min(excerptEnd, lineBreak)
                     // append one line exactly
                     if (mask) {
-                        append(ClipboardEntry.BULLET.repeat(end - start))
+                        appendLine(ClipboardEntry.BULLET.repeat(end - start))
                     } else {
                         appendLine(str.substring(start, end))
                     }

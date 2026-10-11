@@ -26,6 +26,10 @@ interface ClipboardDao {
     @Query("SELECT COUNT(*) FROM ${ClipboardEntry.TABLE_NAME} WHERE deleted=0")
     suspend fun itemCount(): Int
 
+    // the marked too, whose text is on the disk till purged
+    @Query("SELECT COUNT(*) FROM ${ClipboardEntry.TABLE_NAME}")
+    suspend fun countAll(): Int
+
     @Query("SELECT * FROM ${ClipboardEntry.TABLE_NAME} WHERE id=:id AND deleted=0 LIMIT 1")
     suspend fun get(id: Int): ClipboardEntry?
 
@@ -35,8 +39,9 @@ interface ClipboardDao {
     @Query("SELECT EXISTS(SELECT 1 FROM ${ClipboardEntry.TABLE_NAME} WHERE pinned=0 AND deleted=0)")
     suspend fun haveUnpinned(): Boolean
 
-    @Query("SELECT * FROM ${ClipboardEntry.TABLE_NAME} WHERE pinned=0 AND deleted=0")
-    suspend fun getAllUnpinned(): List<ClipboardEntry>
+    // by time, not id: an entry copied again is new, its id old
+    @Query("SELECT timestamp FROM ${ClipboardEntry.TABLE_NAME} WHERE pinned=0 AND deleted=0 ORDER BY timestamp DESC LIMIT 1 OFFSET :index")
+    suspend fun unpinnedTimestampAt(index: Int): Long?
 
     @Query("SELECT * FROM ${ClipboardEntry.TABLE_NAME} WHERE deleted=0 ORDER BY pinned DESC, timestamp DESC")
     fun allEntries(): PagingSource<Int, ClipboardEntry>
@@ -60,8 +65,8 @@ interface ClipboardDao {
     suspend fun undoDelete(vararg ids: Int)
 
     @Query("DELETE FROM ${ClipboardEntry.TABLE_NAME} WHERE deleted=1")
-    suspend fun realDelete()
+    suspend fun purgeAllMarked()
 
     @Query("DELETE FROM ${ClipboardEntry.TABLE_NAME} WHERE deleted=1 AND id in (:ids)")
-    suspend fun realDelete(vararg ids: Int)
+    suspend fun purgeMarked(vararg ids: Int)
 }

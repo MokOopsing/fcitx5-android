@@ -53,28 +53,30 @@ class ClearURLs(rawRules: String) {
         return link + text.substring(end)
     }
 
-    private fun transformWith(url: String, map: Map<String, ClearURLsProvider>): String {
-        var x = url
+    private fun transformWith(url: String, map: Map<String, ClearURLsProvider>, redirects: Int = 0): String {
+        // a redirect target is cleaned in turn when it is a link, and only so many deep
+        if (redirects > MAX_REDIRECTS || !urlPattern.matchesAt(url, 0)) return url
+        var current = url
         var matched = false
-        // lazy, so each provider is matched against the URL as the previous ones left it
-        val applicable = map.values.asSequence().filter { provider ->
-            provider.urlPattern.containsMatchIn(x) && provider.exceptions.none { it.containsMatchIn(x) }
-        }
-        for (provider in applicable) {
+        for (provider in map.values) {
+            // matched against the URL as the previous providers left it
+            if (!provider.urlPattern.containsMatchIn(current) || provider.exceptions.any { it.containsMatchIn(current) }) continue
             matched = true
             // apply redirections
             provider.redirections.forEach { redirection ->
-                redirection.matchAt(x, 0)?.let { match ->
+                redirection.matchAt(current, 0)?.let { match ->
                     match.groupValues.getOrNull(1)?.let {
                         val start = match.groups[1]?.range?.first ?: 0
-                        x = decodeURL(it, isQueryValue = x.getOrNull(start - 1) == '=')
-                        log(if (BuildConfig.DEBUG) "$url ~> $x" else "(redirect)")
-                        return x
+                        // a target that does not decode cleanly stays wrapped: the redirect still reaches it
+                        val target = decodeURL(it, isQueryValue = current.getOrNull(start - 1) == '=') ?: return@forEach
+                        log(if (BuildConfig.DEBUG) "$url ~> $target" else "(redirect)")
+                        // its own trackers too, which a browser would clear on the request it makes next
+                        return transformWith(target, map, redirects + 1)
                     }
                 }
             }
             provider.rawRules.forEach { rawRule ->
-                x = rawRule.replace(x, "")
+                current = rawRule.replace(current, "")
             }
             /**
              * apply rules and referralMarketing
@@ -82,7 +84,7 @@ class ClearURLs(rawRules: String) {
              * https://github.com/ClearURLs/Addon/blob/deec80b763179fa5c3559a37e3c9a6f1b28d0886/clearurls.js#L449
              */
             val rules = provider.rules + provider.referralMarketing
-            val uri = Uri.parse(x)
+            val uri = Uri.parse(current)
             val query = uri.encodedQuery
             val fragment = uri.encodedFragment
             val cleanQuery = filterParams(query, rules)
@@ -93,16 +95,16 @@ class ClearURLs(rawRules: String) {
             val cleanFragment = filterParams(fragment, rules)
             // rebuilt only when a parameter went, so a link with nothing to clear is kept as copied
             if (cleanQuery != query || cleanFragment != fragment) {
-                x = uri.buildUpon()
+                current = uri.buildUpon()
                     .encodedQuery(cleanQuery)
                     .encodedFragment(cleanFragment)
                     .toString()
             }
         }
         if (matched) {
-            log(if (BuildConfig.DEBUG) "$url -> $x" else "(clear)")
+            log(if (BuildConfig.DEBUG) "$url -> $current" else "(clear)")
         }
-        return x
+        return current
     }
 
     /**
@@ -112,17 +114,23 @@ class ClearURLs(rawRules: String) {
      * unlike the js impl, which decodes until nothing changes and so also decodes the target's
      * own %26 or %2B
      * https://github.com/ClearURLs/Addon/blob/deec80b763179fa5c3559a37e3c9a6f1b28d0886/core_js/tools.js#L243
+     *
+     * @return null when a layer does not decode cleanly
      */
-    private fun decodeURL(str: String, isQueryValue: Boolean): String {
+    private fun decodeURL(str: String, isQueryValue: Boolean): String? {
         if (!isQueryValue && urlPattern.matchesAt(str, 0)) return str
-        var decoded = Uri.decode(str)
+        var decoded = decodeOnce(str) ?: return null
         while (encodedSchemePattern.matchesAt(decoded, 0)) {
-            val next = Uri.decode(decoded)
+            val next = decodeOnce(decoded) ?: return null
             if (next == decoded) break
             decoded = next
         }
         return decoded
     }
+
+    // null for a stray % (50%off) or bytes that are no UTF-8, which Uri.decode replaces with U+FFFD
+    private fun decodeOnce(str: String): String? =
+        Uri.decode(str).takeIf { decoded -> decoded.count { it == '\uFFFD' } == str.count { it == '\uFFFD' } }
 
     /**
      * Kept parameters are written back as they were, as the js impl does for #fragments: decoding
@@ -155,6 +163,9 @@ class ClearURLs(rawRules: String) {
             MapSerializer(serializer(), providersSerializer)
 
         val urlPattern = Regex("^https?://", RegexOption.IGNORE_CASE)
+
+        // bounds the recursion a crafted chain of redirects could run
+        const val MAX_REDIRECTS = 5
 
         // a redirect target still encoded reads "http%3A", or awstrack's "http:%2F", where its "://" belongs
         val encodedSchemePattern = Regex("^https?:?%", RegexOption.IGNORE_CASE)

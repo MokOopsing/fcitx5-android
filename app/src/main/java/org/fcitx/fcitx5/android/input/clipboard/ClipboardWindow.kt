@@ -16,6 +16,7 @@ import androidx.core.text.buildSpannedString
 import androidx.core.text.color
 import androidx.core.view.updateLayoutParams
 import androidx.lifecycle.lifecycleScope
+import androidx.paging.CombinedLoadStates
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.recyclerview.widget.ItemTouchHelper
@@ -87,6 +88,11 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>() {
         Pager(PagingConfig(pageSize = 16)) { ClipboardManager.allEntries() }
     }
     private var adapterSubmitJob: Job? = null
+
+    private val loadStateListener: (CombinedLoadStates) -> Unit = {
+        val empty = it.append.endOfPaginationReached && adapter.itemCount < 1
+        stateMachine.push(ClipboardDbUpdated, ClipboardDbEmpty to empty)
+    }
 
     private val adapter: ClipboardAdapter by lazy {
         object : ClipboardAdapter(
@@ -167,7 +173,9 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>() {
                 clipboardEnabledPref.setValue(true)
             }
             deleteAllButton.setOnClickListener {
-                service.lifecycleScope.launch {
+                // the view's scope, cancelled on detach: the menu it shows is anchored to this view
+                promptJob?.cancel()
+                promptJob = imeScope.launch {
                     promptDeleteAll(ClipboardManager.haveUnpinned())
                 }
             }
@@ -176,6 +184,7 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>() {
 
     override fun onCreateView(): View = ui.root
 
+    private var promptJob: Job? = null
     private var promptMenu: PopupMenu? = null
 
     private fun promptDeleteAll(skipPinned: Boolean) {
@@ -222,9 +231,10 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>() {
             }
             .addCallback(object : Snackbar.Callback() {
                 override fun onDismissed(transientBottomBar: Snackbar, event: Int) {
-                    if (snackbarInstance === transientBottomBar) {
-                        snackbarInstance = null
-                    }
+                    // a newer snackbar has taken the pending ids to undo or purge: Material reports
+                    // this one's TIMEOUT only after its hide animation, when a delete may have come
+                    if (snackbarInstance !== transientBottomBar) return
+                    snackbarInstance = null
                     when (event) {
                         BaseCallback.DISMISS_EVENT_SWIPE,
                         BaseCallback.DISMISS_EVENT_MANUAL,
@@ -233,7 +243,7 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>() {
                             val ids = pendingDeleteIds.toIntArray()
                             pendingDeleteIds.clear()
                             service.lifecycleScope.launch {
-                                ClipboardManager.realDelete(*ids)
+                                ClipboardManager.purgeMarked(*ids)
                             }
                         }
                         BaseCallback.DISMISS_EVENT_ACTION,
@@ -271,10 +281,7 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>() {
         }
         // manually switch to initial ui
         ui.switchUiByState(initialState)
-        adapter.addLoadStateListener {
-            val empty = it.append.endOfPaginationReached && adapter.itemCount < 1
-            stateMachine.push(ClipboardDbUpdated, ClipboardDbEmpty to empty)
-        }
+        adapter.addLoadStateListener(loadStateListener)
         adapterSubmitJob = imeScope.launch {
             clipboardEntriesPager.flow.collect {
                 adapter.submitData(it)
@@ -286,7 +293,9 @@ class ClipboardWindow : InputWindow.ExtendedInputWindow<ClipboardWindow>() {
     override fun onDetached() {
         clipboardEnabledPref.unregisterOnChangeListener(clipboardEnabledListener)
         adapter.onDetached()
+        adapter.removeLoadStateListener(loadStateListener)
         adapterSubmitJob?.cancel()
+        promptJob?.cancel()
         promptMenu?.dismiss()
         snackbarInstance?.dismiss()
     }
