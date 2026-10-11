@@ -51,8 +51,9 @@ class PickerGridView(context: Context, val theme: Theme, val density: Density) :
 
     val headerHeight = dp(24)
 
+    // a guess until the first size: rows of 0 never fill a measure pass, which then binds every key
     /** [Density.rowCount] rows (under a header, if any), and a sliver of the next one */
-    var rowHeight = 0
+    var rowHeight = dp(ESTIMATED_ROW)
         private set
 
     init {
@@ -71,7 +72,7 @@ class PickerGridView(context: Context, val theme: Theme, val density: Density) :
         val row = ((h - header) / (density.rowCount + SLIVER)).toInt().coerceAtLeast(1)
         if (row == rowHeight) return
         rowHeight = row
-        // keys bound before, at another height (or none, in a measure pass before the first size)
+        // keys bound before, at another height (the guess, in a measure pass before the first size)
         post { adapter?.notifyDataSetChanged() }
     }
 
@@ -96,5 +97,6 @@ class PickerGridView(context: Context, val theme: Theme, val density: Density) :
 
     companion object {
         private const val SLIVER = 0.3f
+        private const val ESTIMATED_ROW = 40
     }
 }

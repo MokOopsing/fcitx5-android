@@ -37,6 +37,7 @@ interface PickerPolicy {
 class DefaultPickerPolicy : PickerPolicy {
     override fun filter(raw: String) = true
     override fun transform(raw: String) = raw
+    // a Preset, so a symbol's long press as the user edited it (PopupOverrides) is the picker's too
     override fun popup(raw: String) =
         KeyDef.Popup.Keyboard.Preset(label = raw, transformPunctuation = false)
 

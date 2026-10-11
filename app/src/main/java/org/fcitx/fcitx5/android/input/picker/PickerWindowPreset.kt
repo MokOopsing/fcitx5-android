@@ -18,8 +18,7 @@ fun symbolPicker(): PickerWindow = PickerWindow(
         R.drawable.ic_number_pad, NumberKeyboard.Name,
         percentWidth = 0.12f,
         contentDescription = R.string.a11y_key_number_pad
-    ),
-    panel = true
+    )
 )
 
 fun emojiPicker(): PickerWindow = PickerWindow(

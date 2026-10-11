@@ -59,6 +59,9 @@ class PickerGridAdapter(
     private var filtered: List<List<String>> = emptyList()
     private var filteredKey: Any? = null
 
+    // what each item commits as under filteredKey: a skin tone's (code points, RGI set, glyph check) is too dear for every bind
+    private val transforms = HashMap<String, String>()
+
     private val popupOnKeyPress by AppPrefs.getInstance().keyboard.popupOnKeyPress
 
     private val keyAppearance = Appearance.Text(
@@ -90,12 +93,17 @@ class PickerGridAdapter(
         if (filteredKey != key || filtered.isEmpty()) {
             filteredKey = key
             filtered = rawData.map { (_, items) -> items.filter(policy::filter) }
+            transforms.clear()
         }
         sections = PickerSections(listOf(recentlyUsed.items) + filtered, only)
         notifyDataSetChanged()
     }
 
-    fun startOf(category: Int) = sections.startOf(category)
+    /** where [category] starts; past the end (the last ones all hidden), where the last with items does */
+    fun startOf(category: Int): Int {
+        val start = sections.startOf(category)
+        return if (start < sections.rows.size) start else sections.startOf(sections.categoryAt(sections.rows.lastIndex))
+    }
 
     fun categoryAt(position: Int) = sections.categoryAt(position)
 
@@ -156,7 +164,7 @@ class PickerGridAdapter(
     }
 
     private fun bind(key: TextKeyView, item: String) = key.apply {
-        val transformed = policy.transform(item)
+        val transformed = transforms.getOrPut(item) { policy.transform(item) }
         label(this, transformed)
         setOnClickListener { commit(transformed) }
         setOnLongClickListener longClick@{ view ->

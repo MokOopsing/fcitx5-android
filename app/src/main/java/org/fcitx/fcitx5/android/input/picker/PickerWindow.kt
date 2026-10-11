@@ -35,8 +35,6 @@ class PickerWindow(
     private val data: List<Pair<PickerData.Category, Array<String>>>,
     private val density: PickerGridView.Density,
     private val switchKey: KeyDef,
-    /** the symbols' way, after Sogou's: [SymbolPanel] */
-    private val panel: Boolean = false,
     private val popupPreview: Boolean = true,
     private val followKeyBorder: Boolean = true,
     private val policy: PickerPolicy = DefaultPickerPolicy()
@@ -47,6 +45,9 @@ class PickerWindow(
         Emoji,
         Emoticon
     }
+
+    /** the symbols' way, after Sogou's: [SymbolPanel]; told by the density, not a flag that must agree with it */
+    private val panel = density == PickerGridView.Density.Panel
 
     private val theme by manager.theme()
     private val service by manager.inputMethodService()
@@ -106,17 +107,24 @@ class PickerWindow(
                 pickerLayout.embeddedKeyboard.showLocked(locked)
             }
 
-            else -> {
-                if (it is KeyAction.CommitAction && !keepsNoRecent) {
+            is KeyAction.CommitAction -> {
+                if (!keepsNoRecent) {
                     adapter.insertRecent(it.text)
                     // locked, the panel stays: the recently used are there to go to now
-                    if (panel) pickerLayout.side?.setShown(SymbolPanel.RECENT, !adapter.recentEmpty)
+                    updateRecentTab()
                 }
                 commonKeyActionListener.listener.onKeyAction(it, source)
                 // a symbol picked from the panel (the keys below it send no CommitAction)
-                if (panel && it is KeyAction.CommitAction && sidePanel.returnsAfterPick(locked)) backToKeyboard()
+                if (panel && sidePanel.returnsAfterPick(locked)) backToKeyboard()
             }
+
+            else -> commonKeyActionListener.listener.onKeyAction(it, source)
         }
+    }
+
+    /** The panel's side lists the recently used once there are any; the emoji have no side. */
+    private fun updateRecentTab() {
+        pickerLayout.side?.setShown(SymbolPanel.RECENT, sidePanel.shows(SymbolPanel.RECENT, adapter.recentEmpty))
     }
 
     private val popupActionListener: PopupActionListener by lazy {
@@ -201,7 +209,7 @@ class PickerWindow(
         }
         if (panel) {
             sidePanel.open(adapter.recentEmpty)
-            pickerLayout.side?.setShown(SymbolPanel.RECENT, sidePanel.shows(SymbolPanel.RECENT, adapter.recentEmpty))
+            updateRecentTab()
             select(sidePanel.selected)
             pickerLayout.embeddedKeyboard.showLocked(locked)
         } else {
