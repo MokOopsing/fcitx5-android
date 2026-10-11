@@ -76,6 +76,33 @@ class T9KeyboardTest {
         assertEquals(KeyAction.FcitxKeyAction("4"), T9Keyboard.typed(KeyAction.FcitxKeyAction("4"), KeyActionListener.Source.Keyboard, tap, 20))
     }
 
+    @Test
+    fun oneWithNothingTypedIsPunctuationTheNextInPlaceOfTheLastIfPressedAgainSoon() {
+        val tap = MultiTap(600)
+        val keys = KeyActionListener.Source.Keyboard
+        val one = KeyAction.FcitxKeyAction("1")
+        assertEquals(KeyAction.CommitAction("，"), T9Keyboard.typed(one, keys, tap, 0, composing = false))
+        assertEquals(KeyAction.CommitAction("。", replacing = 1), T9Keyboard.typed(one, keys, tap, 100, composing = false))
+        assertEquals(KeyAction.CommitAction("？", replacing = 1), T9Keyboard.typed(one, keys, tap, 200, composing = false))
+        assertEquals(KeyAction.CommitAction("！", replacing = 1), T9Keyboard.typed(one, keys, tap, 300, composing = false))
+        assertEquals(KeyAction.CommitAction("，", replacing = 1), T9Keyboard.typed(one, keys, tap, 400, composing = false))
+        // after a pause, a ， of its own
+        assertEquals(KeyAction.CommitAction("，"), T9Keyboard.typed(one, keys, tap, 2000, composing = false))
+        // while typing, the separator the engine reads
+        assertEquals(one, T9Keyboard.typed(one, keys, tap, 2100, composing = true))
+    }
+
+    // as it is, not through the engine, where . would be 。
+    @Test
+    fun oneLongPressedCommitsItsSymbolsAsTheyAre() {
+        val tap = MultiTap(600)
+        val popup = KeyActionListener.Source.Popup
+        for (symbol in T9Keyboard.ONE_MORE) {
+            assertEquals(KeyAction.CommitAction(symbol), T9Keyboard.typed(KeyAction.FcitxKeyAction(symbol), popup, tap, 0, composing = true))
+        }
+        assertEquals(listOf("…", "：", "；", "~", ".", "-", "@", "、", "“", "”"), T9Keyboard.ONE_MORE)
+    }
+
     private fun letter(c: Char, again: Boolean) =
         KeyAction.SymAction(KeySym(0x01000000 + Keyboard.letterKey(c, again)), KeyStates.Virtual)
 

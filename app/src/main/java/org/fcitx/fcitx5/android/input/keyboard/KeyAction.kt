@@ -20,7 +20,8 @@ sealed class KeyAction {
 
     data class SymAction(val sym: KeySym, val states: KeyStates = KeyStates.Virtual) : KeyAction()
 
-    data class CommitAction(val text: String) : KeyAction()
+    /** [text] put in by the app, in place of the [replacing] code points before the cursor, if any. */
+    data class CommitAction(val text: String, val replacing: Int = 0) : KeyAction()
 
     data class CapsAction(val lock: Boolean) : KeyAction()
 

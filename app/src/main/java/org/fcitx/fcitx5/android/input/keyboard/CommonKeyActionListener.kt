@@ -82,7 +82,7 @@ class CommonKeyActionListener :
                 is SymAction -> service.postFcitxJob {
                     sendKey(action.sym, action.states)
                 }
-                is CommitAction -> service.commitOverEngine(action.text)
+                is CommitAction -> service.commitOverEngine(action.text, action.replacing)
                 is QuickPhraseAction -> service.postFcitxJob {
                     commitAndReset()
                     triggerQuickPhrase()

@@ -49,9 +49,10 @@ import splitties.views.existingOrNewId
 /**
  * Pinyin on nine keys (九键), laid out as 搜狗 does: a column on the left offering what the first
  * digits not yet taken may be (the engine's [EngineBridge.t9] syllables), or punctuation while
- * nothing is typed; 1 is the separator (分词); backspace, start over (重输) and 0 on the right;
- * symbols, numbers, space, the language switch and return below. Swiping a digit key types the
- * digit itself; 1 is the engine's to read, a separator while something is typed, else the digit.
+ * nothing is typed; 1 is the separator (分词) while something is typed, else punctuation
+ * (，。？！, pressed again soon the next in place of the last, as a digit key's letters; its long
+ * press more); backspace, start over (重输) and 0 on the right; symbols, numbers, space, the
+ * language switch and return below. Swiping a digit key, 1 too, types the digit itself.
  *
  * A syllable is sent to the engine as a character of [Keyboard.SYLLABLES], saying which of
  * which list it is ([Keyboard.syllableKey]).
@@ -77,6 +78,15 @@ class T9Keyboard(
 
         /** Shown in the column while nothing is typed, committed as they are. */
         private val PUNCTUATION = listOf("，", "。", "？", "！", "…", "、", "：", "~", "@")
+
+        /** What 1 types while nothing is typed: the first, pressed again soon the next in its place. */
+        internal const val ONE = "，。？！"
+
+        /** 1's long press: the rest of 搜狗's column, committed as they are. */
+        internal val ONE_MORE = listOf("…", "：", "；", "~", ".", "-", "@", "、", "“", "”")
+
+        // 1's label while something is typed
+        private const val SEPARATOR = "分词"
 
         /** How many items of the column show at once. */
         private const val SHOWN = 4
@@ -111,10 +121,21 @@ class T9Keyboard(
 
         /**
          * What [action] from [source] types: a digit key's press [MultiTap] reads at [time], a
-         * letter or digit of its long press; anything else resets [tap] and types as it is.
+         * letter or digit of its long press; 1, while nothing is [composing], punctuation ([ONE]),
+         * a symbol of its long press as it is; anything else resets [tap] and types as it is.
          */
-        internal fun typed(action: KeyAction, source: KeyActionListener.Source, tap: MultiTap, time: Long): KeyAction {
+        internal fun typed(action: KeyAction, source: KeyActionListener.Source, tap: MultiTap, time: Long, composing: Boolean = false): KeyAction {
             val key = (action as? KeyAction.FcitxKeyAction)?.act?.singleOrNull()
+            if (key == '1' && source != KeyActionListener.Source.Popup && !composing) {
+                // as a digit key's letters: pressed again soon, the next in place of the last
+                val next = tap.press(key, ONE, time) ?: return KeyAction.CommitAction(ONE.take(1))
+                return KeyAction.CommitAction(next.toString(), replacing = 1)
+            }
+            if (source == KeyActionListener.Source.Popup && key != null && key.toString() in ONE_MORE) {
+                tap.reset()
+                // as it is: through the engine . would be 。
+                return KeyAction.CommitAction(key.toString())
+            }
             if (key == null || key !in '2'..'9' && key !in 'a'..'z') {
                 tap.reset()
                 return action
@@ -142,11 +163,12 @@ class T9Keyboard(
             listOf(
                 spacer(),
                 KeyDef(
-                    KeyDef.Appearance.AltText(displayText = "分词", altText = "1", textSize = 16f, percentWidth = DIGIT),
+                    KeyDef.Appearance.AltText(displayText = ONE, altText = "1", textSize = 16f, percentWidth = DIGIT),
                     setOf(
                         KeyDef.Behavior.Press(KeyAction.FcitxKeyAction("1")),
                         KeyDef.Behavior.Swipe(KeyAction.CommitAction("1")),
                     ),
+                    arrayOf(KeyDef.Popup.Keyboard.Explicit(ONE_MORE.toTypedArray())),
                 ),
                 digitKey('2', "ABC"),
                 digitKey('3', "DEF"),
@@ -183,6 +205,9 @@ class T9Keyboard(
     }
 
     private val space: TextKeyView by lazy { findViewById(R.id.button_space) }
+
+    // 1, its label as what is typed has it
+    private val one: AltTextKeyView by lazy { keyRows[0].getChildAt(1) as AltTextKeyView }
     private val `return`: ImageKeyView by lazy { findViewById(R.id.button_return) }
     private val lang: ImageKeyView by lazy { findViewById(R.id.button_lang) }
 
@@ -281,10 +306,12 @@ class T9Keyboard(
         }
         // and so is a click released but not run yet (View posts it on ACTION_UP), as a removed item's was
         items.cancelPendingInputEvents()
+        // what was typed gone (a candidate picked on the bar, which is not this keyboard's): the
+        // next press is a key of its own. Only then: 1's punctuation resets the engine, which tells
+        // of nothing typed again, and its next press must still be the next symbol
+        if (!state.composing && columnState.composing) multiTap.reset()
         columnState = state
-        // nothing typed (a candidate picked on the bar, which is not this keyboard's): the next
-        // press is a key of its own
-        if (!state.composing) multiTap.reset()
+        one.mainText.text = if (state.composing) SEPARATOR else ONE
         val labels = labels(state)
         while (items.childCount < labels.size) items.addView(item(items.childCount))
         for (i in 0 until items.childCount) {
@@ -314,7 +341,7 @@ class T9Keyboard(
         val key = (action as? KeyAction.FcitxKeyAction)?.act?.singleOrNull()
         val time = pressed?.takeIf { it.first == key }?.second ?: SystemClock.uptimeMillis()
         pressed = null
-        super.onAction(typed(action, source, multiTap, time), source)
+        super.onAction(typed(action, source, multiTap, time, columnState.composing), source)
     }
 
     // the letters a digit key's preview shows in place of its own (GHI), while it is held
