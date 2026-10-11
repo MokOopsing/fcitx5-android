@@ -1,4 +1,5 @@
-Test fixtures for `engine/libime`.
+Test fixtures for `engine/libime`. `db.main.dict` and `extra.dict` live in
+`src/testFixtures/resources/libime`, the same `/libime/` on the classpath, shared with app's tests.
 
 - `db.main.dict`: libime's 电报码 table as fcitx5-android's prebuilt ships it (zstd, version 2).
 - `extra.dict`, `user.dict`, `user.history`: what the app kept under libime on an emulator: a

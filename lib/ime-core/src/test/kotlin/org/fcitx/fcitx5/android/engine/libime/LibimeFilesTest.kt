@@ -5,8 +5,8 @@
 package org.fcitx.fcitx5.android.engine.libime
 
 import org.fcitx.fcitx5.android.engine.data.DataFormatException
-import org.fcitx.fcitx5.android.engine.libime.ZstdTest.Companion.resource
-import org.fcitx.fcitx5.android.engine.libime.ZstdTest.Companion.sha256
+import org.fcitx.fcitx5.android.engine.libime.Fixtures.resource
+import org.fcitx.fcitx5.android.engine.libime.Fixtures.sha256
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -85,7 +85,10 @@ class LibimeFilesTest {
             writeInt(2)
             rule(equal = true, length = 2, Triple(false, 1, 1), Triple(false, 2, 1))
             rule(equal = false, length = 4, Triple(false, 1, 1), Triple(true, 1, 0x80), Triple(true, 2, 0x81))
-            repeat(5) { emptyTrie() } // phrases, characters, their construct and lookup codes, prompts
+            repeat(2) { emptyTrie() } // phrases, characters
+            trieOf("人\u0001bc") // the characters' construct codes, keyed text first
+            emptyTrie() // their lookup codes
+            trieOf("工\u0001a") // prompts, keyed text first too
         }
         assertEquals(
             """
@@ -99,6 +102,8 @@ class LibimeFilesTest {
             e2=p11+p21
             a4=p11+n1z+n2y
             [Data]
+            &a 工
+            ^bc 人
 
             """.trimIndent(),
             LibimeFiles.table(data),
@@ -107,14 +112,23 @@ class LibimeFilesTest {
 
     @Test
     fun aRuleWithAFlagLibimeHasNotFails() {
-        val data = file(TABLE, 1) {
+        // a whole rule, so that its count holds and each flag is read: 2 is neither of libime's
+        fun withFlags(ruleFlag: Int, entryFlag: Int) = file(TABLE, 1) {
             repeat(4) { writeInt(0) }
             ints(emptyList())
             ints(emptyList())
             writeInt(1)
-            writeInt(2)
+            writeInt(ruleFlag)
+            writeByte(2)
+            writeInt(1)
+            writeInt(entryFlag)
+            writeByte(1)
+            writeByte(1)
         }
-        assertThrows(DataFormatException::class.java) { LibimeFiles.table(data) }
+        for ((data, message) in listOf(withFlags(2, 0) to "rule flag", withFlags(0, 2) to "rule entry flag")) {
+            val e = assertThrows(DataFormatException::class.java) { LibimeFiles.table(data) }
+            assertTrue(e.message, e.message!!.contains(message))
+        }
     }
 
     @Test
@@ -222,7 +236,78 @@ class LibimeFilesTest {
         nodes[1] = Node(base = 0, check = 0, sibling = 2)
         nodes[2] = Node(base = -1, check = 0, sibling = 3)
         nodes[3] = Node(base = -1, check = 0)
-        assertThrows(DataFormatException::class.java) { LibimeFiles.pinyinDictionary(pinyinTrie(nodes, tail)) }
+        val e = assertThrows(DataFormatException::class.java) { LibimeFiles.pinyinDictionary(pinyinTrie(nodes, tail)) }
+        assertTrue(e.message, e.message!!.contains("share its tail"))
+    }
+
+    @Test
+    fun siblingsOutOfOrderFail() {
+        // root → placeholder 1 → 3, whose next sibling is 2: a label going back down, as a loop of siblings must
+        val nodes = Array(4) { Node() }
+        nodes[0] = Node(base = 0, check = -1, child = 1)
+        nodes[1] = Node(base = 0, check = 0, sibling = 3)
+        nodes[3] = Node(base = -1, check = 0, sibling = 2)
+        nodes[2] = Node(base = -1, check = 0)
+        val e = assertThrows(DataFormatException::class.java) { LibimeFiles.pinyinDictionary(pinyinTrie(nodes, ByteArray(6))) }
+        assertTrue(e.message, e.message!!.contains("siblings out of order"))
+    }
+
+    @Test
+    fun aTrieDeeperThanAnyKeyFails() {
+        // root → placeholder 1 → 'a' at 97, then 'a' after 'a' down nodes 258 to 1281: 1,025 deep
+        val a = 'a'.code
+        val path = listOf(a) + (258..1281)
+        val nodes = Array(path.last() + 1) { Node() }
+        nodes[0] = Node(base = 0, check = -1, child = 1)
+        nodes[1] = Node(base = 0, check = 0, sibling = a)
+        for (k in path.indices) {
+            val next = path.getOrNull(k + 1) ?: 0
+            nodes[path[k]] = Node(base = next xor a, check = if (k == 0) 0 else path[k - 1], child = a)
+        }
+        val e = assertThrows(DataFormatException::class.java) { LibimeFiles.pinyinDictionary(pinyinTrie(nodes, byteArrayOf())) }
+        assertTrue(e.message, e.message!!.contains("deeper than"))
+    }
+
+    @Test
+    fun aTriePointingPastItsTailFails() {
+        // a key whose rest would be 100 bytes into a tail of 6
+        val nodes = Array(3) { Node() }
+        nodes[0] = Node(base = 0, check = -1, child = 1)
+        nodes[1] = Node(base = 0, check = 0, sibling = 2)
+        nodes[2] = Node(base = -100, check = 0)
+        val e = assertThrows(DataFormatException::class.java) { LibimeFiles.pinyinDictionary(pinyinTrie(nodes, ByteArray(6))) }
+        assertTrue(e.message, e.message!!.contains("points past its end"))
+    }
+
+    @Test
+    fun aCodeTheTextCannotCarryFails() {
+        // a code is written as libime keeps it: a space or line break in it would split its line
+        for (code in listOf("a b", "a\n[Rule]", "")) {
+            val asEntry = file(TABLE, 1) {
+                repeat(3) { writeInt(0) }
+                writeInt(4)
+                ints("abc".map { it.code })
+                ints(emptyList())
+                ints(emptyList())
+                trieOf("$code\u0001工")
+                emptyTrie()
+            }
+            val asPrompt = file(TABLE, 1) {
+                writeInt(0)
+                writeInt('&'.code)
+                writeInt(0)
+                writeInt(4)
+                ints("abc".map { it.code })
+                ints(emptyList())
+                ints(emptyList())
+                repeat(2) { emptyTrie() }
+                trieOf("工\u0001$code")
+            }
+            for (data in listOf(asEntry, asPrompt)) {
+                val e = assertThrows(code, DataFormatException::class.java) { LibimeFiles.table(data) }
+                assertTrue(e.message, e.message!!.contains("table code"))
+            }
+        }
     }
 
     @Test
@@ -236,14 +321,16 @@ class LibimeFilesTest {
         assertNull(LibimeFiles.spell("好的"))
     }
 
-    @Test
+    @Test(timeout = 60_000)
     fun corruptFilesFailAsDataFormat() {
         // whatever the bytes, no other exception and no hang: imported files come from anywhere
         val random = Random(11)
         val body = Zstd.decompress(resource("db.main.dict"), 8)
-        repeat(300) {
+        repeat(300) { round ->
             val corrupt = body.copyOf()
-            repeat(1 + random.nextInt(4)) { corrupt[random.nextInt(minOf(corrupt.size, 4096))] = random.nextInt(256).toByte() }
+            // every other round anywhere: a trie's nodes come after its tail, past the first 4 KiB
+            val reach = if (round % 2 == 0) minOf(corrupt.size, 4096) else corrupt.size
+            repeat(1 + random.nextInt(4)) { corrupt[random.nextInt(reach)] = random.nextInt(256).toByte() }
             val data = file(TABLE, 1) { write(corrupt) }
             try {
                 LibimeFiles.table(data)
@@ -268,7 +355,9 @@ class LibimeFilesTest {
     private class Node(val base: Int = 0, val check: Int = -1, val sibling: Int = 0, val child: Int = 0)
 
     /** A pinyin dictionary of one trie, as cedar saves [nodes] and [tail]. */
-    private fun pinyinTrie(nodes: Array<Node>, tail: ByteArray) = file(PINYIN, 1) {
+    private fun pinyinTrie(nodes: Array<Node>, tail: ByteArray) = file(PINYIN, 1) { trie(nodes, tail) }
+
+    private fun DataOutputStream.trie(nodes: Array<Node>, tail: ByteArray) {
         writeInt(tail.size)
         writeInt(nodes.size)
         write(tail)
@@ -282,6 +371,16 @@ class LibimeFilesTest {
             writeByte(it.child)
         }
         write(ByteArray((nodes.size ushr 8) * 20))
+    }
+
+    // cedar holding [key] alone, its value 0: the root its own placeholder, the key's first byte its child, the rest in the tail
+    private fun DataOutputStream.trieOf(key: String) {
+        val bytes = key.toByteArray()
+        val first = bytes[0].toInt() and 0xFF
+        val nodes = Array(first + 1) { Node() }
+        nodes[0] = Node(base = 0, check = -1, sibling = first)
+        nodes[first] = Node(base = -1, check = 0)
+        trie(nodes, byteArrayOf(0) + bytes.copyOfRange(1, bytes.size) + ByteArray(5))
     }
 
     // cedar with no node: no tail, no nodes, its three list heads

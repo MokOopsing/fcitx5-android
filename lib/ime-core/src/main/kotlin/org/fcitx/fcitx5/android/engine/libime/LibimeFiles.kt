@@ -6,6 +6,7 @@ package org.fcitx.fcitx5.android.engine.libime
 
 import org.fcitx.fcitx5.android.engine.data.DataFormatException
 import org.fcitx.fcitx5.android.engine.data.escapeValue
+import org.fcitx.fcitx5.android.engine.data.isSeparator
 
 /**
  * libime's binary files read without libime, as the text its own tools write of them: what the
@@ -128,7 +129,7 @@ object LibimeFiles {
         val entries = ArrayList<Triple<String, String, Int>>()
         phrases.forEach { key, length, value ->
             val sep = (0 until length).firstOrNull { key[it] == TABLE_SEPARATOR } ?: return@forEach
-            entries += Triple(String(key, 0, sep, Charsets.UTF_8), String(key, sep + 1, length - sep - 1, Charsets.UTF_8), value)
+            entries += Triple(codeOf(key, 0, sep), String(key, sep + 1, length - sep - 1, Charsets.UTF_8), value)
         }
         // the value is the order they were added in, compared unsigned as libime does
         entries.sortWith { a, b -> Integer.compare(a.third xor Int.MIN_VALUE, b.third xor Int.MIN_VALUE) }
@@ -139,9 +140,19 @@ object LibimeFiles {
     private fun textFirst(trie: LibimeTrie, marker: String, out: StringBuilder) {
         trie.forEach { key, length, _ ->
             val sep = (0 until length).firstOrNull { key[it] == TABLE_SEPARATOR } ?: return@forEach
-            out.append(marker).append(String(key, sep + 1, length - sep - 1, Charsets.UTF_8)).append(' ')
+            out.append(marker).append(codeOf(key, sep + 1, length)).append(' ')
                 .append(escapeValue(String(key, 0, sep, Charsets.UTF_8))).append('\n')
         }
+    }
+
+    /** The code in [key] from [from] to [to], to write as the first field of its line. */
+    private fun codeOf(key: ByteArray, from: Int, to: Int): String {
+        val code = String(key, from, to - from, Charsets.UTF_8)
+        // written unquoted, as libime writes it: a separator or line break in it would split its line
+        if (code.isEmpty() || code.any { it.isSeparator() || it.isISOControl() }) {
+            throw DataFormatException("libime table code ${escapeValue(code)}")
+        }
+        return code
     }
 
     /** A rule as libime writes one: `e2=p11+p12+p21+p22`. */

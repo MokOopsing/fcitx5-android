@@ -5,6 +5,8 @@
 package org.fcitx.fcitx5.android.engine.libime
 
 import org.fcitx.fcitx5.android.engine.data.DataFormatException
+import org.fcitx.fcitx5.android.engine.libime.Fixtures.resource
+import org.fcitx.fcitx5.android.engine.libime.Fixtures.sha256
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -12,7 +14,6 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
-import java.security.MessageDigest
 import java.util.Random
 
 /** Frames made by the zstd tool (see `resources/libime/README.md`), each checked by its digest. */
@@ -124,6 +125,27 @@ class ZstdTest {
     }
 
     @Test
+    fun aMatchMakesNoBlockMoreThan128KiB() {
+        // a block of 10 bytes, its header well under the limit: what it makes is checked as it is made
+        assertArrayEquals(ByteArray(MAX_BLOCK) { 'x'.code.toByte() }, Zstd.decompress(match(MAX_BLOCK - 1)))
+        val e = assertThrows(DataFormatException::class.java) { Zstd.decompress(match(MAX_BLOCK)) }
+        assertTrue(e.message, e.message!!.contains("block makes more than"))
+    }
+
+    /**
+     * A frame of one compressed block: a raw literal x, then one sequence repeating it in a match of
+     * [length] (65,539 to 131,074). Each of its tables is one code repeated: literal length 1, the
+     * first repeated offset (1), and match length code 52, whose 16 bits are all its bitstream has.
+     */
+    private fun match(length: Int): ByteArray {
+        val more = length - 65539
+        val block = byteArrayOf(0x08, 'x'.code.toByte(), 1, 0x54, 1, 0, 52, more.toByte(), (more ushr 8).toByte(), 1)
+        val header = (block.size shl 3) or (2 shl 1) or 1
+        val frame = byteArrayOf(0x28, 0xB5.toByte(), 0x2F, 0xFD.toByte(), 0, 0x58)
+        return frame + byteArrayOf(header.toByte(), (header ushr 8).toByte(), (header ushr 16).toByte()) + block
+    }
+
+    @Test
     fun aFewBytesMakingMoreThan128MiBFail() {
         // as much as zhwiki's dictionary unpacks to (64.5 MiB) reads
         assertEquals(520 * MAX_BLOCK, Zstd.decompress(rle(520, MAX_BLOCK)).size)
@@ -143,7 +165,7 @@ class ZstdTest {
     }
 
     @Test
-    fun theChecksumIsXxh64sLowHalf() {
+    fun xxh64GivesItsPublishedValues() {
         // XXH64's published values, seed 0; the fixtures check the long inputs
         assertEquals(0xEF46DB3751D8E999UL.toLong(), Zstd.xxh64(ByteArray(0), 0, 0))
         assertEquals(0xD24EC4F1A98C6E5BUL.toLong(), Zstd.xxh64(byteArrayOf(9, 'a'.code.toByte()), 1, 1))
@@ -169,7 +191,7 @@ class ZstdTest {
         }
     }
 
-    @Test
+    @Test(timeout = 60_000)
     fun corruptFramesFailAsDataFormatOrDecodeToSomething() {
         // whatever the bytes, no other exception and no hang: imported files come from anywhere
         val random = Random(7)
@@ -191,11 +213,5 @@ class ZstdTest {
 
         // RFC 8878's Block_Maximum_Size
         private const val MAX_BLOCK = 1 shl 17
-
-        fun resource(name: String): ByteArray =
-            ZstdTest::class.java.getResourceAsStream("/libime/$name")!!.use { it.readBytes() }
-
-        fun sha256(bytes: ByteArray): String =
-            MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
     }
 }

@@ -31,6 +31,8 @@ object Zstd {
     // RFC 8878's Block_Maximum_Size: what a block holds, or makes, at most
     private const val MAX_BLOCK = 1 shl 17
 
+    private val NO_LITERALS = ByteArray(0)
+
     /** Whether [data] starts as a zstd frame does. */
     fun isFrame(data: ByteArray, from: Int = 0): Boolean = data.size - from >= 4 && le32(data, from) == FRAME_MAGIC
 
@@ -71,9 +73,18 @@ object Zstd {
     /** What the frames make: only counted with no [bytes], else written into [bytes], of the size counted. */
     private class Output(val bytes: ByteArray?, private val limit: Int) {
         var size = 0
+            private set
 
         // where the block being read began
-        var blockStart = 0
+        private var blockStart = 0
+
+        /** A block begins: from here it may make [MAX_BLOCK] bytes. */
+        fun startBlock() {
+            blockStart = size
+        }
+
+        /** An array for [count] literals to write; none when only counting, as nothing reads them. */
+        fun literals(count: Int): ByteArray = if (bytes == null) NO_LITERALS else ByteArray(count)
 
         /** Room for [extra] bytes to come, as a frame's header claims. */
         fun reserve(extra: Long) {
@@ -170,7 +181,7 @@ object Zstd {
                 p += 3
                 val size = header ushr 3
                 if (size > MAX_BLOCK) corrupt("zstd block of $size bytes")
-                out.blockStart = out.size
+                out.startBlock()
                 when ((header ushr 1) and 3) {
                     0 -> {
                         out.write(src, p, size)
@@ -211,7 +222,7 @@ object Zstd {
                         literalsFrom = p
                         p += literalsSize
                     } else {
-                        literals = ByteArray(literalsSize)
+                        literals = out.literals(literalsSize)
                         Arrays.fill(literals, src[p++])
                         literalsFrom = 0
                     }
@@ -236,7 +247,7 @@ object Zstd {
                         q = read.second
                     }
                     val table = huffman ?: corrupt("zstd literals repeat no table")
-                    literals = ByteArray(literalsSize)
+                    literals = out.literals(literalsSize)
                     literalsFrom = 0
                     // decoded only when written: a count needs only how many there are
                     if (out.bytes != null) {
