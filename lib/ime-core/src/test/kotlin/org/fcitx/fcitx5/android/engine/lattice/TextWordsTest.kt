@@ -9,6 +9,7 @@ import org.fcitx.fcitx5.android.engine.data.PinyinData
 import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
 import org.fcitx.fcitx5.android.engine.pinyin.Syllables
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.ByteBuffer
 
@@ -74,6 +75,18 @@ class TextWordsTest {
     }
 
     @Test
+    fun theLastTwoWordsAreTheDecodersContextTheOneBeforeFirst() {
+        val (ni, hao, ma) = listOf("你", "好", "吗").map(::id)
+        assertEquals(hao to ma, TextWords.previous(intArrayOf(ni, hao, ma)))
+        assertEquals(NO_WORD to ma, TextWords.previous(intArrayOf(ma)))
+        assertEquals(NO_WORD to NO_WORD, TextWords.previous(IntArray(0)))
+        // after a last that is no word, the one before it is no context either
+        assertEquals(NO_WORD to NO_WORD, TextWords.previous(intArrayOf(ni, NO_WORD)))
+        assertEquals(NO_WORD to ma, TextWords.previous(intArrayOf(NO_WORD, ma)))
+        assertEquals(id("你好") to id("吗"), TextWords.previous(words.lastTwo("你好吗")))
+    }
+
+    @Test
     fun theWholeTextSplitIntoWords() {
         assertEquals(listOf(0, 2, 3), words.boundaries("你好吗").toList())
         assertEquals(listOf(0, 2, 3, 4, 6), words.boundaries("中国人x你好").toList())
@@ -92,6 +105,6 @@ class TextWordsTest {
         // x no word: <unk>
         assertEquals(-7f - 3f, words.logProb("x你好"), 1e-4f)
         assertEquals(0f, words.logProb(""), 0f)
-        assert(words.logProb("你好吗") > words.logProb("吗你好吗"))
+        assertTrue(words.logProb("你好吗") > words.logProb("吗你好吗"))
     }
 }

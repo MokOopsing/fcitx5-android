@@ -109,9 +109,21 @@ class TextWords(private val model: NgramModel, private val index: WordIndex) {
         return Split(word, start)
     }
 
-    private companion object {
+    companion object {
         // the longest word looked for: the model's are shorter, but for a few names
         const val MAX_WORD = 8
-        const val WINDOW = 3 * MAX_WORD
+        private const val WINDOW = 3 * MAX_WORD
+
+        /**
+         * The last two of [words] (as [lastTwo] gives them) as the decoder takes them, the one
+         * before the last first: [NO_WORD] for each [words] lacks, and for the one before when
+         * the last is none.
+         */
+        fun previous(words: IntArray): Pair<Int, Int> {
+            val n = words.size
+            val prev = if (n >= 1) words[n - 1] else NO_WORD
+            val prev2 = if (n >= 2 && prev != NO_WORD) words[n - 2] else NO_WORD
+            return prev2 to prev
+        }
     }
 }

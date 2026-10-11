@@ -41,6 +41,8 @@ class PinyinDecoder(
     private val wordsPerReading: Int = DEFAULT_WORDS_PER_READING,
     /** The user's own words, found along with the dictionary's; learning them needs a [reset]. */
     private val user: UserWords? = null,
+    /** Where lookAhead keeps its longer words, an entry per [dictionary] node, asked for when first needed: one array for decoders of the same dictionary and scores to share. */
+    extensions: () -> Array<IntArray?> = { arrayOfNulls<IntArray>(dictionary.nodeCount) },
 ) {
     init {
         require(beam >= 1 && wordsPerReading >= 1) { "beam $beam, words per reading $wordsPerReading" }
@@ -50,8 +52,12 @@ class PinyinDecoder(
 
     // per dictionary node reached by a syllable still being typed, see extensionsOf; made once
     // (a reference a node, under a megabyte) and kept when the scores change: they only pick
-    // which longer word stands in, and the model scores it as it is when a key is typed
-    private var extensions: Array<IntArray?>? = null
+    // which longer word stands in, and the model scores it as it is when a key is typed; shared
+    // when given, by decoders that score alike
+    private val extensions: Array<IntArray?> by lazy(LazyThreadSafetyMode.NONE) {
+        // checked here, once: one of the wrong size would fail deep in lookAhead, at some node past its end
+        extensions().also { require(it.size == dictionary.nodeCount) { "extensions for ${it.size} of ${dictionary.nodeCount} nodes" } }
+    }
 
     // what the beams hold now came from these, or from nothing if lastEnd is -1
     private var lastArcs = Lattice()
@@ -59,6 +65,11 @@ class PinyinDecoder(
     private var lastStart = 0
     private var lastPrev2 = NO_WORD
     private var lastPrev = NO_WORD
+
+    // the scores firstWords gave the arcs from the start, for the next decode to keep those of the
+    // arcs it shares; how many hold, 0 until firstWords is done with them
+    private var firstScores = FloatArray(0)
+    private var firstScored = 0
 
     // per position, up to [beam] word sequences, best first; a sequence is its last word and a
     // link to the slot of the one it goes on from, which stays put once its position is searched
@@ -86,9 +97,12 @@ class PinyinDecoder(
             reset()
             return Decoding(emptyList(), emptyList())
         }
-        val last = lastEnd
+        // what the last decode left is built on only in the same context: see search and firstWords
+        val last = if (graph.start == lastStart && prev2 == lastPrev2 && prev == lastPrev) lastEnd else -1
+        val firstKept = if (last >= 0) firstScored else 0
         // until the search is done: one that threw would leave beams and arcs that match nothing
         lastEnd = -1
+        firstScored = 0
         lastArcs = arcs.also { arcs = lastArcs }
         buildLattice(graph)
         search(graph, prev2, prev, last)
@@ -96,7 +110,7 @@ class PinyinDecoder(
         lastStart = graph.start
         lastPrev2 = prev2
         lastPrev = prev
-        return Decoding(sentences(graph, sentences), firstWords(graph, prev2, prev, words))
+        return Decoding(sentences(graph, sentences), firstWords(graph, prev2, prev, words, firstKept))
     }
 
     /** Forgets the last decode, so the next searches from scratch; needed when [scorer]'s scores change. */
@@ -176,7 +190,7 @@ class PinyinDecoder(
      */
     private fun lookAhead(kind: Kind, to: Int, node: Int, cost: Float, words: Int) {
         if (kind != Kind.INITIAL && kind != Kind.PARTIAL || dictionary.childCount(node) == 0) return
-        val cache = extensions ?: arrayOfNulls<IntArray>(dictionary.nodeCount).also { extensions = it }
+        val cache = extensions
         val longer = cache[node] ?: extensionsOf(node).also { cache[node] = it }
         for (w in 0 until minOf(words, longer.size)) {
             val word = dictionary.word(node, w)
@@ -242,8 +256,7 @@ class PinyinDecoder(
             statePrev = statePrev.copyOf((n + 1) * beam)
             stateBack = stateBack.copyOf((n + 1) * beam)
         }
-        val sameContext = graph.start == lastStart && prev2 == lastPrev2 && prev == lastPrev
-        val from = if (sameContext && last >= 0) unchangedUntil(graph, last) else graph.start
+        val from = if (last >= 0) unchangedUntil(graph, last) else graph.start
         beamSize.fill(0, from, n + 1)
         if (from == graph.start) insert(graph.start, 0f, prev, prev2, -1)
         for (at in graph.start until n) {
@@ -375,20 +388,29 @@ class PinyinDecoder(
 
     /**
      * Words the input may start with, best first, each once. An initial alone may start with
-     * thousands (`s` is every sh and s syllable), so text is made only for those returned.
+     * thousands (`s` is every sh and s syllable), so text is made only for those returned. Arcs
+     * that begin the group as they began the last decode's, of the [kept] it scored, keep their
+     * scores: a key changes the arcs ending near the end, and those come last.
      */
-    private fun firstWords(graph: SyllableGraph, prev2: Int, prev: Int, limit: Int): List<Candidate> {
+    private fun firstWords(graph: SyllableGraph, prev2: Int, prev: Int, limit: Int, kept: Int): List<Candidate> {
         val from = arcs.start[graph.start]
         val until = arcs.start[graph.start + 1]
         val context = scorer.context(prev2, prev)
-        val scores = FloatArray(until - from)
+        if (firstScores.size < until - from) firstScores = firstScores.copyOf(until - from)
+        val scores = firstScores
+        var same = 0
+        if (kept > 0) {
+            val lastFrom = lastArcs.start[graph.start]
+            while (same < minOf(kept, until - from) && lastArcs.same(lastFrom + same, arcs, from + same)) same++
+        }
         // score, then arc, in one sortable long: best first, ties in arc order
         val order = LongArray(until - from) { i ->
             val a = from + i
             val word = arcs.word[a]
-            scores[i] = if (word == NO_WORD) Float.NEGATIVE_INFINITY else arcs.cost[a] + scorer.scoreAfter(context, arcs.scored[a])
+            if (i >= same) scores[i] = if (word == NO_WORD) Float.NEGATIVE_INFINITY else arcs.cost[a] + scorer.scoreAfter(context, arcs.scored[a])
             (sortable(-scores[i]).toLong() shl Int.SIZE_BITS) or a.toLong()
         }
+        firstScored = until - from
         order.sort()
         val out = ArrayList<Candidate>()
         val seen = HashSet<Int>()

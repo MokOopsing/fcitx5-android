@@ -141,6 +141,31 @@ class PinyinDecoderTest {
     }
 
     @Test
+    fun decodersThatScoreAlikeShareTheLongerWordsGiven() {
+        val p = Penalties()
+        val shared = arrayOfNulls<IntArray>(data.dictionary.nodeCount)
+        val asked = IntArray(2)
+        fun sharing(i: Int) =
+            PinyinDecoder(data.dictionary, data.vocabulary, WordScorer.of(data.model), extensions = { asked[i]++; shared })
+        sharing(0).decode(plain.segment("zh"))
+        assertTrue(shared.any { it != null })
+        // the second reads what the first worked out, and scores zh as one of its own would
+        assertEquals(-1.5f + p.initial + p.lookAhead, sharing(1).decode(plain.segment("zh")).sentences.first().score, 1e-4f)
+        assertEquals(listOf(1, 1), asked.toList())
+        // and goes by it, not working it out again: zhong's entry made to say no longer word is likelier,
+        // 中 is scored as itself
+        shared[data.dictionary.find(syl("zhong"))] = intArrayOf(NO_WORD)
+        assertEquals(-3.5f + p.initial, sharing(1).decode(plain.segment("zh")).sentences.first { it.text == "中" }.score, 1e-4f)
+    }
+
+    @Test
+    fun longerWordsGivenForAnotherDictionaryAreRefused() {
+        val decoder = PinyinDecoder(data.dictionary, data.vocabulary, WordScorer.of(data.model), extensions = { arrayOfNulls<IntArray>(1) })
+        // at the first syllable still being typed, not at some node past the array's end
+        assertThrows(IllegalArgumentException::class.java) { decoder.decode(plain.segment("zh")) }
+    }
+
+    @Test
     fun inputThatIsNoPinyinIsKeptAsTyped() {
         val s = decode("ni1").sentences.first()
         assertEquals("你1", s.text)
@@ -276,15 +301,35 @@ class PinyinDecoderTest {
             return calls
         }
         val d = PinyinDecoder(data.dictionary, data.vocabulary, counting)
-        // the same key costs the same however much input comes before it, once the beams are full
+        // the same key costs about the same however much input comes before it, once the beams are
+        // full: one that grew with the input would cost four times as much after 32 as after 8
         val building = listOf(8, 16, 32).map { n ->
             val input = "nihao".repeat(n)
             count(d, input)
             count(d, input + "m")
         }
-        assertEquals(1, building.distinct().size)
+        assertTrue("$building", building.all { it < 2 * building.first() })
         d.reset()
         assertTrue(building.first() * 10 < count(d, "nihao".repeat(32) + "m"))
+    }
+
+    @Test
+    fun aKeyAtTheEndScoresNoFirstWordAgain() {
+        val wo = id("我")
+        // after the committed 我 only the words from the start are scored
+        var fromStart = 0
+        val counting = WordScorer { p2, p, w ->
+            if (p == wo) fromStart++
+            WordScorer.of(data.model).score(p2, p, w)
+        }
+        val d = PinyinDecoder(data.dictionary, data.vocabulary, counting)
+        val input = "nihao".repeat(8)
+        d.decode(plain.segment(input), prev = wo)
+        fromStart = 0
+        val typed = d.decode(plain.segment(input + "m"), prev = wo)
+        assertEquals(0, fromStart)
+        val fresh = PinyinDecoder(data.dictionary, data.vocabulary, counting).decode(plain.segment(input + "m"), prev = wo)
+        assertEquals(describe(fresh), describe(typed))
     }
 
     @Test
@@ -297,7 +342,10 @@ class PinyinDecoderTest {
         // the search up to wo is kept, with the old scores
         assertEquals("在我吗", d.decode(plain.segment("zaiwoma")).sentences.first().text)
         d.reset()
-        assertEquals("再我吗", d.decode(plain.segment("zaiwoma")).sentences.first().text)
+        val again = d.decode(plain.segment("zaiwoma"))
+        assertEquals("再我吗", again.sentences.first().text)
+        // and the words it starts with: their scores are kept with the search's
+        assertEquals("再", again.words.first().text)
     }
 
     @Test

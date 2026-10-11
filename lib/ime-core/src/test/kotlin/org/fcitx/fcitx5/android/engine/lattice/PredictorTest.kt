@@ -80,6 +80,24 @@ class PredictorTest {
     }
 
     @Test
+    fun eachWordSeenAfterTheLastOneIsLookedAtOnce() {
+        val looked = ArrayList<Int>()
+        val user = object : UserWords {
+            override fun child(node: Int, syllable: Int) = -1
+            override fun childCount(node: Int) = 0
+            override fun wordCount(node: Int) = 0
+            override fun word(node: Int, index: Int) = NO_WORD
+            override fun text(word: Int) = ""
+            override fun blockedAnyhow(word: Int) = false.also { looked += word }
+        }
+        val after = Predictor(data.model, data.vocabulary, data.dictionary, user).predict(NO_WORD, id("你"))
+        assertEquals(listOf("好", "吗", "A股", "马克·吐温"), texts(after))
+        // 好 among them, the first offered, which also tells whether any word is: the old loop looked at it twice
+        assertEquals(looked.distinct(), looked)
+        assertTrue(id("好") in looked)
+    }
+
+    @Test
     fun theWordBeforeThatCounts() {
         val after = predictor.predict(id("我"), id("再"))
         assertEquals(listOf("见", "吗"), texts(after))
@@ -162,6 +180,22 @@ class PredictorTest {
         // one the user typed is read as they typed it, 见 as xian
         user.learn(null, listOf(Entry("见", syl("xian"))))
         assertEquals(syl("xian").toList(), predicting.reading(id("见"))?.toList())
+    }
+
+    @Test
+    fun theCharacterReadingsGivenAreAskedForOnceWhenFirstNeeded() {
+        val readings = Predictor.charReadingsOf(data.dictionary, data.vocabulary)
+        assertEquals(setOf("jian", "xian"), readings.getValue('见'.code).map { Syllables.spelling(it) }.toSet())
+        var asked = 0
+        val shared = Predictor(data.model, data.vocabulary, data.dictionary, charReadings = { readings.also { asked++ } })
+        shared.predict(NO_WORD, id("你"))
+        assertEquals(0, asked)
+        assertEquals(syl("zai", "jian").toList(), shared.reading(id("再见"))?.toList())
+        assertEquals(syl("ni").toList(), shared.reading(id("你"))?.toList())
+        assertEquals(1, asked)
+        // what they say goes: with 见 read as xian alone, 再见 has no reading of the dictionary's
+        val xian = readings + ('见'.code to syl("xian"))
+        assertEquals(null, Predictor(data.model, data.vocabulary, data.dictionary, charReadings = { xian }).reading(id("再见")))
     }
 
     @Test

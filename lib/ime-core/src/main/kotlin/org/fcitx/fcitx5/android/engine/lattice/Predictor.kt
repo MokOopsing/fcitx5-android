@@ -35,6 +35,8 @@ class Predictor(
     private val dictionary: PinyinDictionary? = null,
     private val user: UserWords? = null,
     private val userWeight: Float = USER_WEIGHT,
+    /** [charReadingsOf] the [dictionary], asked for when [reading] first needs it: one map for the predictors over it to share. */
+    charReadings: () -> Map<Int, IntArray> = { dictionary?.let { charReadingsOf(it, vocabulary) }.orEmpty() },
 ) {
 
     /**
@@ -72,13 +74,16 @@ class Predictor(
     private fun offerFollowers(context: Long, typed: HashMap<Int, Float>, best: Best): Boolean {
         var any = false
         model.forEachAfter(context) { word, modelScore ->
-            // what the model has after it may be only punctuation, or what the user blocked
-            if (!any && offered(word)) any = true
-            val p = typed.remove(word)
+            // most often empty, and a common word has tens of thousands of followers to box
+            val p = if (typed.isEmpty()) null else typed.remove(word)
             val score = if (p == null || p <= 0f) modelScore else minOf(0f, log10(10f.pow(modelScore) + p))
             // ties go to the word seen first, being the lower id
-            if (!best.takes(score) || !offered(word)) return@forEachAfter
-            best.offer(word, score)
+            val takes = best.takes(score)
+            if (any && !takes) return@forEachAfter
+            // what the model has after it may be only punctuation, or what the user blocked
+            val offerable = offered(word)
+            any = any || offerable
+            if (takes && offerable) best.offer(word, score)
         }
         return any
     }
@@ -173,20 +178,8 @@ class Predictor(
         return best
     }
 
-    // the syllables each character of the dictionary is read as, from its words of one character
-    private val charReadings: Map<Int, IntArray> by lazy(LazyThreadSafetyMode.NONE) {
-        val dictionary = dictionary ?: return@lazy emptyMap()
-        val readings = HashMap<Int, MutableList<Int>>()
-        val first = dictionary.firstChild(dictionary.root)
-        for (node in first until first + dictionary.childCount(dictionary.root)) {
-            for (k in 0 until dictionary.wordCount(node)) {
-                val text = vocabulary.word(dictionary.word(node, k))
-                if (text.isEmpty() || Character.charCount(text.codePointAt(0)) != text.length) continue
-                readings.getOrPut(text.codePointAt(0)) { ArrayList() } += dictionary.syllable(node)
-            }
-        }
-        readings.mapValues { (_, list) -> list.toIntArray() }
-    }
+    // the syllables each character of the dictionary is read as: see charReadingsOf
+    private val charReadings: Map<Int, IntArray> by lazy(LazyThreadSafetyMode.NONE, charReadings)
 
     private fun textOf(word: Int) = if (word < vocabulary.size) vocabulary.word(word) else user?.text(word).orEmpty()
 
@@ -220,5 +213,22 @@ class Predictor(
         private const val MAX_READINGS = 2187
         private const val TAIL = 2
         private const val MIDDLE_DOT = 0xb7
+
+        /**
+         * The syllables each character of [dictionary] is read as, from its words of one character,
+         * for [Predictor.reading]: some 20,000 characters, so the pinyins' sessions share one map.
+         */
+        fun charReadingsOf(dictionary: PinyinDictionary, vocabulary: Vocabulary): Map<Int, IntArray> {
+            val readings = HashMap<Int, MutableList<Int>>()
+            val first = dictionary.firstChild(dictionary.root)
+            for (node in first until first + dictionary.childCount(dictionary.root)) {
+                for (k in 0 until dictionary.wordCount(node)) {
+                    val text = vocabulary.word(dictionary.word(node, k))
+                    if (text.isEmpty() || Character.charCount(text.codePointAt(0)) != text.length) continue
+                    readings.getOrPut(text.codePointAt(0)) { ArrayList() } += dictionary.syllable(node)
+                }
+            }
+            return readings.mapValues { (_, list) -> list.toIntArray() }
+        }
     }
 }
