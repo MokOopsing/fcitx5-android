@@ -30,7 +30,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.fcitx.fcitx5.android.FcitxApplication
 import org.fcitx.fcitx5.android.R
-import org.fcitx.fcitx5.android.core.reloadPinyinCustomPhrase
 import org.fcitx.fcitx5.android.data.pinyin.CustomPhraseManager
 import org.fcitx.fcitx5.android.data.pinyin.customphrase.PinyinCustomPhrase
 import org.fcitx.fcitx5.android.engine.phrase.CustomPhrases
@@ -247,24 +246,17 @@ class PinyinCustomPhraseFragment : Fragment(), OnItemChangedListener<PinyinCusto
     private fun importPhrases(uri: Uri) {
         val ctx = requireContext()
         lifecycleScope.launch {
-            try {
+            ctx.showingFileErrors("custom phrases import") {
                 val bytes = withContext(Dispatchers.IO) {
-                    (ctx.contentResolver.openInputStream(uri) ?: throw IOException("cannot read $uri")).use { it.readImported() }
+                    ctx.contentResolver.openInputStreamOrThrow(uri).use { it.readImported() }
                 }
                 val have = ui.entries.mapTo(HashSet()) { it.serialize() }
                 // off the main thread: a file of thousands of phrases would hold it for seconds
                 val phrases = withContext(Dispatchers.Default) {
-                    CustomPhrases.parse(WordLists.decode(bytes)).all
-                        .map { PinyinCustomPhrase(it.key, it.order, it.value) }
-                        .filter { have.add(it.serialize()) }
+                    CustomPhraseManager.items(CustomPhrases.parse(WordLists.decode(bytes))).filter { have.add(it.serialize()) }
                 }
                 ui.addItems(phrases)
                 ctx.toast(getString(R.string.import_phrases_done, phrases.size))
-            } catch (e: IOException) {
-                ctx.toast(e)
-            } catch (e: SecurityException) {
-                // a file the picker gave that its provider will not open after all
-                ctx.toast(e)
             }
         }
     }
@@ -274,21 +266,16 @@ class PinyinCustomPhraseFragment : Fragment(), OnItemChangedListener<PinyinCusto
         // a copy: written on another thread while the list may change
         val items = ui.entries.toList()
         lifecycleScope.launch {
-            try {
+            ctx.showingFileErrors("custom phrases export") {
                 withContext(Dispatchers.IO) {
                     val temp = File(ctx.cacheDir, "customphrase.export")
                     try {
                         CustomPhraseManager.save(items, temp)
-                        (ctx.contentResolver.openOutputStream(uri) ?: throw IOException("cannot write $uri")).use { out -> temp.inputStream().use { it.copyTo(out) } }
+                        ctx.contentResolver.openOutputStreamOrThrow(uri).use { out -> temp.inputStream().use { it.copyTo(out) } }
                     } finally {
                         temp.delete()
                     }
                 }
-            } catch (e: IOException) {
-                ctx.toast(e)
-            } catch (e: SecurityException) {
-                // a file the picker gave that its provider will not open after all
-                ctx.toast(e)
             }
         }
     }
@@ -333,7 +320,7 @@ class PinyinCustomPhraseFragment : Fragment(), OnItemChangedListener<PinyinCusto
         val fcitx = viewModel.fcitx
         // the connection checked now, in onStop, while the page has it; dropped if fcitx stops before the save ends
         fcitx.lifecycleScope.launch(Dispatchers.Main.immediate) {
-            fcitx.runOnReady<Unit> { if (saved.await()) reloadPinyinCustomPhrase() }
+            fcitx.runOnReady<Unit> { if (saved.await()) reloadEngine() }
         }
     }
 

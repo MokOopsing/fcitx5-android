@@ -6,10 +6,10 @@ package org.fcitx.fcitx5.android.data.pinyin
 
 import org.fcitx.fcitx5.android.data.pinyin.dict.PinyinDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.TextDictionary
-import org.fcitx.fcitx5.android.data.replaceFile
 import org.fcitx.fcitx5.android.engine.data.WordLayers
 import org.fcitx.fcitx5.android.engine.data.DataFormatException
 import org.fcitx.fcitx5.android.engine.libime.LibimeFiles
+import org.fcitx.fcitx5.android.engine.store.replaceFile
 import org.fcitx.fcitx5.android.engine.user.LibimeImport
 import org.fcitx.fcitx5.android.engine.user.WordPack
 import timber.log.Timber
@@ -35,13 +35,13 @@ object ImportedDictionaries {
         var words = 0
         replaceFile(dest, File(dest.path + ".tmp")) { temp ->
             temp.bufferedWriter().use { out ->
-                for (line in LibimeImport.dictionaryText(lines.mapIndexed { i, l -> if (i == 0) l.removePrefix("\uFEFF") else l })) {
+                for (line in LibimeImport.dictionaryText(lines.withoutByteOrderMark())) {
                     out.write(line)
                     out.write('\n'.code)
                     words++
                 }
             }
-            words > 0
+            if (words == 0) return 0
         }
         return words
     }
@@ -56,46 +56,56 @@ object ImportedDictionaries {
      */
     fun writePack(lines: Sequence<String>, dest: File): Int {
         val kept = ArrayList<String>()
-        val pack = WordPack.parse(lines.mapIndexed { i, l -> (if (i == 0) l.removePrefix("\uFEFF") else l).also { kept += it } }, dest.name)
+        val pack = WordPack.parse(lines.withoutByteOrderMark().onEach { kept += it }, dest.name)
         if (pack.words.isEmpty()) return 0
         replaceFile(dest, File(dest.path + ".tmp")) { temp ->
             temp.bufferedWriter().use { out -> kept.forEach { out.write(it); out.write('\n'.code) } }
-            true
         }
         return pack.words.size
     }
 
+    private fun Sequence<String>.withoutByteOrderMark() = mapIndexed { i, l -> if (i == 0) l.removePrefix("\uFEFF") else l }
+
+    /** Whether [dir] holds a dictionary called [name] of one of [types], on or off. */
+    fun hasDictionary(
+        dir: File,
+        name: String,
+        types: List<PinyinDictionary.Type> = listOf(PinyinDictionary.Type.Text, PinyinDictionary.Type.Words),
+    ): Boolean = types.any { type -> listOf(true, false).any { File(dir, TextDictionary.fileName(name, it, type)).exists() } }
+
     /**
      * Turns each of libime's dictionaries in [dir] into text, on or off as it was, and moves it
      * to [LIBIME]; one with no word the engine can read, or that is no libime dictionary, or too
-     * large for the heap, or whose name a text one has, is only moved. One that could not be read
-     * (an I/O error) is left to try again. Those only moved, but for one whose name a text one
-     * has, are noted for the settings to tell of ([unread]); so are, once, those an older one put
-     * aside without noting them, if they still cannot be read. Both the settings and the engine
-     * call it, on their own threads.
+     * large for the heap, or whose name a text one or a word pack has, is only moved. One that
+     * could not be read (an I/O error) is left to try again. Those only moved, but for one whose
+     * name another has, are noted for the settings to tell of ([unread]); so are, once, those an
+     * older one put aside without noting them, if they still cannot be read. Each is read by
+     * [read], libime's reader but in a test. Both the settings and the engine call it, on their
+     * own threads.
      */
     @Synchronized
-    fun migrate(dir: File) {
+    fun migrate(dir: File, read: (ByteArray) -> List<String> = LibimeFiles::pinyinDictionary) {
         // before any is put aside: one put aside under a taken name is noted by the name it had
-        noteOlder(dir)
+        noteOlder(dir, read)
         for (file in dir.listFiles().orEmpty()) {
             val enabled = when {
                 file.name.endsWith(".dict") -> true
                 file.name.endsWith(".dict.${TextDictionary.DISABLE}") -> false
                 else -> null
             }
-            if (enabled != null) migrate(file, enabled)
+            if (enabled != null) migrate(file, enabled, read)
         }
     }
 
-    private fun migrate(file: File, enabled: Boolean) {
+    private fun migrate(file: File, enabled: Boolean, read: (ByteArray) -> List<String>) {
         val name = file.name.substringBeforeLast(".dict")
         val unread = try {
-            if (listOf(true, false).any { file.resolveSibling(TextDictionary.fileName(name, it)).exists() }) {
+            // a pack too: two of one name would share their entry in INTO_NEW
+            if (hasDictionary(file.parentFile, name)) {
                 Timber.w("libime's dictionary %s: a dictionary of its name is there", file.name)
                 null
             } else {
-                val lines = LibimeFiles.pinyinDictionary(file.readBytes())
+                val lines = read(file.readBytes())
                 val words = write(lines.asSequence(), file.resolveSibling(TextDictionary.fileName(name, enabled)))
                 Timber.i("libime's dictionary %s: %d of %d words kept", file.name, words, lines.size)
                 if (words == 0) Unread.Reason.NO_WORDS else null
@@ -133,9 +143,9 @@ object ImportedDictionaries {
     }
 
     // an older migration put aside what it could not read without a note: each there that is
-    // not noted and has no text dictionary of its name is read again, and noted once if it
-    // still cannot be
-    private fun noteOlder(dir: File) {
+    // not noted and has no dictionary of its name is read again, and noted once if it still
+    // cannot be
+    private fun noteOlder(dir: File, read: (ByteArray) -> List<String>) {
         val aside = File(dir, LIBIME)
         val done = File(aside, OLDER_NOTED)
         // none aside, none an older one left: what is put aside from now on is noted as it goes
@@ -146,12 +156,9 @@ object ImportedDictionaries {
             // each name putAside gives holds .dict, the notes kept with them do not
             val older = aside.listFiles().orEmpty()
                 .filter { it.isFile && ".dict" in it.name && it.name !in noted }
-                .filter { file ->
-                    val name = file.name.substringBeforeLast(".dict")
-                    listOf(true, false).none { File(dir, TextDictionary.fileName(name, it)).exists() }
-                }
+                .filter { file -> !hasDictionary(dir, file.name.substringBeforeLast(".dict")) }
                 // one that reads is no news: turned into text before, its text since deleted
-                .mapNotNull { file -> whyUnread(file)?.let { Unread(file.name, it) } }
+                .mapNotNull { file -> whyUnread(file, read)?.let { Unread(file.name, it) } }
                 .sortedBy { it.fileName }
             // put aside before any noted
             if (older.isNotEmpty()) writeUnread(aside, older + unread)
@@ -164,9 +171,14 @@ object ImportedDictionaries {
 
     // why [file], put aside by an older migration, cannot be turned into text as migrate would
     // turn it; none if it can
-    private fun whyUnread(file: File): Unread.Reason? = try {
-        val lines = LibimeFiles.pinyinDictionary(file.readBytes())
-        if (LibimeImport.dictionaryText(lines.asSequence()).none()) Unread.Reason.NO_WORDS else null
+    private fun whyUnread(file: File, read: (ByteArray) -> List<String>): Unread.Reason? = try {
+        val lines = read(file.readBytes())
+        if (LibimeImport.dictionaryText(lines.asSequence()).none()) {
+            Unread.Reason.NO_WORDS
+        } else {
+            Timber.i("libime's dictionary %s: it reads, not noted", file.name)
+            null
+        }
     } catch (e: IOException) {
         // noted, not tried again: that would read each of the others again at the next migration
         Timber.w(e, "libime's dictionary %s", file.name)
@@ -236,7 +248,6 @@ object ImportedDictionaries {
         replaceFile(file, File(aside, "$UNREAD.tmp")) { temp ->
             // the reason first: a name may hold a tab
             temp.writeText(unread.joinToString("") { "${it.reason.name}\t${it.fileName}\n" })
-            true
         }
     }
 
@@ -272,7 +283,8 @@ object ImportedDictionaries {
     private fun readIntoNew(dir: File): Set<String> {
         val file = File(dir, INTO_NEW)
         if (!file.isFile) return packsOfTheirOwnLayer(dir)
-        return file.readLines().map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+        // as setIntoNew wrote them: a name may begin or end with a space
+        return file.readLines().filter { it.isNotEmpty() }.toSet()
     }
 
     /**
@@ -281,7 +293,7 @@ object ImportedDictionaries {
      * user moves one.
      */
     private fun packsOfTheirOwnLayer(dir: File): Set<String> =
-        dir.listFiles().orEmpty().filter { PinyinDictionary.Type.fromFileName(it.name, ignoreCase = false) == PinyinDictionary.Type.Words }
+        dir.listFiles().orEmpty().filter { PinyinDictionary.Type.fromFileName(it.name) == PinyinDictionary.Type.Words }
             .filter { file ->
                 val layer = file.useLines { lines -> lines.take(HEADER_LINES).firstOrNull { it.startsWith(LAYER_KEY) } }
                 layer?.substring(LAYER_KEY.length)?.trim() != WordLayers.BASE
@@ -291,9 +303,14 @@ object ImportedDictionaries {
     /**
      * Merges dictionary [name] into the new words dictionary ([into]) or the base one. The
      * settings write it, from any thread.
+     *
+     * @throws IOException if it could not be written, or [name] cannot be listed: empty, or with
+     *   a line break in it
      */
     @Synchronized
     fun setIntoNew(dir: File, name: String, into: Boolean) {
+        // a name a line: one that is not would read back as others, or as none
+        if (into && !isOneLine(name)) throw IOException("cannot list \"$name\" in $INTO_NEW")
         // a list that does not read is not written over with one name: the rest would be lost
         val names = readIntoNew(dir)
         val now = if (into) names + name else names - name
@@ -301,9 +318,10 @@ object ImportedDictionaries {
         if (now == names && file.isFile) return
         replaceFile(file, File(dir, "$INTO_NEW.tmp")) { temp ->
             temp.writeText(now.sorted().joinToString("") { "$it\n" })
-            true
         }
     }
+
+    private fun isOneLine(name: String) = name.isNotEmpty() && '\n' !in name && '\r' !in name
 
     private const val LAYER_KEY = "# layer:"
     private const val HEADER_LINES = 3

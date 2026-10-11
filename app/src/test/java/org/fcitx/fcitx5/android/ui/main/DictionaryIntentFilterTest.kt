@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.ui.main
 
 import org.fcitx.fcitx5.android.data.pinyin.dict.PinyinDictionary
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Element
@@ -21,7 +22,9 @@ class DictionaryIntentFilterTest {
         val patterns = attributes.map { it.getAttributeNS(ANDROID_NS, "pathPattern") }
         val suffixes = attributes.map { it.getAttributeNS(ANDROID_NS, "pathSuffix") }
         for (type in PinyinDictionary.Type.entries) {
-            assertTrue(type.ext, """.*\\.${type.ext}""" in patterns)
+            // pathPattern's .* stops at the first dot it can: a path with more dots needs a pattern of its own
+            val variants = (1..4).map { """.*\\.""".repeat(it) + type.ext }.toSet()
+            assertEquals(type.ext, variants, patterns.filter { it.endsWith("""\\.${type.ext}""") }.toSet())
             assertTrue(type.ext, ".${type.ext}" in suffixes)
         }
     }

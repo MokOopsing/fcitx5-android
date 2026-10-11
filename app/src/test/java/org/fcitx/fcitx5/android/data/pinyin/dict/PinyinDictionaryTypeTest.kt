@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.data.pinyin.dict
 
 import org.fcitx.fcitx5.android.data.pinyin.dict.PinyinDictionary.Type
+import org.fcitx.fcitx5.android.utils.withLowercaseExtension
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -34,7 +35,7 @@ class PinyinDictionaryTypeTest {
         assertNull(Type.fromFileName(""))
     }
 
-    /** Only text has a disabled form: libime's are turned into text, not kept (see ImportedDictionaries). */
+    /** Only text and word packs have a disabled form: libime's are turned into text, not kept (see ImportedDictionaries). */
     @Test
     fun theDisableSuffixIsNotRecognisedForOtherTypes() {
         assertNull(Type.fromFileName("words.scel.disable"))
@@ -44,19 +45,19 @@ class PinyinDictionaryTypeTest {
     /** A dictionary exported as `WORDS.SCEL` (common on Windows) is one to import. */
     @Test
     fun theExtensionMatchesInAnyCase() {
-        assertEquals(Type.LibIME, Type.fromFileName("words.DICT"))
-        assertEquals(Type.Sougou, Type.fromFileName("词库.SCEL"))
-        assertEquals(Type.Text, Type.fromFileName("words.TXT"))
-        assertEquals(Type.Words, Type.fromFileName("NEW.Words"))
+        assertEquals(Type.LibIME, Type.fromFileName(withLowercaseExtension("words.DICT")))
+        assertEquals(Type.Sougou, Type.fromFileName(withLowercaseExtension("词库.SCEL")))
+        assertEquals(Type.Text, Type.fromFileName(withLowercaseExtension("words.TXT")))
+        assertEquals(Type.Words, Type.fromFileName(withLowercaseExtension("NEW.Words")))
     }
 
     /** The files kept are named in lowercase, as the engine reads them: no other is one of them. */
     @Test
     fun aKeptFileMatchesOnlyAsItIsNamed() {
-        assertNull(Type.fromFileName("words.TXT", ignoreCase = false))
-        assertNull(Type.fromFileName("new.WORDS", ignoreCase = false))
-        assertEquals(Type.Text, Type.fromFileName("words.txt.disable", ignoreCase = false))
-        assertEquals(Type.Words, Type.fromFileName("new.words", ignoreCase = false))
+        assertNull(Type.fromFileName("words.TXT"))
+        assertNull(Type.fromFileName("new.WORDS"))
+        assertEquals(Type.Text, Type.fromFileName("words.txt.disable"))
+        assertEquals(Type.Words, Type.fromFileName("new.words"))
     }
 
     @Test

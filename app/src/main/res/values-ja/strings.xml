@@ -4,11 +4,6 @@
     <string name="app_name_debug">Youmo IME (デバッグ)</string>
     <string name="save">保存</string>
     <string name="input_methods">インプットメソッド</string>
-    <string name="add_input_method">インプットメソッドの追加</string>
-    <string name="addons">アドオン</string>
-    <string name="conf">設定</string>
-    <string name="global_options">全般オプション</string>
-    <string name="behavior">ふるまい</string>
     <string name="advanced">高度な設定</string>
     <string name="ignore_sys_cursor">システムカーソル位置を無視する</string>
     <string name="hide_key_config">ホットキー設定を隠す</string>
@@ -39,7 +34,6 @@
     <string name="dict_already_exists">辞書はすでに存在します</string>
     <string name="invalid_dict">辞書の種類が無効です</string>
     <string name="whether_import_dict">この辞書をインポートしますか？</string>
-    <string name="import_">インポート</string>
     <string name="synced">同期完了!</string>
     <string name="loading">ロード中</string>
     <string name="clipboard_listening">クリップボードリスニング</string>
@@ -64,7 +58,7 @@
     <string name="virtual_keyboard">キーとフィードバック</string>
     <string name="clipboard_suggestion_timeout">クリップボード候補のタイムアウト</string>
     <string name="version">バージョン</string>
-    <string name="build_time">ビルド時間</string>
+    <string name="build_time">コミット日時</string>
     <string name="build_git_hash">ビルド Git ハッシュ</string>
     <string name="source_code">ソースコード</string>
     <string name="privacy_policy">プライバシーポリシー</string>
@@ -85,7 +79,6 @@
     <string name="app_crash_message">申し訳ありませんが、調査のためにいくつかのログをお届けします。</string>
     <string name="crash_logs">クラッシュログ</string>
     <string name="verbose_log">詳細な記録</string>
-    <string name="verbose_log_summary">再起動が必要です</string>
     <string name="removed_x">%1$s を削除しました</string>
     <string name="added_x">%1$s を追加しました</string>
     <string name="edited_x">%1$s を編集しました</string>
@@ -93,7 +86,6 @@
     <string name="keyboard_long_press_delay">キーの長押しの期間</string>
     <string name="quickphrase_editor">クイックフレーズエディター</string>
     <string name="quickphrase_already_exists">クイックフレーズはすでに存在します</string>
-    <string name="invalid_quickphrase">無効な値のクイックフレーズ</string>
     <string name="create_new">新規作成</string>
     <string name="name">名前</string>
     <string name="reset">リセット</string>
@@ -127,7 +119,6 @@
     <string name="exception_quickphrase_parse">クイックフレーズの行の解析に失敗しました: %1$s</string>
     <string name="exception_quickphrase_filename">%1$s のファイル拡張子はクイックフレーズを示していません</string>
     <string name="exception_theme_filename">%1$s のファイル拡張子はテーマを示していません</string>
-    <string name="exception_theme_unknown">テーマ %1$s が不明です</string>
     <string name="exception_libime_dict_filename">%1$s のファイル拡張子はlibime辞書を示していません</string>
     <string name="exception_text_dict_filename">%1$s のファイル拡張子はテキスト辞書を示していません</string>
     <string name="exception_sougou_dict_filename">%1$s のファイル拡張子はsogou辞書を示していません</string>
@@ -142,7 +133,6 @@
     <string name="dark_mode_theme">ダークモードテーマ</string>
     <string name="new_theme">新規テーマ</string>
     <string name="skip">スキップ</string>
-    <string name="horizontal_candidate_growth">残りの幅に合わせるため水平候補を引き伸ばす</string>
     <string name="none">なし</string>
     <string name="theme_migrated">テーマは現在のバージョンに移行されました</string>
     <string name="keep_keyboard_letters_uppercase">キーボードの文字を大文字にする</string>
@@ -154,11 +144,6 @@
     <string name="landscape">横画面時</string>
     <string name="keyboard_bottom_padding">キーボードの下部余白</string>
     <string name="keyboard_side_padding">キーボードの側面余白</string>
-    <string name="disable_addon_warn_title">アドオンを無効にする</string>
-    <string name="disable_addon_warn_name">%1$s を無効にする場合 :</string>
-    <string name="disable_addon_warn_dep">%1$s を無効にする</string>
-    <string name="disable_addon_warn_optdep">%1$s のいくつかの機能が無効になります</string>
-    <string name="disable_addon_warn_confirm">本当に無効にしますか？</string>
     <string name="swipe_symbol_behavior">句読点や数字をスワイプして入力する</string>
     <string name="swipe_down">下にスワイプ</string>
     <string name="swipe_up">上にスワイプ</string>
@@ -174,7 +159,6 @@
     <string name="exception_table_im">Tableインプットメソッドの設定ファイル（.confもしくは.conf.in）が見つかりません</string>
     <string name="exception_table">Tableの辞書（.dictもしくは.txt）が見つかりません</string>
     <string name="table_im">Tableインプットメソッド</string>
-    <string name="manage_table_im">Tableインプットメソッドの管理</string>
     <string name="exception_table_im_filename">\"%1$s\"の拡張子はTableインプットメソッドパッケージのもの（.zip）ではありません</string>
     <string name="table_already_exists">Tableインプットメソッドの設定ファイル\"%1$s\"は既に存在します</string>
     <string name="table_file_does_not_exist_title">Tableは利用できません</string>
@@ -210,7 +194,7 @@
     <string name="edit_theme">テーマを編集</string>
     <string name="fcitx_daemon">Fcitxデーモン</string>
     <string name="restarting_fcitx">Fcitxを再起動中</string>
-    <string name="removed_n_items">%1$s 個のアイテムを削除しました</string>
+    <string name="removed_n_items">%1$d 個のアイテムを削除しました</string>
     <string name="added_n_items">%1$d 個のアイテムを追加しました</string>
     <string name="whether_reset_switch_preference">この設定をデフォルトの設定にリセットしますか？</string>
     <string name="enabled">有効</string>
@@ -221,7 +205,7 @@
     <string name="disable_it">無効にする</string>
     <string name="export_user_data">ユーザーデータをエクスポートする</string>
     <string name="import_user_data">ユーザーデータをインポートする</string>
-    <string name="exception_user_data_filename">%1$s のファイル拡張子はfcitx5-androidのユーザーデータを示していません</string>
+    <string name="exception_user_data_filename">%1$s のファイル拡張子はYoumo IMEのバックアップを示していません</string>
     <string name="exception_user_data_metadata">ユーザーデータのメタデータが見つかりません</string>
     <string name="exception_user_data_package_name_mismatch">ユーザーデータが現在のアプリに適合しません</string>
     <string name="user_data_imported">%1$s のユーザーデータをインポートしました。再起動します…</string>
@@ -234,7 +218,6 @@
     <string name="table_dict_replace_message">Tableの辞書\"%1$s\"は存在します。新しい辞書をインポートして置き換えることができます。</string>
     <string name="lang_switch_key_behavior">言語切り替えキーの動作</string>
     <string name="lang_switch_behavior_next_ime_app">次のインプットメゾッドアプリに切り替える</string>
-    <string name="cannot_be_empty">空にできません</string>
     <string name="_cannot_be_empty">%1$s を空にできません</string>
     <string name="rotate">右回転</string>
     <string name="flip">反転</string>

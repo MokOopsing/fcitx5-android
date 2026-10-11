@@ -67,6 +67,7 @@ import splitties.views.gravityBottomEnd
 import splitties.views.gravityCenterVertical
 import splitties.views.imageDrawable
 import splitties.views.setPaddingDp
+import timber.log.Timber
 import kotlin.math.roundToInt
 
 /**
@@ -186,7 +187,7 @@ class UserWordListFragment : Fragment() {
 
     private fun load() {
         lifecycleScope.launch {
-            all = viewModel.fcitx.runOnReady { userWords() }.filter { it.kind == kind }
+            all = viewModel.fcitx.runOnReady { userWords(kind) }
             // by word and reading: a learned word's count may have changed since it was picked
             val picked = selected.mapTo(HashSet()) { it.text to it.pinyin }
             selected.clear()
@@ -204,25 +205,13 @@ class UserWordListFragment : Fragment() {
         filtering = owner.lifecycleScope.launch {
             // a search as the user types, not one a keystroke
             if (!immediately) delay(SEARCH_DELAY)
-            val q = query.trim().lowercase().replace(Regex("[\\s']"), "")
+            val q = searchKey(query)
             val words = all
-            shown = if (q.isEmpty()) words else withContext(Dispatchers.Default) {
-                // those that start with it first: typing a word's start finds it at the top
-                val (starting, within) = words.mapNotNull { word ->
-                    val text = word.text.lowercase()
-                    val pinyin = word.pinyin.replace(" ", "").lowercase()
-                    when {
-                        text.startsWith(q) || pinyin.startsWith(q) -> word to true
-                        q in text || q in pinyin -> word to false
-                        else -> null
-                    }
-                }.partition { it.second }
-                starting.map { it.first } + within.map { it.first }
-            }
+            shown = if (q.isEmpty()) words else withContext(Dispatchers.Default) { searchWords(words, q) }
             adapter.notifyDataSetChanged()
             countView.text = when {
                 words.isEmpty() -> getString(R.string.word_list_empty)
-                q.isEmpty() -> getString(R.string.word_list_count, words.size)
+                q.isEmpty() -> resources.getQuantityString(R.plurals.word_list_count, words.size, words.size)
                 else -> getString(R.string.word_list_found, shown.size, words.size)
             }
         }
@@ -251,12 +240,12 @@ class UserWordListFragment : Fragment() {
     private fun confirmRemove(words: List<UserWord>) {
         if (words.isEmpty()) return
         val message = when (kind) {
-            UserWord.Kind.ADDED -> R.string.confirm_delete_words
-            UserWord.Kind.LEARNED -> R.string.confirm_forget_words
-            UserWord.Kind.BLOCKED -> R.string.confirm_unblock_words
+            UserWord.Kind.ADDED -> R.plurals.confirm_delete_words
+            UserWord.Kind.LEARNED -> R.plurals.confirm_forget_words
+            UserWord.Kind.BLOCKED -> R.plurals.confirm_unblock_words
         }
         AlertDialog.Builder(requireContext())
-            .setMessage(getString(message, words.size))
+            .setMessage(resources.getQuantityString(message, words.size, words.size))
             .setPositiveButton(removeLabel()) { _, _ -> remove(words) }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
@@ -269,13 +258,14 @@ class UserWordListFragment : Fragment() {
             try {
                 viewModel.fcitx.runOnReady { removeUserWords(words) }
                 selected.removeAll(words.toSet())
-                all = viewModel.fcitx.runOnReady { userWords() }.filter { it.kind == kind }
+                all = viewModel.fcitx.runOnReady { userWords(kind) }
                 filter(immediately = true)
                 selectionChanged()
             } catch (e: CancellationException) {
                 throw e
             } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
                 // a word list that could not be written: shown, where uncaught it would close the app
+                Timber.w(e, "Removing user words failed")
                 ctx.toast(e)
             }
         }
@@ -430,4 +420,28 @@ class UserWordListFragment : Fragment() {
     companion object {
         private const val SEARCH_DELAY = 150L
     }
+}
+
+// spaces and the `'` that parts syllables: a pinyin is found however the user spaces it
+private val SEARCH_IGNORED = Regex("[\\s']")
+
+/** [query] as [searchWords] matches it: in lower case, spaces and `'` aside. */
+internal fun searchKey(query: String): String = query.trim().lowercase().replace(SEARCH_IGNORED, "")
+
+/**
+ * The [words] with [key] (a [searchKey]) in the word or in its pinyin, spaces aside, in any case:
+ * those that start with it first, as typing a word's start should find it at the top, each part in
+ * the order of [words].
+ */
+internal fun searchWords(words: List<UserWord>, key: String): List<UserWord> {
+    val (starting, within) = words.mapNotNull { word ->
+        val text = word.text.lowercase()
+        val pinyin = word.pinyin.replace(" ", "").lowercase()
+        when {
+            text.startsWith(key) || pinyin.startsWith(key) -> word to true
+            key in text || key in pinyin -> word to false
+            else -> null
+        }
+    }.partition { it.second }
+    return starting.map { it.first } + within.map { it.first }
 }

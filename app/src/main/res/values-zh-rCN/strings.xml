@@ -4,11 +4,6 @@
     <string name="app_name_debug">幽默输入法 (调试)</string>
     <string name="save">保存</string>
     <string name="input_methods">输入法</string>
-    <string name="add_input_method">添加输入法</string>
-    <string name="addons">附加组件</string>
-    <string name="conf">配置</string>
-    <string name="global_options">全局选项</string>
-    <string name="behavior">行为</string>
     <string name="advanced">高级</string>
     <string name="ignore_sys_cursor">忽略系统光标位置</string>
     <string name="hide_key_config">隐藏快捷键配置</string>
@@ -40,7 +35,6 @@
     <string name="dict_already_exists">词库已存在</string>
     <string name="invalid_dict">词典类型无效</string>
     <string name="whether_import_dict">您想导入这个词库吗？</string>
-    <string name="import_">导入</string>
     <string name="synced">已同步！</string>
     <string name="loading">加载中</string>
     <string name="clipboard_listening">记录剪贴板历史</string>
@@ -65,7 +59,7 @@
     <string name="virtual_keyboard">按键与振动</string>
     <string name="clipboard_suggestion_timeout">剪贴板提示超时</string>
     <string name="version">版本</string>
-    <string name="build_time">构建时间</string>
+    <string name="build_time">提交时间</string>
     <string name="engine_data">基础数据</string>
     <string name="download_word_packs">去下载词包</string>
     <string name="data_outdated">这一版已超过半年</string>
@@ -90,7 +84,6 @@
     <string name="app_crash_message">抱歉，但我们提供了日志以供调查。</string>
     <string name="crash_logs">崩溃日志</string>
     <string name="verbose_log">详细记录日志</string>
-    <string name="verbose_log_summary">需要重启</string>
     <string name="removed_x">已移除 %1$s</string>
     <string name="added_x">已添加 %1$s</string>
     <string name="edited_x">已编辑 %1$s</string>
@@ -98,7 +91,6 @@
     <string name="keyboard_long_press_delay">长按延迟</string>
     <string name="quickphrase_editor">快速输入编辑器</string>
     <string name="quickphrase_already_exists">快速输入已存在</string>
-    <string name="invalid_quickphrase">快速输入格式无效</string>
     <string name="create_new">新建</string>
     <string name="name">名称</string>
     <string name="reset">重置</string>
@@ -135,7 +127,6 @@
     <string name="exception_quickphrase_parse">无法解析快速输入条目： %1$s</string>
     <string name="exception_quickphrase_filename">文件 %1$s 的拓展名不是快速输入</string>
     <string name="exception_theme_filename">文件 %1$s 的拓展名不是主题</string>
-    <string name="exception_theme_unknown">未知主题 %1$s</string>
     <string name="exception_libime_dict_filename">文件 %1$s 的拓展名不是 libime 词库</string>
     <string name="exception_text_dict_filename">文件 %1$s 的拓展名不是纯文本词库</string>
     <string name="exception_sougou_dict_filename">文件 %1$s 的拓展名不是搜狗细胞词库</string>
@@ -151,24 +142,19 @@
     <string name="dark_mode_theme">暗色模式主题</string>
     <string name="new_theme">新增主题</string>
     <string name="skip">跳过</string>
-    <string name="horizontal_candidate_growth">拉伸横向候选词以填充宽度</string>
     <string name="none">无</string>
     <string name="theme_migrated">主题已迁移到当前版本</string>
     <string name="keep_keyboard_letters_uppercase">键盘字母保持大写</string>
     <string name="choose_input_method">选择输入法</string>
     <string name="edit_clipboard">编辑剪贴板</string>
     <string name="clipboard_edit_text_hint">剪贴板内容</string>
+    <string name="clipboard_copy_too_large">内容过大，无法复制到剪贴板</string>
     <string name="config_addon_not_loaded">无可用配置项，该附加组件可能在 Fcitx 启动时处于禁用状态。</string>
     <string name="portrait">竖屏</string>
     <string name="landscape">横屏</string>
     <string name="keyboard_bottom_padding">键盘底部边距</string>
     <string name="keyboard_side_padding">键盘两侧边距</string>
     <string name="clipboard_suggestion">显示剪贴板提示</string>
-    <string name="disable_addon_warn_title">禁用附加组件</string>
-    <string name="disable_addon_warn_name">禁用%1$s将同时：</string>
-    <string name="disable_addon_warn_dep">禁用%1$s</string>
-    <string name="disable_addon_warn_optdep">禁用%1$s中的某些功能</string>
-    <string name="disable_addon_warn_confirm">确定要禁用它吗？</string>
     <string name="swipe_symbol_behavior">划动输入标点符号及数字</string>
     <string name="swipe_down">下划</string>
     <string name="swipe_up">上划</string>
@@ -184,7 +170,6 @@
     <string name="exception_table_im">未找到码表输入法配置文件（ .conf 或 .conf.in ）</string>
     <string name="exception_table">未找到码表词典（ .dict 或 .txt ）</string>
     <string name="table_im">码表输入法</string>
-    <string name="manage_table_im">管理码表输入法</string>
     <string name="exception_table_im_filename">\"%1$s\" 的拓展名不是码表输入法包（ .zip ）</string>
     <string name="table_already_exists">\"%1$s\" 码表输入法配置文件已存在</string>
     <string name="table_dict_already_exists">码表“%1$s”已属于另一个输入法</string>
@@ -234,7 +219,7 @@
     <string name="reset_keyboard_on_focus_change">焦点改变时切换回键盘</string>
     <string name="export_user_data">备份全部</string>
     <string name="import_user_data">从备份恢复</string>
-    <string name="exception_user_data_filename">文件 %1$s 的拓展名不是 fcitx5-android 用户数据</string>
+    <string name="exception_user_data_filename">文件 %1$s 的拓展名不是幽默输入法备份</string>
     <string name="exception_user_data_metadata">找不到用户数据的元数据</string>
     <string name="exception_user_data_package_name_mismatch">用户数据与当前应用不匹配</string>
     <string name="user_data_imported">已导入来自 %1$s 的用户数据，正在重启…</string>
@@ -244,18 +229,16 @@
     <string name="i_do_not_need_it">我不需要</string>
     <string name="grant_permission">授予权限</string>
     <string name="clear_clp_db_confirm">剪贴板数据库将会被完全清空，包括已置顶的条目。继续吗？</string>
+    <string name="clear_clp_db_not_all">部分剪贴板数据未能清除，可能仍然存在，或在下次启动时重新出现；再次清空，或重启后再清空，或许有效。</string>
     <string name="expand_keypress_area">将按键范围扩展至边缘</string>
     <string name="update_table">更新码表</string>
     <string name="table_dict_replace_message">码表词典 \"%1$s\" 已存在。您可以导入新词典并替换它。</string>
     <string name="lang_switch_key_behavior">语言切换键行为</string>
     <string name="lang_switch_behavior_next_ime_app">切换至下一个输入法应用</string>
-    <string name="cannot_be_empty">不能为空</string>
     <string name="_cannot_be_empty">%1$s不能为空</string>
-    <string name="action_forget_candidate_word">忘记词汇</string>
     <string name="clipboard_mask_sensitive">隐藏敏感信息（如密码）</string>
     <string name="clipboard_clear_urls">去除链接中的跟踪参数</string>
     <string name="clipboard_clear_urls_summary">复制的链接存入剪贴板历史前，按 ClearURLs 规则清理。不改动系统剪贴板。</string>
-    <string name="restart_to_apply_settings">应用将重启以应用新设置。继续吗？</string>
     <string name="auto_pairs">括号和引号成对输入，光标停在中间</string>
     <string name="space_swipe_move_cursor">划动空格键以移动光标</string>
     <string name="please_wait">请稍候…</string>
@@ -279,14 +262,12 @@
     <string name="restart_fcitx_instance">重启 Fcitx 实例</string>
     <string name="restart_fcitx_instance_confirm">Fcitx 实例将被销毁并重新初始化。继续吗？</string>
     <string name="ignore_system_window_insets">忽略系统窗口边衬区 (WindowInsets)</string>
-    <string name="browse_user_data_dir">浏览用户数据目录</string>
-    <string name="browse_user_data_dir_summary">长按改用系统文件管理器打开</string>
     <string name="user_data">备份与恢复</string>
     <string name="haptic_on_repeat">重复按键时的振动反馈</string>
     <string name="redo">重做</string>
     <string name="status_area">状态区域</string>
     <string name="expand_candidates_list">展开候选词列表</string>
-    <string name="hide_candidates_list">隐藏</string>
+    <string name="hide_candidates_list">隐藏候选词列表</string>
     <string name="hide_keyboard">隐藏键盘</string>
     <string name="private_mode">隐私模式（点击以切换工具栏）</string>
     <string name="hide_toolbar">隐藏工具栏</string>
@@ -296,7 +277,7 @@
     <string name="move_cursor_up">向上移动光标</string>
     <string name="move_cursor_right">向右移动光标</string>
     <string name="move_cursor_down">向下移动光标</string>
-    <string name="move_cursor_left">向左移动</string>
+    <string name="move_cursor_left">向左移动光标</string>
     <string name="move_cursor_to_start">把光标移动到开头</string>
     <string name="move_cursor_to_end">把光标移动到结尾</string>
     <string name="open_input_method_settings">打开输入法设置</string>
@@ -312,7 +293,6 @@
     <string name="emoji_skin_tone_type_6">🏿 深肤色 (Type-6)</string>
     <string name="hide_unsupported_emojis">隐藏不支持的表情</string>
     <string name="key_border_stroke">启用按键边框描边</string>
-    <string name="edit_text_playground">文本输入框 (EditText) 演练场</string>
     <string name="keyboard_height_percent_base">键盘高度百分比</string>
     <string name="display_metrics">显示指标 (Resources.getDisplayMetrics)</string>
     <string name="real_size">真实尺寸 (Display.getRealSize)</string>
@@ -340,13 +320,9 @@
     <string name="a11y_copy">复制</string>
     <string name="long_press_characters">按键字符</string>
     <string name="section_keys">按键</string>
-    <string name="section_toolbar_and_panels">工具栏与面板</string>
     <string name="section_candidates">候选栏</string>
-    <string name="section_size_and_padding">尺寸与边距</string>
     <string name="section_sound_and_vibration">声音与振动</string>
     <string name="home_section_input">输入</string>
-    <string name="home_section_keyboard">键盘</string>
-    <string name="home_section_appearance">外观</string>
     <string name="home_section_other">其他</string>
     <string name="long_press_characters_summary">自定义每个键长按弹出的字符；第一个也是滑动输入的字符，也就是键上的小字</string>
     <string name="long_press_of">长按“%1$s”</string>
@@ -371,23 +347,22 @@
     </plurals>
     <string name="forget_word">忘掉</string>
     <string name="unblock_word">恢复显示</string>
-    <string name="search">搜索</string>
     <string name="search_words_hint">搜索词或拼音</string>
     <string name="search_settings">搜索设置</string>
     <string name="search_settings_hint">搜索设置项</string>
     <string name="search_settings_none">没有找到相关的设置</string>
-    <string name="home_section_words">词库</string>
+    <string name="home_section_words">词语</string>
     <string name="home_section_keyboard_look">键盘与外观</string>
     <string name="home_section_clipboard_emoji">剪贴板与表情</string>
     <string name="custom_phrases">自定义短语</string>
-    <string name="custom_phrases_summary">用短的编码打出长文本，如 dz → 你的地址</string>
     <string name="word_packs">词库</string>
-    <string name="my_words_summary">手动添加、自动学到和屏蔽的词，可导入导出</string>
     <string name="more_settings">更多设置</string>
     <string name="word_pinyin_unknown">找不到读音，请填写拼音</string>
     <string name="punctuation_map">中文标点</string>
     <string name="word_list_empty">还没有词</string>
-    <string name="word_list_count">共 %1$d 个 · 长按可多选</string>
+    <plurals name="word_list_count">
+        <item quantity="other">共 %1$d 个 · 长按可多选</item>
+    </plurals>
     <string name="word_list_found">找到 %1$d 个，共 %2$d 个</string>
     <string name="import_words">导入词表</string>
     <string name="import_words_summary">文本文件，一行一个词，可以带拼音（幽默 you\'mo），也可以只写词。搜狗、QQ 等导出的词库文本也能读</string>
@@ -398,9 +373,15 @@
     <string name="select_all">全选</string>
     <string name="delete_selected">删除</string>
     <string name="selected_count">已选 %1$d 个</string>
-    <string name="confirm_delete_words">删除这 %1$d 个词？</string>
-    <string name="confirm_forget_words">忘掉这 %1$d 个词？</string>
-    <string name="confirm_unblock_words">恢复显示这 %1$d 个词？</string>
+    <plurals name="confirm_delete_words">
+        <item quantity="other">删除这 %1$d 个词？</item>
+    </plurals>
+    <plurals name="confirm_forget_words">
+        <item quantity="other">忘掉这 %1$d 个词？</item>
+    </plurals>
+    <plurals name="confirm_unblock_words">
+        <item quantity="other">恢复显示这 %1$d 个词？</item>
+    </plurals>
     <string name="words_section_manage">词</string>
     <string name="words_section_files">导入与导出</string>
     <plurals name="word_count">

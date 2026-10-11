@@ -25,7 +25,6 @@ import org.fcitx.fcitx5.android.ui.main.MainViewModel
 import org.fcitx.fcitx5.android.utils.addPreference
 import org.fcitx.fcitx5.android.utils.navigateWithAnim
 import org.fcitx.fcitx5.android.utils.toast
-import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -89,7 +88,7 @@ class UserWordsFragment : PaddingPreferenceFragment() {
 
     private fun refreshCounts() {
         lifecycleScope.launch {
-            val counts = viewModel.fcitx.runOnReady { userWords() }.groupingBy { it.kind }.eachCount()
+            val counts = viewModel.fcitx.runOnReady { userWordCounts() }
             lists.forEach { (kind, pref) -> pref.summary = count(counts[kind] ?: 0) }
         }
     }
@@ -99,10 +98,10 @@ class UserWordsFragment : PaddingPreferenceFragment() {
     private fun import(uri: Uri) {
         val ctx = requireContext()
         lifecycleScope.withLoadingDialog(ctx) {
-            try {
+            ctx.showingFileErrors("user words import") {
                 val lines = withContext(Dispatchers.IO) {
-                    val bytes = (ctx.contentResolver.openInputStream(uri) ?: throw IOException("cannot read $uri")).use { it.readImported() }
-                    WordLists.decode(bytes).lines()
+                    val bytes = ctx.contentResolver.openInputStreamOrThrow(uri).use { it.readImported() }
+                    WordLists.decode(bytes).lineSequence()
                 }
                 val imported = viewModel.fcitx.runOnReady { importUserWords(lines) }
                 AlertDialog.Builder(ctx)
@@ -111,11 +110,6 @@ class UserWordsFragment : PaddingPreferenceFragment() {
                     .setPositiveButton(android.R.string.ok, null)
                     .show()
                 refreshCounts()
-            } catch (e: IOException) {
-                ctx.toast(e)
-            } catch (e: SecurityException) {
-                // a file the picker gave that its provider will not open after all
-                ctx.toast(e)
             }
         }
     }
@@ -123,21 +117,16 @@ class UserWordsFragment : PaddingPreferenceFragment() {
     private fun export(uri: Uri) {
         val ctx = requireContext()
         lifecycleScope.withLoadingDialog(ctx) {
-            try {
+            ctx.showingFileErrors("user words export") {
                 val lines = viewModel.fcitx.runOnReady { exportUserWords() }
                 withContext(Dispatchers.IO) {
-                    (ctx.contentResolver.openOutputStream(uri) ?: throw IOException("cannot write $uri")).bufferedWriter().use { out ->
+                    ctx.contentResolver.openOutputStreamOrThrow(uri).bufferedWriter().use { out ->
                         out.write(getString(R.string.export_words_header))
                         out.write("\n")
                         lines.forEach { out.write(it); out.write("\n") }
                     }
                 }
                 ctx.toast(count(lines.size))
-            } catch (e: IOException) {
-                ctx.toast(e)
-            } catch (e: SecurityException) {
-                // a file the picker gave that its provider will not open after all
-                ctx.toast(e)
             }
         }
     }

@@ -15,11 +15,6 @@ import org.fcitx.fcitx5.android.engine.host.Engines
  */
 interface FcitxAPI {
 
-    enum class AddonDep {
-        Required,
-        Optional
-    }
-
     /**
      * Subscribe this flow to receive event sent from fcitx
      */
@@ -37,8 +32,6 @@ interface FcitxAPI {
 
     fun setLogRule(verbose: Boolean)
 
-    suspend fun getAddonReverseDependencies(addon: String): List<Pair<String, AddonDep>>
-
     fun translate(str: String, domain: String = "fcitx5"): String
 
     suspend fun save()
@@ -50,6 +43,12 @@ interface FcitxAPI {
 
     /** The words the user added, made as they typed, and blocked: see [Engines.userWords]. */
     suspend fun userWords(): List<Engines.UserWord>
+
+    /** The user's words of [kind] alone: see [Engines.userWords]. */
+    suspend fun userWords(kind: Engines.UserWord.Kind): List<Engines.UserWord>
+
+    /** How many words of each kind the user has: see [Engines.userWordCounts]. */
+    suspend fun userWordCounts(): Map<Engines.UserWord.Kind, Int>
 
     /** Where each of [texts] splits into words: see [Engines.wordBoundaries]. */
     suspend fun wordBoundaries(texts: List<String>): Map<String, IntArray>
@@ -69,8 +68,12 @@ interface FcitxAPI {
     /** Takes [words] off their lists: see [Engines.removeWords]. */
     suspend fun removeUserWords(words: List<Engines.UserWord>)
 
-    /** Adds and blocks the words of a list the user imports, a word a line: see [Engines.importWords]. */
-    suspend fun importUserWords(lines: List<String>): Engines.Imported
+    /**
+     * Adds and blocks the words of a list the user imports, a word a line: see [Engines.importWords].
+     * [lines] are read as the engine takes them, on fcitx's thread: those of a local file, not of a
+     * provider's stream, whose slowness would hold up the keyboard.
+     */
+    suspend fun importUserWords(lines: Sequence<String>): Engines.Imported
 
     /** The user's words as [importUserWords] reads them: see [Engines.exportWords]. */
     suspend fun exportUserWords(): List<String>

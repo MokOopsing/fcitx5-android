@@ -4,11 +4,8 @@
  */
 package org.fcitx.fcitx5.android.data.pinyin
 
-import io.mockk.every
-import io.mockk.mockkObject
 import org.fcitx.fcitx5.android.data.pinyin.ImportedDictionaries.Unread
 import org.fcitx.fcitx5.android.engine.data.SourceException
-import org.fcitx.fcitx5.android.engine.libime.LibimeFiles
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -27,7 +24,7 @@ class ImportedDictionariesTest {
     private val dir by lazy { folder.newFolder("dictionaries") }
 
     // what libime kept of a dictionary imported from text (see ime-core's resources/libime)
-    private val extra = javaClass.getResourceAsStream("/libime/extra.dict")!!.readBytes()
+    private val extra = javaClass.getResourceAsStream("/libime/extra.dict")!!.use { it.readBytes() }
 
     private fun names() = dir.list()!!.sorted()
 
@@ -37,7 +34,7 @@ class ImportedDictionariesTest {
     @Test
     fun aDictionaryIsKeptAsTheEngineReadsIt() {
         val dest = File(dir, "a.txt")
-        val words = ImportedDictionaries.write(sequenceOf("﻿你好\tni'hao", "junk", "绿 lü -1"), dest)
+        val words = ImportedDictionaries.write(sequenceOf("\uFEFF你好\tni'hao", "junk", "绿 lü -1"), dest)
         assertEquals(2, words)
         assertEquals("你好 ni'hao 0.0\n绿 lü -1.0\n", dest.readText())
         assertEquals(listOf("a.txt"), names())
@@ -95,12 +92,25 @@ class ImportedDictionariesTest {
     }
 
     @Test
+    fun oneOfTheNameOfAWordPackIsOnlyPutAside() {
+        val pack = "# youmo words 1\n搭子 da'zi -5.6\n"
+        File(dir, "a.dict").writeBytes(extra)
+        File(dir, "a.words").writeText(pack)
+        // as an older migration left it: put aside, nothing noted
+        val libime = File(dir, ImportedDictionaries.LIBIME).apply { mkdir() }
+        File(libime, "b.dict").writeBytes(extra.copyOf(30))
+        File(dir, "b.words.disable").writeText(pack)
+        ImportedDictionaries.migrate(dir)
+        // no a.txt beside a.words to share its entry in the new words; one of a pack's name is no news
+        assertEquals(listOf(".libime", "a.words", "b.words.disable"), names())
+        assertEquals(listOf("a.dict", "b.dict"), aside())
+        assertEquals(emptyList<Unread>(), ImportedDictionaries.unread(dir))
+    }
+
+    @Test
     fun oneTooLargeForTheHeapIsPutAsideNotReadAgain() {
         File(dir, "huge.dict").writeBytes(extra)
-        mockkObject(LibimeFiles) {
-            every { LibimeFiles.pinyinDictionary(any()) } throws OutOfMemoryError("Java heap space")
-            ImportedDictionaries.migrate(dir)
-        }
+        ImportedDictionaries.migrate(dir) { throw OutOfMemoryError("Java heap space") }
         assertEquals(listOf(".libime"), names())
         assertEquals(listOf("huge.dict"), aside())
     }
@@ -129,10 +139,7 @@ class ImportedDictionariesTest {
             ImportedDictionaries.unread(dir).sortedBy { it.fileName },
         )
         File(dir, "huge.dict").writeBytes(extra)
-        mockkObject(LibimeFiles) {
-            every { LibimeFiles.pinyinDictionary(any()) } throws OutOfMemoryError("Java heap space")
-            ImportedDictionaries.migrate(dir)
-        }
+        ImportedDictionaries.migrate(dir) { throw OutOfMemoryError("Java heap space") }
         // after those before, all kept until told
         assertEquals(3, ImportedDictionaries.unread(dir).size)
         assertEquals(Unread("huge.dict", Unread.Reason.TOO_LARGE), ImportedDictionaries.unread(dir).last())
@@ -207,11 +214,10 @@ class ImportedDictionariesTest {
         val libime = File(dir, ImportedDictionaries.LIBIME).apply { mkdir() }
         File(libime, "huge.dict").writeBytes(extra)
         File(libime, "lost.dict").writeBytes(extra.copyOf(30))
-        mockkObject(LibimeFiles) {
-            every { LibimeFiles.pinyinDictionary(match { it.size == extra.size }) } throws OutOfMemoryError("Java heap space")
+        ImportedDictionaries.migrate(dir) { data ->
+            if (data.size == extra.size) throw OutOfMemoryError("Java heap space")
             // as if the file could not be read
-            every { LibimeFiles.pinyinDictionary(match { it.size == 30 }) } throws IOException("I/O error")
-            ImportedDictionaries.migrate(dir)
+            throw IOException("I/O error")
         }
         assertEquals(
             listOf(Unread("huge.dict", Unread.Reason.TOO_LARGE), Unread("lost.dict", Unread.Reason.UNKNOWN)),
@@ -233,6 +239,20 @@ class ImportedDictionariesTest {
             ImportedDictionaries.unread(dir),
         )
         assertEquals(listOf("a.dict", "a.dict.1"), aside())
+    }
+
+    @Test
+    fun oneAnOlderMigrationPutAsideIsNotedThoughOneOfItsNameIsTurnedIntoTextAfter() {
+        // as an older migration left it: put aside, nothing noted
+        val libime = File(dir, ImportedDictionaries.LIBIME).apply { mkdir() }
+        File(libime, "x.dict").writeBytes(extra.copyOf(30))
+        File(dir, "x.dict").writeBytes(extra)
+        ImportedDictionaries.migrate(dir)
+        // looked at before the new one is turned into x.txt: another dictionary, never told of
+        assertEquals(listOf(Unread("x.dict", Unread.Reason.DAMAGED)), ImportedDictionaries.unread(dir))
+        assertEquals(listOf(".libime", "x.txt"), names())
+        assertEquals("骁骎 xiao'qin 0.0\n琮璟 cong'jing 0.0\n", File(dir, "x.txt").readText())
+        assertEquals(listOf("x.dict", "x.dict.1"), aside())
     }
 
     @Test
@@ -271,5 +291,19 @@ class ImportedDictionariesTest {
         val dest = File(dir, "a.txt").apply { mkdir() }
         assertThrows(IOException::class.java) { ImportedDictionaries.write(sequenceOf("你 ni 0.0"), dest) }
         assertEquals(listOf("a.txt"), names())
+    }
+
+    @Test
+    fun aNameIsListedInTheNewWordsAsItIsOrNotAtAll() {
+        ImportedDictionaries.setIntoNew(dir, "新词 ", true)
+        assertEquals(setOf("新词 "), ImportedDictionaries.intoNew(dir))
+        // a name a line: one with a line break would read back as two
+        assertThrows(IOException::class.java) { ImportedDictionaries.setIntoNew(dir, "a\nb", true) }
+        assertEquals(setOf("新词 "), ImportedDictionaries.intoNew(dir))
+        // one not listed is kept from the new words all the same
+        ImportedDictionaries.setIntoNew(dir, "a\nb", false)
+        ImportedDictionaries.setIntoNew(dir, "新词 ", false)
+        assertEquals(emptySet<String>(), ImportedDictionaries.intoNew(dir))
+        assertEquals(listOf(ImportedDictionaries.INTO_NEW), names())
     }
 }

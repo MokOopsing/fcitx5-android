@@ -40,9 +40,6 @@ class FakeFcitxAPI : FcitxAPI {
     var availableIme: Array<InputMethodEntry> = emptyArray()
     var enabledIme: Array<InputMethodEntry> = emptyArray()
 
-    private var dependencyGraph: AddonDependencyGraph? = null
-    private var dependencyGraphAddons: Array<AddonInfo>? = null
-
     private val globalConfig = RawConfig()
     private val addonConfigs = mutableMapOf<String, RawConfig>()
     private val addonSubConfigs = mutableMapOf<Pair<String, String>, RawConfig>()
@@ -50,16 +47,6 @@ class FakeFcitxAPI : FcitxAPI {
 
     override fun setLogRule(verbose: Boolean) {
         calls += "setLogRule($verbose)"
-    }
-
-    override suspend fun getAddonReverseDependencies(addon: String): List<Pair<String, FcitxAPI.AddonDep>> {
-        // rebuilt when the test replaces [addons]
-        val graph = dependencyGraph.takeIf { dependencyGraphAddons === addons }
-            ?: AddonDependencyGraph(addons).also {
-                dependencyGraph = it
-                dependencyGraphAddons = addons
-            }
-        return graph.reverseDependencies(addon)
     }
 
     override fun translate(str: String, domain: String) = str
@@ -80,6 +67,11 @@ class FakeFcitxAPI : FcitxAPI {
     val userWords = ArrayList<Engines.UserWord>()
 
     override suspend fun userWords(): List<Engines.UserWord> = userWords.toList()
+
+    override suspend fun userWords(kind: Engines.UserWord.Kind): List<Engines.UserWord> = userWords.filter { it.kind == kind }
+
+    override suspend fun userWordCounts(): Map<Engines.UserWord.Kind, Int> =
+        Engines.UserWord.Kind.entries.associateWith { kind -> userWords.count { it.kind == kind } }
 
     // no dictionary to read it by
     override suspend fun pinyinOf(text: String): String? = null
@@ -107,12 +99,18 @@ class FakeFcitxAPI : FcitxAPI {
         userWords -= words.toSet()
     }
 
-    override suspend fun importUserWords(lines: List<String>): Engines.Imported {
-        calls += "importUserWords(${lines.size})"
-        return Engines.Imported(0, 0, lines.size)
+    override suspend fun importUserWords(lines: Sequence<String>): Engines.Imported {
+        // once: a file's lines may be read only once
+        val count = lines.count()
+        calls += "importUserWords($count)"
+        return Engines.Imported(0, 0, count)
     }
 
-    override suspend fun exportUserWords(): List<String> = userWords.map { "${it.text} ${it.pinyin}" }
+    // as Engines.exportWords writes them, for importUserWords to read back
+    override suspend fun exportUserWords(): List<String> = userWords.map {
+        val line = "${it.text} ${it.pinyin.replace(' ', '\'')}"
+        if (it.kind == Engines.UserWord.Kind.BLOCKED) "!$line" else line
+    }
 
     override suspend fun engineContext(before: String) {
         calls += "engineContext($before)"
@@ -156,7 +154,12 @@ class FakeFcitxAPI : FcitxAPI {
 
     override suspend fun setEnabledIme(array: Array<String>) {
         calls += "setEnabledIme(${array.joinToString()})"
-        enabledIme = availableIme.filter { it.uniqueName in array }.toTypedArray()
+        val current = inputMethodEntryCached.uniqueName
+        val wasEnabled = enabledIme.any { it.uniqueName == current }
+        // in the order given, as fcitx keeps it
+        enabledIme = array.mapNotNull { name -> availableIme.find { it.uniqueName == name } }.toTypedArray()
+        // the current one taken out: fcitx turns to the first left, as for a context that has no other
+        if (wasEnabled && enabledIme.none { it.uniqueName == current }) enabledIme.firstOrNull()?.let { inputMethodEntryCached = it }
     }
 
     override suspend fun toggleIme() {

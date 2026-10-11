@@ -14,15 +14,15 @@ abstract class PinyinDictionary {
 
         companion object {
             /**
-             * A file manager may name one `WORDS.SCEL`: an extension in any case, unless [ignoreCase]
-             * is false, for the files kept, which are named in lowercase as the engine reads them.
+             * Case-sensitive, as the files kept are named in lowercase, as the engine reads them: a
+             * name from outside goes through [org.fcitx.fcitx5.android.utils.withLowercaseExtension] first.
              */
-            fun fromFileName(name: String, ignoreCase: Boolean = true): Type? =
+            fun fromFileName(name: String): Type? =
                 when {
-                    name.endsWith(".dict", ignoreCase) -> LibIME
-                    name.endsWith(".scel", ignoreCase) -> Sougou
-                    name.endsWith(".txt", ignoreCase) || name.endsWith(".txt.${TextDictionary.DISABLE}", ignoreCase) -> Text
-                    name.endsWith(".words", ignoreCase) || name.endsWith(".words.${TextDictionary.DISABLE}", ignoreCase) -> Words
+                    name.endsWith(".dict") -> LibIME
+                    name.endsWith(".scel") -> Sougou
+                    name.endsWith(".txt") || name.endsWith(".txt.${TextDictionary.DISABLE}") -> Text
+                    name.endsWith(".words") || name.endsWith(".words.${TextDictionary.DISABLE}") -> Words
                     else -> null
                 }
         }

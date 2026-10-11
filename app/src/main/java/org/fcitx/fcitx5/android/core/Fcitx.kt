@@ -55,28 +55,21 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
         setupLogStream(verbose)
     }
 
-    // built on first use, and only ever touched on the fcitx thread (see
-    // [getAddonReverseDependencies]); reset by [stop] after the dispatcher is gone
-    private var addonGraph: AddonDependencyGraph? = null
-
-    override suspend fun getAddonReverseDependencies(addon: String) = withFcitxContext {
-        (addonGraph ?: AddonDependencyGraph(addons()).also { addonGraph = it })
-            .reverseDependencies(addon)
-    }
-
     override fun translate(str: String, domain: String) = getFcitxTranslation(domain, str)
 
     override suspend fun save() = withFcitxContext { saveFcitxState() }
     override suspend fun reloadConfig() = withFcitxContext { reloadFcitxConfig() }
     override suspend fun reloadEngine() = withFcitxContext { EngineBridge.reload() }
     override suspend fun userWords() = withFcitxContext { EngineBridge.engines.userWords() }
+    override suspend fun userWords(kind: Engines.UserWord.Kind) = withFcitxContext { EngineBridge.engines.userWords(kind) }
+    override suspend fun userWordCounts() = withFcitxContext { EngineBridge.engines.userWordCounts() }
     override suspend fun pinyinOf(text: String) = withFcitxContext { EngineBridge.engines.pinyinOf(text) }
     override suspend fun wordBoundaries(texts: List<String>) = withFcitxContext { EngineBridge.engines.wordBoundaries(texts) }
     override suspend fun logProbs(texts: List<String>) = withFcitxContext { EngineBridge.engines.logProbs(texts) }
     override suspend fun addUserWord(text: String, pinyin: String) = withFcitxContext { EngineBridge.engines.addWord(text, pinyin) }
     override suspend fun blockUserWord(text: String, pinyin: String) = withFcitxContext { EngineBridge.engines.blockWord(text, pinyin) }
     override suspend fun removeUserWords(words: List<Engines.UserWord>) = withFcitxContext { EngineBridge.engines.removeWords(words) }
-    override suspend fun importUserWords(lines: List<String>) = withFcitxContext { EngineBridge.engines.importWords(lines.asSequence()) }
+    override suspend fun importUserWords(lines: Sequence<String>) = withFcitxContext { EngineBridge.engines.importWords(lines) }
     override suspend fun exportUserWords() = withFcitxContext { EngineBridge.engines.exportWords() }
 
     override suspend fun engineContext(before: String) = withFcitxContext { EngineBridge.context(before) }
@@ -482,6 +475,8 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
 
         override fun nativeExit() {
             exitFcitx()
+            // the addon gone with fcitx: a cached process keeps none of the engine's models, tables and logs
+            EngineBridge.close()
         }
 
     })
@@ -557,8 +552,6 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
         }
         lifecycleRegistry.postEvent(FcitxLifecycle.Event.ON_STOPPED)
         unregisterFcitxEventHandler(::handleFcitxEvent)
-        // clear addon graph
-        addonGraph = null
     }
 
 }
