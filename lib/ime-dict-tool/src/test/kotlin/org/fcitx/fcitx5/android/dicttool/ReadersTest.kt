@@ -9,6 +9,7 @@ import org.fcitx.fcitx5.android.engine.data.PinyinData
 import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
 import org.fcitx.fcitx5.android.engine.data.SourceException
 import org.fcitx.fcitx5.android.engine.data.fields
+import org.fcitx.fcitx5.android.engine.pinyin.Syllables
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -62,10 +63,11 @@ class ReadersTest {
         val reader = PinyinDictReader(builder)
         reader.read("好\thao\t0\n\n好 hao'ni -0.5\n好\txyz\t0\n耗 hao\n好\tni'xyz'xyz\n".reader().buffered(), "dict")
         assertEquals(3, reader.entries)
-        assertEquals(mapOf("xyz" to 3), reader.unknownSyllables)
-        assertEquals(3, reader.skipped)
+        // xyz twice in one reading: still one reading skipped
+        assertEquals(mapOf("xyz" to 2), reader.unknownSyllables)
+        assertEquals(2, reader.skipped)
         val data = PinyinData.load(ByteBuffer.wrap(builder.build().toByteArray()))
-        assertEquals(2, data.dictionary.wordCount(data.dictionary.find(intArrayOf(org.fcitx.fcitx5.android.engine.pinyin.Syllables.id("hao")))))
+        assertEquals(2, data.dictionary.wordCount(data.dictionary.find(intArrayOf(Syllables.id("hao")))))
     }
 
     @Test
@@ -77,7 +79,7 @@ class ReadersTest {
         assertEquals(2, reader.corrections)
         val data = PinyinData.load(ByteBuffer.wrap(builder.build().toByteArray()))
         fun weight(vararg reading: String): Float? {
-            val node = data.dictionary.find(reading.map { org.fcitx.fcitx5.android.engine.pinyin.Syllables.id(it) }.toIntArray())
+            val node = data.dictionary.find(reading.map { Syllables.id(it) }.toIntArray())
             return if (node < 0 || data.dictionary.wordCount(node) == 0) null else data.dictionary.weight(node, 0)
         }
         assertEquals(0f, weight("bo", "re"))

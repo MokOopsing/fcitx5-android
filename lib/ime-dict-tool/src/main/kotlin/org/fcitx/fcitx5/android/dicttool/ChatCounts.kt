@@ -4,6 +4,8 @@
  */
 package org.fcitx.fcitx5.android.dicttool
 
+import org.fcitx.fcitx5.android.engine.lattice.TextWords
+
 /**
  * N-gram counts of text split into [model]'s words: what people write to each other, which the
  * model (news and the like) has little of.
@@ -16,8 +18,9 @@ package org.fcitx.fcitx5.android.dicttool
  */
 class ChatCounts(private val model: ArpaModel) {
 
-    private val ids = HashMap<String, Int>(model.size * 2).apply { model.words.forEachIndexed { id, w -> put(w, id) } }
-    private val longest = minOf(MAX_WORD, model.words.maxOf { it.length })
+    private val ids = WordIds(model.words)
+    // as the engine reads text (TextWords): a few names are longer
+    private val longest = minOf(TextWords.MAX_WORD, model.words.maxOf { it.length })
 
     init {
         // the start's id must fit a key as well, and not wrap round to word 0
@@ -43,12 +46,17 @@ class ChatCounts(private val model: ArpaModel) {
     fun add(text: String) {
         val chars = text.replace(" ", "")
         var begin = 0
-        for (i in 0..chars.length) {
-            if (i == chars.length || chars[i].toString() !in ids) {
+        var i = 0
+        while (i < chars.length) {
+            // a char past U+FFFF (dict_extb's) is two: a word by itself whole, either half alone none
+            val width = Character.charCount(chars.codePointAt(i))
+            if (ids.find(chars, i, i + width) < 0) {
                 if (i > begin) count(chars, begin, i)
-                begin = i + 1
+                begin = i + width
             }
+            i += width
         }
+        if (chars.length > begin) count(chars, begin, chars.length)
     }
 
     private fun count(text: String, begin: Int, end: Int) {
@@ -63,7 +71,8 @@ class ChatCounts(private val model: ArpaModel) {
         for (e in 1..n) {
             best[e] = Double.NEGATIVE_INFINITY
             for (length in 1..minOf(longest, e)) {
-                val id = ids[text.substring(begin + e - length, begin + e)] ?: continue
+                val id = ids.find(text, begin + e - length, begin + e)
+                if (id < 0) continue
                 val score = best[e - length] + model.unigramProb[id]
                 if (score > best[e]) {
                     best[e] = score
@@ -90,10 +99,50 @@ class ChatCounts(private val model: ArpaModel) {
         }
         tokens += words
     }
+}
+
+/**
+ * [words]' ids by their text, found from the chars where they lie rather than from strings made
+ * of them, as ime-core's WordIndex: [ChatCounts] looks up every run of up to 8 chars of the chat.
+ */
+private class WordIds(private val words: List<String>) {
+
+    // id + 1 of the word hashed there, 0 for none; at most two thirds full
+    private val slots = IntArray(Integer.highestOneBit(maxOf(words.size, 1) * 3 / 2) shl 1)
+    private val mask = slots.size - 1
+    private val shift = Integer.SIZE - Integer.numberOfTrailingZeros(slots.size)
+
+    init {
+        for (id in words.indices) {
+            val word = words[id]
+            var slot = hash(word, 0, word.length)
+            while (slots[slot] != 0 && words[slots[slot] - 1] != word) slot = (slot + 1) and mask
+            if (slots[slot] == 0) slots[slot] = id + 1
+        }
+    }
+
+    /** The id of [text]'s chars from [from] to [to], or -1. */
+    fun find(text: String, from: Int, to: Int): Int {
+        var slot = hash(text, from, to)
+        while (true) {
+            val id = slots[slot] - 1
+            if (id < 0) return -1
+            val word = words[id]
+            if (word.length == to - from && text.regionMatches(from, word, 0, word.length)) return id
+            slot = (slot + 1) and mask
+        }
+    }
+
+    private fun hash(text: String, from: Int, to: Int): Int {
+        var h = to - from
+        for (i in from until to) h = h * MULTIPLIER + text[i].code
+        // the high bits of a Fibonacci hash: CJK chars are consecutive code points
+        return (h * FIBONACCI) ushr shift
+    }
 
     private companion object {
-        // as the engine reads text (TextWords): a few names are longer
-        const val MAX_WORD = 8
+        const val MULTIPLIER = 31
+        const val FIBONACCI = -0x61c88647 // 2^32 / φ
     }
 }
 

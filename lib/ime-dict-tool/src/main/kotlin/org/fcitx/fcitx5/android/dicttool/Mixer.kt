@@ -69,28 +69,28 @@ class Mixer(
             val w = NgramKey.word(key, 3, 2)
             p3[i] = mix(base.log10(u, v, w), chat.p3(u, v, w))
             val context = bigrams.indexOf(NgramKey.of(u, v))
-            check(context >= 0) { "trigram with no bigram for its context" }
+            // runCli reports an IllegalArgumentException; ARPA does not make a trigram's context a bigram
+            require(context >= 0) { "trigram \"${(0..2).joinToString(" ") { base.words[NgramKey.word(key, 3, it)] }}\" has no bigram for its context" }
             sum3.add(context, p3[i])
             // what the mixture gives w after v alone
             val lower = bigrams.indexOf(NgramKey.of(v, w))
             lower3.add(context, if (lower >= 0) p2[lower] else backoff1[v] * p1[w])
         }
 
-        val bigramProb = DoubleColumn(bigrams.size)
+        // to log10 in place: the probabilities are read no more, and two columns fewer at mix's peak
         val bigramBackoff = DoubleColumn(bigrams.size)
         for (i in 0 until bigrams.size) {
-            bigramProb[i] = log10(p2[i])
+            p2[i] = log10(p2[i])
             bigramBackoff[i] = log10(
                 backoff(sum3[i], lower3[i]) { (0..1).joinToString(" ") { base.words[NgramKey.word(bigrams.keyAt(i), 2, it)] } },
             )
         }
-        val trigramProb = DoubleColumn(trigrams.size)
-        for (i in 0 until trigrams.size) trigramProb[i] = log10(p3[i])
+        for (i in 0 until trigrams.size) p3[i] = log10(p3[i])
         return ArpaModel(
             base.words,
             DoubleArray(size) { log10(p1[it]) },
             DoubleArray(size) { log10(backoff1[it]) },
-            bigrams, bigramProb, bigramBackoff, trigrams, trigramProb,
+            bigrams, p2, bigramBackoff, trigrams, p3,
         )
     }
 

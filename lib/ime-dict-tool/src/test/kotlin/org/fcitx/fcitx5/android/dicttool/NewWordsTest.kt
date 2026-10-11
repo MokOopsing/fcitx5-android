@@ -38,9 +38,9 @@ class NewWordsTest {
         assertEquals(6, dazi.count)
         assertEquals(2022, dazi.year)
         assertFalse(dazi.known)
-        // 搭 and 子 each occur only in it (子 once more in 子一 ... no: 子 is in every 搭子): the run is as frequent as its parts allow
+        // 搭 and 子 occur only in it: the run is as frequent as its parts allow
         assertTrue(dazi.pmi > 0.5)
-        // six different characters before it, five after (one end of text)
+        // five different characters before it (饭 twice), six after (one the comma's boundary)
         assertTrue("left ${dazi.leftEntropy}", dazi.leftEntropy > 1.5)
         assertTrue("right ${dazi.rightEntropy}", dazi.rightEntropy > 1.5)
         val chifan = found.first { it.text == "吃饭" }
@@ -48,14 +48,25 @@ class NewWordsTest {
         assertEquals(2, chifan.count)
         // a known word's neighbours are not gathered
         assertTrue(chifan.leftEntropy.isNaN())
-        // 饭搭子: three times, always followed by 一/来/啊 but preceded by 个/有/没 ... counted as a run of three
+        // 饭搭子: twice (个饭搭子一, 有饭搭子啊), counted as a run of three
         assertEquals(2, found.first { it.text == "饭搭子" }.count)
         // a run across two words (一起|吃饭): nothing before or after it ever varies
         val qichi = found.first { it.text == "起吃" }
         assertEquals(2, qichi.count)
         assertEquals(0.0, qichi.leftEntropy, 1e-9)
         assertEquals(0.0, qichi.rightEntropy, 1e-9)
+    }
 
+    @Test
+    fun aRunOfFourIsFoundAsTheWordsCommandLooksForThem() {
+        // the length words looks for (NewWords.MAX_LENGTH): 一起吃饭 twice, after 子 and the comma,
+        // before the end and 吧
+        val run = find(maxLength = 4).first { it.text == "一起吃饭" }
+        assertEquals(2, run.count)
+        // its likeliest split 一起吃|饭, 2 and 4 times in 46 characters
+        assertEquals(Math.log10(2 / (2.0 * 4 / 46)), run.pmi, 1e-9)
+        assertEquals(Math.log(2.0) + 0.25, run.leftEntropy, 1e-9)
+        assertEquals(Math.log(2.0) + 0.25, run.rightEntropy, 1e-9)
     }
 
     @Test
@@ -75,12 +86,24 @@ class NewWordsTest {
 
     @Test
     fun aSketchNeverCountsUnderAndACollisionOnlyOver() {
-        val sketch = NewWords.Sketch(4)
         val keys = (1L..40L).map { it * 7919 }
-        keys.forEachIndexed { i, k -> repeat(i + 1) { sketch.add(k) } }
-        keys.forEachIndexed { i, k -> assertTrue("$k", sketch.count(k) >= i + 1) }
-        // sixteen cells for forty keys: some counts are over, but the smallest key, added once, no more than its collisions
-        assertTrue(sketch.count(keys[0]) >= 1)
+        val narrow = NewWords.Sketch(4)
+        val wide = NewWords.Sketch(10)
+        keys.forEachIndexed { i, k ->
+            repeat(i + 1) {
+                narrow.add(k)
+                wide.add(k)
+            }
+        }
+        // sixteen cells for forty keys: counts over, none under
+        keys.forEachIndexed { i, k -> assertTrue("$k", narrow.count(k) >= i + 1) }
+        assertTrue(keys.indices.any { narrow.count(keys[it]) > it + 1 })
+        // 1024 cells: 13 × 7919's second is 22 × 7919's first; a count is the lesser of a key's two
+        // cells, so every one comes out exact, where the greater or either row alone would not.
+        // Those cells are Sketch.slot's and MIX's as they are: with another hash, pick keys that
+        // share a cell again, rather than change count
+        assertEquals(keys.indices.map { it + 1 }, keys.map(wide::count))
+        assertEquals(0, wide.count(41L * 7919))
     }
 
     @Test
@@ -104,7 +127,7 @@ class NewWordsTest {
     fun aFrequentRunsNeighboursAreSampledAndARunOfTwoBelowChanceStillGathered() {
         val finder = NewWords(emptySet(), 2, 2, sketchBits = 12)
         while (!finder.done) {
-            // 搭子 on 80 pages, after a different character each time: every other page looked at
+            // 搭子 on 80 pages, after a different character each time: every other occurrence looked at
             repeat(80) { finder.add("${'一' + it}搭子", "") }
             // 社 and 牛 far more often apart than together: 社牛 below chance, gathered all the same
             repeat(3) { finder.add("社牛。${"社会".repeat(20)}${"牛奶".repeat(20)}", "") }
@@ -118,5 +141,23 @@ class NewWordsTest {
         val sheniu = out.first { it.text == "社牛" }
         assertTrue("pmi ${sheniu.pmi}", sheniu.pmi < NewWords.GATHER_PMI)
         assertFalse(sheniu.leftEntropy.isNaN())
+    }
+
+    @Test
+    fun aFrequentRunOnOneLineIsSampledAllTheSame() {
+        val finder = NewWords(emptySet(), 2, 2, sketchBits = 12)
+        while (!finder.done) {
+            finder.add("你好吗", "")
+            // 搭子 50 times on the second line, after a different character each time: its every other
+            // occurrence looked at, where every other line would have skipped the line
+            finder.add((0 until 50).joinToString("") { "${'一' + it}搭子。" }, "")
+            finder.nextPass()
+        }
+        val out = ArrayList<NewWords.Candidate>().also { c -> finder.candidates { c += it } }
+        val dazi = out.first { it.text == "搭子" }
+        assertEquals(50, dazi.count)
+        // 25 different characters once each, and Miller-Madow's 24 / 50; after it the full stop each time
+        assertEquals(Math.log(25.0) + 24.0 / 50, dazi.leftEntropy, 1e-9)
+        assertEquals(Math.log(25.0) + 24.0 / 50, dazi.rightEntropy, 1e-9)
     }
 }

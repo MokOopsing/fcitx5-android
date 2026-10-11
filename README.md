@@ -50,11 +50,13 @@
 - 代码：LGPL-2.1-or-later，与上游相同。
 - 词典、拼音语言模型、码表：来自 [libime](https://github.com/fcitx/libime) 发布的文本源（LGPL-2.1-or-later），构建时编译成本引擎的格式。
   拼音语言模型里混入了 [FineWeb-2](https://huggingface.co/datasets/HuggingFaceFW/fineweb-2) 中文类聊天网页（ODC-By 1.0）和
-  [Common Crawl](https://commoncrawl.org) 一次抓取里中文网页（遵守其使用条款）的 n-gram。混好的模型放在本仓库的
+  [Common Crawl](https://commoncrawl.org) 一次抓取里中文类聊天网页（遵守其使用条款）的 n-gram。混好的模型放在本仓库的
   `engine-data-*` release 里，由 `lib/ime-dict-tool/engine-data.sh` 在发版前生成。
-  近几年的新词由本项目自己从上述网页里找出、逐个校对（`lexicon/`），打成词包发布在 `words-*` release 里，构建时编进词典的单独一层。
+  近几年的新词由本项目自己从该次抓取的中文网页里找出、逐个校对（`lexicon/`），打成词包发布在 `words-*` release 里，构建时编进词典的单独一层。
+- 笔画表（拼音里以 `u` 开头按笔画找字）：来自 [rime-stroke](https://github.com/rime/rime-stroke)（LGPL-3.0-only），构建时编进安装包。
 - 句子模型：本项目自己训练（Apache-2.0）。先在 FineWeb-2 中文网页上训练语言模型，再用 Qwen3.5-9B-Base（Apache-2.0）给候选列表打分做蒸馏。
   文件发布在 [sentence-models-20261001](https://github.com/Sraw/youmo-ime/releases/tag/sentence-models-20261001)。
+- 语音识别（只在 `voice` 版里）：[X-ASR](https://github.com/Gilgamesh-J/X-ASR) 中英模型（Apache-2.0），由 [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)（Apache-2.0）和 [silero VAD](https://github.com/snakers4/silero-vad)（MIT）运行。
 - 安装包里的词典、语言模型和句子模型都没有用仅限科研用途的数据训练。`lib/ime-eval` 里的聊天与对话评测集取自 [LCCC](https://github.com/thu-coai/CDial-GPT)（其说明要求仅用于科研），只用来评测和选参数：语言模型的混合权重和 `Predictor.USER_WEIGHT` 是按包含这些集的分数选的。
 
 ### 构建
@@ -165,12 +167,14 @@ Settings, themes and the clipboard come along. The old app's backups leave out t
 - Code: LGPL-2.1-or-later, as upstream.
 - Dictionary, pinyin language model and code tables: compiled at build time from the text sources published by [libime](https://github.com/fcitx/libime) (LGPL-2.1-or-later).
   The pinyin language model also mixes in n-grams from chat-like Chinese pages of [FineWeb-2](https://huggingface.co/datasets/HuggingFaceFW/fineweb-2) (ODC-By 1.0)
-  and from the Chinese pages of a [Common Crawl](https://commoncrawl.org) crawl (under its terms of use). The mixed model is in
+  and from the chat-like Chinese pages of a [Common Crawl](https://commoncrawl.org) crawl (under its terms of use). The mixed model is in
   this repository's `engine-data-*` releases, made before a release by `lib/ime-dict-tool/engine-data.sh`.
-  The words of the last few years are the project's own: found in those pages and curated one by one (`lexicon/`), packed and
+  The words of the last few years are the project's own: found in that crawl's Chinese pages and curated one by one (`lexicon/`), packed and
   published as `words-*` releases, and compiled into a layer of the dictionary at build time.
+- Stroke table (pinyin's lookup by strokes after `u`): from [rime-stroke](https://github.com/rime/rime-stroke) (LGPL-3.0-only), compiled into the APK at build time.
 - Sentence models: this project's own (Apache-2.0). A language model is first trained on FineWeb-2's Chinese pages, then distilled from Qwen3.5-9B-Base's (Apache-2.0) scores of candidate lists.
   The files are published at [sentence-models-20261001](https://github.com/Sraw/youmo-ime/releases/tag/sentence-models-20261001).
+- Speech recognition (in the `voice` build only): the [X-ASR](https://github.com/Gilgamesh-J/X-ASR) zh-en model (Apache-2.0), run with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) (Apache-2.0) and [silero VAD](https://github.com/snakers4/silero-vad) (MIT).
 - The dictionary, language model and sentence models in the app are not trained on research-only data. The chat and dialog evaluation sets in `lib/ime-eval` come from [LCCC](https://github.com/thu-coai/CDial-GPT), whose README asks for research use only, and are used only to evaluate and to choose parameters: the language model's mix weight and `Predictor.USER_WEIGHT` were tuned on scores that include them.
 
 ### Building

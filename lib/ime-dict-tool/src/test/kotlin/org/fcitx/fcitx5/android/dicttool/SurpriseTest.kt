@@ -37,7 +37,7 @@ class SurpriseTest {
         assertEquals(-2.5, s.predicted("好你"), 1e-6)
         // a character of no word's is the unknown word; a longer run of none is no split
         assertEquals(-1.0 - 5.0 + -0.5, s.predicted("你嗯"), 1e-6)
-        // 100 in 10000 characters: 100 times what the model says of 好你
+        // 100 in 10000 characters: 10^0.5, some 3.2 times, what the model says of 好你
         assertEquals(0.5, s.of("好你", 100, 10_000), 1e-6)
     }
 }

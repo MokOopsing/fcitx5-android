@@ -11,21 +11,29 @@ package org.fcitx.fcitx5.android.dicttool
  *
  * A sentence is what lies between two ends ([ENDS]), [MIN_SENTENCE] to [MAX_SENTENCE] characters,
  * and is taken for a word only once, the first [perWord] different ones in the pages' order.
- * Words of up to four characters are found by a key of their chars, as [NewWords] counts them;
- * longer ones by the key of their first four, then compared whole.
+ * Words of two or three characters are found by a key of their chars; longer ones by the key of
+ * their first three, then compared whole: three chars fit a [LongIndex] key, which is never negative.
  */
 class Examples(words: Collection<String>, private val perWord: Int = PER_WORD) {
 
-    private val short = HashMap<Long, String>()
-    private val long = HashMap<Long, MutableList<String>>()
+    // an index and lists beside it rather than maps of boxed keys: each char of every page is looked up
+    private val short = LongIndex()
+    private val shortWords = ArrayList<String>()
+    private val long = LongIndex()
+    private val longWords = ArrayList<MutableList<String>>()
     private val found = HashMap<String, MutableList<String>>()
 
     init {
         require(perWord >= 1) { "per word $perWord" }
         for (word in words) {
             if (word.length < 2) continue
-            if (word.length <= KEY_CHARS) short[key(word, 0, word.length)] = word
-            else long.getOrPut(key(word, 0, KEY_CHARS)) { ArrayList() } += word
+            if (word.length <= KEY_CHARS) {
+                if (short.add(key(word, 0, word.length)) == shortWords.size) shortWords += word
+            } else {
+                val at = long.add(key(word, 0, KEY_CHARS))
+                if (at == longWords.size) longWords += ArrayList<String>()
+                longWords[at].add(word)
+            }
         }
     }
 
@@ -46,12 +54,21 @@ class Examples(words: Collection<String>, private val perWord: Int = PER_WORD) {
             var k = 0L
             for (n in 1..minOf(KEY_CHARS, s.length - i)) {
                 k = (k shl Char.SIZE_BITS) or s[i + n - 1].code.toLong()
-                if (n >= 2) short[k]?.let { take(it, s) }
+                if (n >= 2) takeShort(k, s)
             }
-            if (i + KEY_CHARS <= s.length) {
-                long[k]?.forEach { word -> if (s.startsWith(word, i)) take(word, s) }
-            }
+            if (i + KEY_CHARS <= s.length) takeLong(k, s, i)
         }
+    }
+
+    private fun takeShort(k: Long, s: String) {
+        val at = short.indexOf(k)
+        if (at >= 0) take(shortWords[at], s)
+    }
+
+    // the words whose first chars are key [k] that [s] holds whole at [i]
+    private fun takeLong(k: Long, s: String, i: Int) {
+        val at = long.indexOf(k)
+        if (at >= 0) longWords[at].forEach { word -> if (s.startsWith(word, i)) take(word, s) }
     }
 
     private fun take(word: String, sentence: String) {
@@ -67,7 +84,7 @@ class Examples(words: Collection<String>, private val perWord: Int = PER_WORD) {
         const val MIN_SENTENCE = 6
         const val MAX_SENTENCE = 80
         const val ENDS = "。！？!?；;…\n"
-        private const val KEY_CHARS = 4
+        private const val KEY_CHARS = 3
 
         private fun key(s: String, from: Int, length: Int): Long {
             var k = 0L

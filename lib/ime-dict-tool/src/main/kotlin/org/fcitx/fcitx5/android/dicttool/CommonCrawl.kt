@@ -15,10 +15,11 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
+import java.util.Locale
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutionException
-import java.util.Locale
 import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import java.util.zip.GZIPInputStream
 import kotlin.random.Random
 
@@ -47,35 +48,49 @@ object CommonCrawl {
      * @throws IOException if a file cannot be fetched after some tries, or is not WARC
      */
     fun extract(crawl: String, from: Int, files: Int, outDir: File, base: String = BASE, log: (String) -> Unit) {
-        val paths = GZIPInputStream(ByteArrayInputStream(fetch(base, "crawl-data/$crawl/wet.paths.gz")))
+        // the pool's threads tell of their retries too
+        val say: (String) -> Unit = { line -> synchronized(log) { log(line) } }
+        val paths = GZIPInputStream(ByteArrayInputStream(fetch(base, "crawl-data/$crawl/wet.paths.gz", say)))
             .bufferedReader().readLines().filter(String::isNotBlank)
         require(from >= 0 && files > 0 && from + files <= paths.size) { "$crawl has ${paths.size} WET files, not $from to ${from + files}" }
         if (!outDir.isDirectory && !outDir.mkdirs()) throw IOException("cannot make $outDir")
         val pool = Executors.newFixedThreadPool(THREADS)
         try {
+            // a shard's files are fetched while the one before is written: its write, or one file of
+            // it waiting out CommonCrawl's 503s, would leave the other threads and the network idle.
+            // Two shards' pages are held then, some 0.5 GB each by estimate (150 million Han characters,
+            // two bytes each in a String, and the rest of the text): well under the tool's -Xmx6g
+            var pending: Pair<File, List<Future<ArrayList<WebText.Page>>>>? = null
             for (first in from until from + files step FILES_PER_SHARD) {
                 val until = minOf(first + FILES_PER_SHARD, from + files)
                 val shard = File(outDir, "%s-%05d-%05d.parquet".format(Locale.ROOT, crawl, first, until))
                 if (shard.exists()) {
-                    log("${shard.name}: there already")
+                    say("${shard.name}: there already")
                     continue
                 }
                 val fetched = (first until until).map { i ->
-                    pool.submit(Callable { ArrayList<WebText.Page>().also { list -> pages(ByteArrayInputStream(fetch(base, paths[i])), list::add) } })
+                    pool.submit(Callable { ArrayList<WebText.Page>().also { list -> pages(ByteArrayInputStream(fetch(base, paths[i], say)), list::add) } })
                 }
-                val pages = fetched.flatMap { future ->
-                    try {
-                        future.get()
-                    } catch (e: ExecutionException) {
-                        throw IOException(e.cause?.message, e)
-                    }
-                }
-                WebText.write(shard, pages)
-                log("${shard.name}: ${until - first} files, ${pages.size} pages, ${pages.sumOf { p -> p.text.count { it in HAN } }} Han characters")
+                pending?.let { (file, its) -> write(file, its, say) }
+                pending = shard to fetched
             }
+            pending?.let { (file, its) -> write(file, its, say) }
         } finally {
             pool.shutdownNow()
         }
+    }
+
+    /** Writes the pages of a shard's [fetched] files to [shard], in the files' order, once all are fetched. */
+    private fun write(shard: File, fetched: List<Future<ArrayList<WebText.Page>>>, log: (String) -> Unit) {
+        val pages = fetched.flatMap { future ->
+            try {
+                future.get()
+            } catch (e: ExecutionException) {
+                throw IOException(e.cause?.message, e)
+            }
+        }
+        WebText.write(shard, pages)
+        log("${shard.name}: ${fetched.size} files, ${pages.size} pages, ${pages.sumOf { p -> p.text.count { TextChars.isHan(it) } }} Han characters")
     }
 
     /**
@@ -93,7 +108,7 @@ object CommonCrawl {
             if (content.size < length) throw IOException("a WARC record cut short")
             if (headers["warc-type"] != "conversion" || !headers["warc-identified-content-language"].orEmpty().startsWith("zho")) continue
             val text = String(content, Charsets.UTF_8)
-            if (text.count { it in HAN } >= MIN_HAN) page(WebText.Page(headers["warc-target-uri"].orEmpty(), text, headers["warc-date"].orEmpty()))
+            if (text.count { TextChars.isHan(it) } >= MIN_HAN) page(WebText.Page(headers["warc-target-uri"].orEmpty(), text, headers["warc-date"].orEmpty()))
         }
     }
 
@@ -122,11 +137,17 @@ object CommonCrawl {
     }
 
     private val client: HttpClient by lazy {
-        HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(CONNECT_SECONDS)).followRedirects(HttpClient.Redirect.NORMAL).build()
+        // HTTP/1.1: over HTTP/2 the client puts every request to one host on one connection, and
+        // the threads would share its bandwidth
+        HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).connectTimeout(Duration.ofSeconds(CONNECT_SECONDS))
+            .followRedirects(HttpClient.Redirect.NORMAL).build()
     }
 
-    /** A whole file: one is 60 MB, and the gzip members are read from memory past the network's pauses. */
-    private fun fetch(base: String, path: String): ByteArray {
+    /**
+     * A whole file: one is 60 MB, and the gzip members are read from memory past the network's pauses.
+     * Each pause before another try is told to [log], and spent in [sleep].
+     */
+    internal fun fetch(base: String, path: String, log: (String) -> Unit, sleep: (Long) -> Unit = Thread::sleep): ByteArray {
         if (!base.startsWith("http")) return File(base, path).readBytes()
         val request = HttpRequest.newBuilder(URI(base + path)).timeout(Duration.ofMinutes(FETCH_MINUTES)).build()
         var failure: IOException? = null
@@ -148,8 +169,10 @@ object CommonCrawl {
             // twice as long each time, up to minutes, and at random within half of it: the threads
             // slowed down together must not come back together
             if (attempt < TRIES) {
-                val pause = minOf(PAUSE_MILLIS shl (attempt - 1), MAX_PAUSE_MILLIS)
-                Thread.sleep(pause + Random.nextLong(pause / 2))
+                val least = minOf(PAUSE_MILLIS shl (attempt - 1), MAX_PAUSE_MILLIS)
+                val pause = least + Random.nextLong(least / 2)
+                log("$path: ${if (status != 0) "HTTP $status" else failure}, try ${attempt + 1} of $TRIES in ${Duration.ofMillis(pause).toSeconds()} s")
+                sleep(pause)
             }
         }
         throw failure ?: IOException("$path: not fetched")
@@ -157,7 +180,6 @@ object CommonCrawl {
 
     private fun passing(status: Int) = status == SLOW_DOWN || status == TOO_MANY || status >= SERVER_ERROR
 
-    private val HAN = '一'..'鿿'
     private const val MIN_HAN = 50
     private const val THREADS = 8
     private const val TRIES = 8

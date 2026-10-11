@@ -58,7 +58,10 @@ object JsonStrings {
                     val e = line[i++]
                     if (e == 'u') {
                         require(i + HEX <= line.length) { "short \\u escape: $line" }
-                        text.append(line.substring(i, i + HEX).toInt(HEX_RADIX).toChar())
+                        val hex = line.substring(i, i + HEX)
+                        // toInt alone takes a sign ("-001" gives U+FFFF) and non-ASCII digits
+                        require(hex.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) { "bad escape \\u$hex: $line" }
+                        text.append(hex.toInt(HEX_RADIX).toChar())
                         i += HEX
                     } else {
                         text.append(ESCAPES[e] ?: throw IllegalArgumentException("bad escape \\$e: $line"))

@@ -82,7 +82,26 @@ class WebTextTest {
         WebText.read(shard) { page, date -> pages += page; dates += date }
         assertEquals(listOf(listOf("你去哪儿啊？", "我还没吃呢"), listOf("好吧", "走吧"), listOf("那行吧")), pages)
         // the first page is dated, the others not
-        assertEquals(listOf("2023-06-14 00:00:00", "", ""), dates)
+        assertEquals(listOf("2023-06-14T05:46:23Z", "", ""), dates)
+    }
+
+    @Test
+    fun aShardOfManyRowGroupsIsReadInItsOrder() {
+        // row groups of 2048 rows, which DuckDB's two threads read side by side: in the file's order
+        // only while preserve_insertion_order holds
+        val pages = 20_000
+        val shard = tmp.root.resolve("many.parquet")
+        DriverManager.getConnection("jdbc:duckdb:").use { connection ->
+            connection.createStatement().use {
+                it.execute(
+                    "COPY (SELECT 'https://a.example.com/' || CAST(i AS VARCHAR) AS url, '好吧' AS text, '' AS date FROM range($pages) t(i)) " +
+                        "TO '${shard.path.replace("'", "''")}' (FORMAT parquet, ROW_GROUP_SIZE 2048)",
+                )
+            }
+        }
+        val urls = ArrayList<String>()
+        WebText.pages(shard) { urls += it.url }
+        assertEquals((0 until pages).map { "https://a.example.com/$it" }, urls)
     }
 
     @Test
@@ -116,7 +135,8 @@ class WebTextTest {
         assertEquals("# chars\t14", lines[1])
         val rows = lines.filter { !it.startsWith("#") }.map { it.split("\t") }
         assertEquals(listOf("你好"), rows.map { it[0] })
-        // three times, first on the dated page; 吧/啊/吗 are single and no words of the data: not counted
+        // four times on three pages, first on the dated page, and no word of the data; 吧/啊/吗 are
+        // among the 14 chars, but each run they end is seen once only
         assertEquals(listOf("4", "2023", "0"), listOf(rows[0][1], rows[0][2], rows[0][7]))
         // log10(4 / 14) against the model's 你 (-1) 好 after 你 (-0.3)
         assertEquals(0.756, rows[0][6].toDouble(), 1e-3)
@@ -141,17 +161,18 @@ class WebTextTest {
 
     /**
      * A parquet file of (url, text, date) rows, written by DuckDB as FineWeb-2's are read, the first
-     * page dated; a quote in its name, as read_parquet's path is a string literal.
+     * page dated by an ISO string as FineWeb-2's and [WebText.write]'s are; a quote in its name, as
+     * read_parquet's path is a string literal.
      */
     private fun parquet(vararg pages: Pair<String?, String?>): File {
         val file = tmp.root.resolve("it's a shard.parquet")
         DriverManager.getConnection("jdbc:duckdb:").use { connection ->
-            connection.createStatement().use { it.execute("CREATE TABLE pages (url VARCHAR, text VARCHAR, date TIMESTAMP)") }
+            connection.createStatement().use { it.execute("CREATE TABLE pages (url VARCHAR, text VARCHAR, date VARCHAR)") }
             connection.prepareStatement("INSERT INTO pages VALUES (?, ?, ?)").use { insert ->
                 pages.forEachIndexed { i, (url, text) ->
                     insert.setObject(1, url)
                     insert.setObject(2, text)
-                    insert.setObject(3, if (i == 0) java.sql.Timestamp.valueOf("2023-06-14 00:00:00") else null)
+                    insert.setObject(3, if (i == 0) "2023-06-14T05:46:23Z" else null)
                     insert.executeUpdate()
                 }
             }

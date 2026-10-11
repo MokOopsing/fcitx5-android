@@ -25,7 +25,7 @@ class PageCleanerTest {
         pages.forEach(cleaner::count)
         // the footer on all three pages; the menu, no sentence end and short, on any
         assertEquals(article(0).joinToString("\n"), cleaner.clean(pages[0]))
-        // once more than the pages counted: still under three
+        // counted on two pages only, the footer stays: under three; an indent and blank lines go
         val fresh = PageCleaner(sketchBits = 12, minRepeats = 3)
         pages.take(2).forEach(fresh::count)
         assertEquals((article(0) + footer).joinToString("\n"), fresh.clean("  " + pages[0].replace(menu + "\n", "") + "\n\n"))
@@ -36,14 +36,58 @@ class PageCleanerTest {
         val cleaner = PageCleaner(sketchBits = 12)
         // 175 Han characters left: under 200
         assertNull(cleaner.clean(article(1).take(7).joinToString("\n")))
-        // a spam word in each sentence: 10 in 254 Han characters, over 3 a thousand
-        val spam = article(2).map { it.dropLast(3) + "在线观看。" }
+        // a spam word of two in each sentence: 10 in 270 Han characters, over 3 a thousand
+        val spam = article(2).mapIndexed { i, line -> line.dropLast(3) + (if (i % 2 == 0) "在线观看" else "免费观看") + "。" }
         assertNull(cleaner.clean(spam.joinToString("\n")))
         // 3 in 1006 is not
-        val some = (2..5).flatMap(::article).mapIndexed { i, line -> if (i < 3) line.dropLast(3) + "免费观看。" else line }
+        val some = (2..5).flatMap(::article).mapIndexed { i, line ->
+            if (i < 3) line.dropLast(3) + (if (i == 0) "在线观看" else "免费观看") + "。" else line
+        }
         assertEquals(some.joinToString("\n"), cleaner.clean(some.joinToString("\n")))
         // 300 Han characters of 2 different ones and a full stop
         assertNull(cleaner.clean("哈嘿".repeat(150) + "。"))
+    }
+
+    @Test
+    fun aSpamWordCountsOnlyWholeAndBesideAnother() {
+        val cleaner = PageCleaner(sketchBits = 12)
+        // 30 av in 250 Han characters, every one inside have, Java or JAVA
+        val english = article(3).map { "$it have Java JAVA" }
+        assertEquals(english.joinToString("\n"), cleaner.clean(english.joinToString("\n")))
+        // an everyday word alone, however often, is what the page is about
+        val asia = article(4).map { it.dropLast(3) + "亚洲。" }
+        assertEquals(asia.joinToString("\n"), cleaner.clean(asia.joinToString("\n")))
+        // AV standing alone counts, beside another word
+        val adult = article(5).mapIndexed { i, line -> line.dropLast(3) + (if (i % 2 == 0) "AV" else "无码") + "。" }
+        assertNull(cleaner.clean(adult.joinToString("\n")))
+    }
+
+    @Test
+    fun aWordOnlySpamSaysIsEnoughAloneAndOneWordWrittenTwoWaysIsOne() {
+        val cleaner = PageCleaner(sketchBits = 12)
+        // what only a page selling it repeats
+        val selling = article(6).map { it.dropLast(3) + "约炮。" }
+        assertNull(cleaner.clean(selling.joinToString("\n")))
+        // regions said together, as 欧美日韩 often are, are one word: what the page is about
+        val regions = article(7).mapIndexed { i, line -> line.dropLast(3) + (if (i % 2 == 0) "欧美" else "日韩") + "。" }
+        assertEquals(regions.joinToString("\n"), cleaner.clean(regions.joinToString("\n")))
+        // nor are av and AV two
+        val cased = article(8).mapIndexed { i, line -> "$line ${if (i % 2 == 0) "av" else "AV"}" }
+        assertEquals(cased.joinToString("\n"), cleaner.clean(cased.joinToString("\n")))
+        // a region beside another everyday word is spam
+        val listing = article(9).mapIndexed { i, line -> line.dropLast(3) + (if (i % 2 == 0) "日韩" else "自拍") + "。" }
+        assertNull(cleaner.clean(listing.joinToString("\n")))
+    }
+
+    @Test
+    fun aLongPageIsHeldToTheVarietyOfOneOf2000() {
+        val cleaner = PageCleaner(sketchBits = 12)
+        // a thousand different sentences, 25,000 Han characters of 2000 different ones: under one in
+        // ten, as any long article's are
+        val long = (0 until 1000).joinToString("\n") { i -> (0 until 25).map { '一' + (i * 26 + it) % 2000 }.joinToString("") + "。" }
+        assertEquals(long, cleaner.clean(long))
+        // two over and over is left out however long
+        assertNull(cleaner.clean("哈嘿".repeat(5000) + "。"))
     }
 
     @Test

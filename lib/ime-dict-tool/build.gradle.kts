@@ -12,8 +12,9 @@
 //   ./gradlew :lib:ime-dict-tool:run --args="mix -o <out.arpa> --lm <lm.arpa> <chat.jsonl.gz | fineweb.parquet>..."
 //   ./gradlew :lib:ime-dict-tool:run --args="check <pinyin data> <lm.arpa>"
 //
-// A release's data (a CommonCrawl crawl's Chinese pages, cleaned and mixed in, and its new words)
-// is engine-data.sh's to make, a job of an hour for a rented machine (dev/TRAINING-PLAN.md 12.9).
+// A release's data (a CommonCrawl crawl's Chinese pages, cleaned, the chat-like of them mixed in as
+// FineWeb-2's are, and the new words of them all) is engine-data.sh's to make, a job of an hour for
+// a rented machine.
 //
 // The app build runs it through EngineDataPlugin (build-logic): `./gradlew :app:compileEngineData`
 // downloads libime's sources and the model engine-data.sh mixed (a release's) once, and puts
@@ -21,6 +22,8 @@
 plugins {
     application
     alias(libs.plugins.kotlin.jvm)
+    // coverage reported only (`koverHtmlReport`, uploaded by CI), with no floor yet
+    alias(libs.plugins.kover)
 }
 
 application {
@@ -42,6 +45,9 @@ dependencies {
 }
 
 tasks.withType<Test>().configureEach {
+    // MainTest compiles the lists the app build passes: an edit to one alone runs it again
+    inputs.files(rootProject.files("lexicon/readings.tsv", "lexicon/misreadings.tsv", "lexicon/remove.tsv"))
+        .withPathSensitivity(PathSensitivity.RELATIVE)
     testLogging {
         events("failed")
     }

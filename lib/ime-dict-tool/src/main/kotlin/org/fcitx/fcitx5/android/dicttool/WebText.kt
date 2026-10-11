@@ -36,11 +36,11 @@ object WebText {
         var traditional = 0
         var particles = 0
         for (c in text) {
-            if (c in HAN) han++
-            when (c) {
-                in SIMPLIFIED -> simplified++
-                in TRADITIONAL -> traditional++
-                in PARTICLES -> particles++
+            if (TextChars.isHan(c)) han++
+            when {
+                IS_SIMPLIFIED[c.code] -> simplified++
+                IS_TRADITIONAL[c.code] -> traditional++
+                IS_PARTICLE[c.code] -> particles++
             }
         }
         // cmn_Hani is Taiwan's and Hong Kong's pages too, whose words the model has not got
@@ -135,7 +135,6 @@ object WebText {
             """wiki2\.org$|unionpedia|jinzhao\.wiki$|wanweibaike|baike\.|hudong\.com$|""" +
             """fandom\.com$|moegirl\.org(\.cn)?$|huijiwiki\.com$|wiki\.biligame\.com$|wikihow\.com$""",
     )
-    private val HAN = '一'..'鿿'
     // chars whose traditional form differs, and those forms
     private const val SIMPLIFIED = "们这说时为会国个来对过发经还没么后机书车门问间关开"
     private const val TRADITIONAL = "們這說時為會國個來對過發經還沒麼後機書車門問間關開"
@@ -143,4 +142,11 @@ object WebText {
     private const val PARTICLES = "吗呢吧啊呀嘛啦哦哈嗯"
     private const val PER_MILLE = 1000
     private const val MIN_PARTICLES = 5
+
+    // looked up, not searched for: accepts goes over every char of every page, on each pass of words
+    private val IS_SIMPLIFIED = table(SIMPLIFIED)
+    private val IS_TRADITIONAL = table(TRADITIONAL)
+    private val IS_PARTICLE = table(PARTICLES)
+
+    private fun table(chars: String) = BooleanArray(Char.MAX_VALUE.code + 1).apply { for (c in chars) this[c.code] = true }
 }

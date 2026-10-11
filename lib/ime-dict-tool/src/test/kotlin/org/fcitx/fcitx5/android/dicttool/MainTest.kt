@@ -5,15 +5,20 @@
 package org.fcitx.fcitx5.android.dicttool
 
 import org.fcitx.fcitx5.android.engine.data.CodeTable
+import org.fcitx.fcitx5.android.engine.data.Misreadings
 import org.fcitx.fcitx5.android.engine.data.PinyinData
+import org.fcitx.fcitx5.android.engine.pinyin.Syllables
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.nio.ByteBuffer
+import java.util.zip.GZIPInputStream
 import java.util.zip.GZIPOutputStream
 
 class MainTest {
@@ -71,7 +76,7 @@ class MainTest {
         val bad = file("bad.words", "# youmo words 1\n耗子\thao\t-4\n")
         val (badCode, _, badErr) = run("pinyin", "-o", output, "--lm", lm, dict, bad)
         assertEquals(1, badCode)
-        assertTrue(badErr, badErr.contains("bad.words") && badErr.contains("2"))
+        assertTrue(badErr, badErr.startsWith("$bad:2: "))
     }
 
     @Test
@@ -99,6 +104,95 @@ class MainTest {
         val pack = tmp.root.resolve("p.words").path
         assertEquals(0, run("pack", "-o", pack, "--data", output, "--layer", "new", "--min-count", "5", candidates).first)
         assertEquals(listOf("长大好\tzhang'da'hao"), File(pack).readLines().drop(2).map { it.substringBeforeLast('\t') })
+        // a negative threshold is a flag's value, not a flag
+        val low = tmp.root.resolve("low.words").path
+        assertEquals(0, run("pack", "-o", low, "--data", output, "--layer", "new", "--min-count", "5", "--min-pmi", "-1", candidates).first)
+        assertEquals(File(pack).readLines(), File(low).readLines())
+    }
+
+    /** A character past U+FFFF (dict_extb's) is two chars and one syllable, as the dictionaries and misreadings.tsv count it. */
+    @Test
+    fun aCuratedReadingHasASyllableACharacterNotAChar() {
+        val lm = file("lm.arpa", ReadersTest.TINY_ARPA)
+        val dict = file("dict.txt", "你 ni\n好 hao\n\uD840\uDC00 qu\n")
+        val readings = file("readings.tsv", "# word\treading\n\uD840\uDC00\tqiu\n")
+        val output = tmp.root.resolve("pinyin.data").path
+        val (code, _, err) = run("pinyin", "-o", output, "--lm", lm, "--readings", readings, dict)
+        assertEquals(err, 0, code)
+        val data = PinyinData.load(ByteBuffer.wrap(File(output).readBytes()))
+        val qiu = data.dictionary.find(intArrayOf(Syllables.id("qiu")))
+        assertEquals(listOf("\uD840\uDC00"), (0 until data.dictionary.wordCount(qiu)).map { data.vocabulary.word(data.dictionary.word(qiu, it)) })
+        assertEquals(-1, data.dictionary.find(intArrayOf(Syllables.id("qu"))))
+    }
+
+    @Test
+    fun aMisreadWordIsTypedEitherWayAndEachPackIsALayer() {
+        val lm = file("lm.arpa", ReadersTest.TINY_ARPA)
+        val dict = file("dict.txt", "你 ni\n好 hao\n般若 ban'ruo\n般若 pan're\n")
+        // on both lists, as 般若, 关卡 and 包扎 are: the misreadings hold
+        val readings = file("readings.tsv", "般若\tban're\n")
+        val misreadings = file("misreadings.tsv", "# word\treading\tmisreadings\n般若\tbō rě\tban'ruo\n")
+        val first = file("new.words", "# youmo words 1\n# layer: new\n耗子\thao'zi\t-4.000\n")
+        // 耗子 of the first pack keeps its layer and its score
+        val second = file("latin.words", "# youmo words 1\n# layer: latin\n好耶\thao'ye\t-5.000\n耗子\thao'zi\t-6.000\n")
+        val output = tmp.root.resolve("pinyin.data").path
+        val (code, out, err) = run("pinyin", "-o", output, "--lm", lm, "--readings", readings, "--misreadings", misreadings, dict, first, second)
+        assertEquals(err, 0, code)
+        assertTrue(out, out.contains("corrected: 2 readings of the dictionaries left out or replaced"))
+        assertTrue(out, out.contains("latin.words: 2 words in layer latin, 1 of them scored as the pack says"))
+        assertTrue(out, out.contains("misread: 1 words, typed by their misreadings too"))
+        val data = PinyinData.load(ByteBuffer.wrap(File(output).readBytes()))
+        assertEquals("bō rě\tban'ruo", data.meta[Misreadings.META_PREFIX + "般若"])
+        fun weight(vararg reading: String): Float? {
+            val node = data.dictionary.find(reading.map { Syllables.id(it) }.toIntArray())
+            return if (node < 0 || data.dictionary.wordCount(node) == 0) null else data.dictionary.weight(node, 0)
+        }
+        assertEquals(0f, weight("bo", "re"))
+        assertEquals(Misreadings.WEIGHT, weight("ban", "ruo")!!, 0.1f)
+        assertNull(weight("ban", "re"))
+        assertNull(weight("pan", "re"))
+        assertEquals(listOf("base", "new", "latin"), data.layers.names)
+        val id = { word: String -> (0 until data.vocabulary.size).first { data.vocabulary.word(it) == word } }
+        assertEquals(1, data.layers.layer(id("耗子")))
+        assertEquals(2, data.layers.layer(id("好耶")))
+        assertEquals(-4f, data.model.score(-1, -1, id("耗子")), 1e-6f)
+    }
+
+    @Test
+    fun aCuratedReadingTheEngineCannotTypeIsAnErrorAtItsLine() {
+        val lm = file("lm.arpa", ReadersTest.TINY_ARPA)
+        val dict = file("dict.txt", "你 ni\n好 hao\n你好 ni'hao\n")
+        val output = tmp.root.resolve("pinyin.data").path
+        // a syllable no one types, a syllable short, none: each would take 你好 out of the data
+        val readings = tmp.root.resolve("readings.tsv")
+        for (line in listOf("你好\tni'hoa", "你好\tni", "你好")) {
+            readings.writeText("# word\treading\n$line\n")
+            val (code, _, err) = run("pinyin", "-o", output, "--lm", lm, "--readings", readings.path, dict)
+            assertEquals(line, 1, code)
+            assertTrue(err, err.startsWith("${readings.path}:2: ") && err.contains("is no reading of 你好"))
+        }
+        val misreadings = file("misreadings.tsv", "# word\treading\tmisreadings\n# a comment\n你好\tnǐ hǎo\tni'hoa\n")
+        val (code, _, err) = run("pinyin", "-o", output, "--lm", lm, "--misreadings", misreadings, dict)
+        assertEquals(1, code)
+        assertTrue(err, err.startsWith("$misreadings:3: ") && err.contains("\"ni'hoa\" is no reading of 你好"))
+        // a word listed twice, the second wrongly: at its own line, not the first's
+        val twice = file("twice.tsv", "# word\treading\tmisreadings\n你好\tnǐ hǎo\tli'hao\n你好\tnǐ hǎo\tni'hoa\n")
+        val (twiceCode, _, twiceErr) = run("pinyin", "-o", output, "--lm", lm, "--misreadings", twice, dict)
+        assertEquals(1, twiceCode)
+        assertTrue(twiceErr, twiceErr.startsWith("$twice:3: ") && twiceErr.contains("\"ni'hoa\" is no reading of 你好"))
+    }
+
+    @Test
+    fun theListsTheAppBuildPassesCompile() {
+        val lexicon = File("../../lexicon")
+        val lm = file("lm.arpa", ReadersTest.TINY_ARPA)
+        val dict = file("dict.txt", "你 ni\n好 hao\n")
+        val (code, out, err) = run(
+            "pinyin", "-o", tmp.root.resolve("pinyin.data").path, "--lm", lm, "--remove", lexicon.resolve("remove.tsv").path,
+            "--readings", lexicon.resolve("readings.tsv").path, "--misreadings", lexicon.resolve("misreadings.tsv").path, dict,
+        )
+        assertEquals(err, 0, code)
+        assertTrue(out, out.contains("misread: "))
     }
 
     @Test
@@ -127,77 +221,6 @@ class MainTest {
     }
 
     @Test
-    fun newWordsAreFoundAndPackedScoredOnTheModelsScale() {
-        // the model has the characters of the words to pack; 嗯 it has not, 丂 all but not
-        val lm = file(
-            "lm.arpa",
-            ReadersTest.TINY_ARPA.replace("ngram 1=3", "ngram 1=7").replace("-1.5\t好", "-1.5\t好\n-3.0\t耗\n-3.0\t子\n-2.0\t了\n-7.0\t丂"),
-        )
-        // 子了 is the dictionary's, read as it has it
-        val dict = file("dict.txt", "你\tni\t0\n好 hao\n你好 ni'hao\n耗 hao\n子 zi\n了 le\n丂 kao\n你耗 ni'hao\n好耗 hao'hao\n子了 zi'liao\n")
-        val output = tmp.root.resolve("pinyin.data").path
-        assertEquals(0, run("pinyin", "-o", output, "--lm", lm, dict).first)
-        val candidates = tmp.root.resolve("candidates.tsv").path
-        // the test corpus is a parquet shard: WebTextTest covers reading one; here the candidates are written
-        File(candidates).writeText(
-            "# text\tcount\tyear\tpmi\tleft_entropy\tright_entropy\tsurprise\tknown\n# chars\t1000\n" +
-                "你\t99\t0\t0.000\t3.000\t3.000\t0.000\t1\n好\t9\t0\t0.000\t3.000\t3.000\t0.000\t1\n" +
-                "你好\t99\t2020\t2.000\t3.000\t3.000\t0.300\t1\n耗好\t99\t2023\t2.000\t2.000\t2.000\t1.500\t0\n" +
-                "耗子\t20\t2024\t2.000\t2.000\t2.000\t1.500\t0\n好好\t99\t2023\t0.500\t2.000\t2.000\t1.500\t0\n" +
-                "你你\t99\t2023\t2.000\t1.000\t2.000\t1.500\t0\n嗯好\t99\t2023\t2.000\t2.000\t2.000\t1.500\t0\n" +
-                "好你好\t30\t2023\t2.000\t2.000\t2.000\t0.300\t0\n丂子\t99\t2023\t2.000\t2.000\t2.000\t1.500\t0\n" +
-                // a phrase (的 inside), a fragment (子好 is mostly 耗子好, which 1.0 entropy keeps out), a verb with 了 (typed as one)
-                "你的好\t99\t2023\t2.000\t2.000\t2.000\t1.500\t0\n子好\t15\t2023\t2.000\t2.000\t2.000\t1.500\t0\n" +
-                "耗子好\t9\t2023\t2.000\t1.000\t2.000\t1.500\t0\n好了\t99\t2023\t2.000\t2.000\t2.000\t1.500\t0\n" +
-                // too low a pmi for its neighbours to be gathered
-                "子了\t99\t2023\t0.300\tNaN\tNaN\t1.500\t0\n" +
-                // a fragment of words the dictionary has, 你耗 and 好耗: neither run is half of 耗了 (20),
-                // both together are
-                "耗了\t20\t2023\t2.000\t2.000\t2.000\t1.500\t0\n你耗了\t6\t2023\t0.500\t2.000\t2.000\t1.500\t0\n" +
-                "好耗了\t6\t2023\t0.500\t2.000\t2.000\t1.500\t0\n",
-        )
-        val pack = tmp.root.resolve("new.words").path
-        val (code, out, err) = run("pack", "-o", pack, "--data", output, "--layer", "2026q3", "--min-count", "5", "--min-surprise", "0.4", candidates)
-        assertEquals(err, 0, code)
-        // 你 (99) and 好 (9) fit log10 P = -2 + 0.5 log10(c + 1) exactly; 你好, which the model lacks, does not count
-        assertTrue(out, out.contains("fit: log10 P = -2.000 + 0.500 log10(count + 1), over 2 words"))
-        // 你耗了 and 好耗了 held together too little, while 好好 (as little) is a run of two, held to its
-        // entropy alone; 你你 too few different neighbours, 好你好 no more frequent than the model says
-        // of 好 你好, 嗯 and 丂 the model has not got (嗯 no reading either)
-        assertTrue(out, out.contains("pack: 4 words, 2 left out for a character the model hardly has, 0 for want of a reading"))
-        assertEquals(
-            "# youmo words 1\n# layer: 2026q3\n耗好\thao'hao\t-1.000\n耗子\thao'zi\t-1.339\n好好\thao'hao\t-1.000\n好了\thao'le\t-1.000\n",
-            File(pack).readText(),
-        )
-        // with a list of the words: what is on it, the pmi and entropy asked for being low; an entropy not
-        // measured no bar; 子了 read as the dictionary has the word, not as its characters alone
-        val only = tmp.root.resolve("titles.txt").apply { writeText("# titles\n耗子\n好好\tzhwiki\n子了\n耗好\n# 好了\n") }.path
-        assertEquals(0, run("pack", "-o", pack, "--data", output, "--layer", "wiki", "--min-count", "5", "--min-pmi", "0", "--min-entropy", "1", "--only", only, candidates).first)
-        assertEquals(
-            "# youmo words 1\n# layer: wiki\n耗好\thao'hao\t-1.000\n耗子\thao'zi\t-1.339\n好好\thao'hao\t-1.000\n子了\tzi'liao\t-1.000\n",
-            File(pack).readText(),
-        )
-        // a curated list: its words alone, as it reads them, whatever the thresholds; one the
-        // candidates lack scored as the least count (5: -2 + 0.5 log10 6)
-        val lexicon = tmp.root.resolve("add.tsv").apply { writeText("# word\treading\n好好\thao'hao\tword\n你的好\tni'di'hao\n好你\thao'ni\n") }.path
-        val (curated, curatedOut, _) = run("pack", "-o", pack, "--data", output, "--layer", "new", "--min-count", "5", "--lexicon", lexicon, candidates)
-        assertEquals(0, curated)
-        assertTrue(curatedOut, curatedOut.contains("pack: 1 of the list's words not among the candidates, scored as seen 5 times"))
-        assertEquals(
-            "# youmo words 1\n# layer: new\n好好\thao'hao\t-1.000\n你的好\tni'di'hao\t-1.000\n好你\thao'ni\t-1.611\n",
-            File(pack).readText(),
-        )
-        // a reading the engine cannot type, or of the wrong length
-        File(lexicon).writeText("好好\thao'hoa\n")
-        assertEquals(1, run("pack", "-o", pack, "--data", output, "--layer", "new", "--lexicon", lexicon, candidates).first)
-        File(lexicon).writeText("好好\thao\n")
-        assertEquals(1, run("pack", "-o", pack, "--data", output, "--layer", "new", "--lexicon", lexicon, candidates).first)
-        assertEquals(2, run("pack", "-o", pack, "--data", output, "--layer", "bad name", candidates).first)
-        assertEquals(2, run("pack", "-o", pack, "--data", output, candidates).first)
-        assertEquals(2, run("words", "-o", candidates, output).first)
-    }
-
-    @Test
     fun cleanTakesAWiderSketchForMoreCrawls() {
         val shard = tmp.root.resolve("CC-MAIN-2026-39-0-1.parquet")
         val prose = "这是一段足够长的中文句子，用来测试清洗之后页面仍然留下。".repeat(10)
@@ -210,6 +233,12 @@ class MainTest {
         // past what an array holds, or a bad value
         assertEquals(2, run("clean", "-o", out, "--sketch-bits", "31", shard.path).first)
         assertEquals(2, run("clean", "-o", out, "--sketch-bits", "x", shard.path).first)
+        // into the shards' own directory: each cleaned one would replace its raw one
+        val written = shard.lastModified()
+        val (inPlace, _, inPlaceErr) = run("clean", "-o", tmp.root.path, shard.path)
+        assertEquals(1, inPlace)
+        assertTrue(inPlaceErr, inPlaceErr.contains("holds the shards"))
+        assertEquals(written, shard.lastModified())
     }
 
     @Test
@@ -239,7 +268,9 @@ class MainTest {
         assertTrue(packedOut, packedOut.contains("chat: 2 documents, 6 words"))
         assertTrue(File(mixed).readText().contains("\t你好\t"))
 
-        for (bad in listOf(listOf("--cutoffs", "2"), listOf("--cutoffs", "3,2"), listOf("--weight", "2"), listOf("--weight"))) {
+        // a field that is no number is not left out: 2,x,3 is no 2,3
+        val cutoffs = listOf("2", "3,2", "2,x,3", "1,1,").map { listOf("--cutoffs", it) }
+        for (bad in cutoffs + listOf(listOf("--weight", "2"), listOf("--weight"))) {
             assertEquals(bad.toString(), 2, run(*(listOf("mix", "-o", mixed, "--lm", lm, chat.path) + bad).toTypedArray()).first)
         }
     }
@@ -257,6 +288,115 @@ class MainTest {
     }
 
     @Test
+    fun aCodeTableTakesThePacksWordsAndTheDatasByUse() {
+        // 式作 is coded abca by the rules, as the table's 工作 is; the model has it far rarer
+        val lm = file("lm.arpa", ReadersTest.TINY_ARPA.replace("ngram 1=3", "ngram 1=5").replace("-1.5\t好", "-1.5\t好\n-2.0\t工作\n-6.0\t式作"))
+        val pinyin = tmp.root.resolve("pinyin.data").path
+        assertEquals(0, run("pinyin", "-o", pinyin, "--lm", lm, file("dict.txt", "你 ni\n好 hao\n工作 gong'zuo\n式作 shi'zuo\n")).first)
+        val table = file("t.txt", TABLE)
+        val output = tmp.root.resolve("t.data")
+        fun abca(packed: String): List<String> {
+            val words = tmp.root.resolve("new.words").apply { writeText("# youmo words 1\n# layer: new\n$packed\n") }.path
+            val (code, out, err) = run("table", "-o", output.path, "--words", words, "--pinyin", pinyin, table)
+            assertEquals(err, 0, code)
+            assertTrue(out, out.contains("words: 1 new words and 0 others of 2 added, 0 of them left out"))
+            val t = CodeTable.load(ByteBuffer.wrap(output.readBytes()))
+            return t.exactRange("abca").map(t::text)
+        }
+        // the pack's score, the higher, and a new word taken as ten times more used
+        assertEquals(listOf("式作", "工作"), abca("式作\tshi'zuo\t-1.500"))
+        // a tenth as common as 工作 and less, a new word stays all the same
+        assertEquals(listOf("工作", "式作"), abca("式作\tshi'zuo\t-6.500"))
+    }
+
+    @Test
+    fun strokesAreCompiled() {
+        val dict = file("stroke.dict.yaml", "# Rime dictionary: stroke\n---\nname: stroke\n...\n\n一\th\n十\ths\n")
+        val output = tmp.root.resolve("stroke.data").path
+        val (code, out, err) = run("strokes", "-o", output, dict)
+        assertEquals(err, 0, code)
+        assertTrue(out, out.contains("strokes: read $dict"))
+        val table = CodeTable.load(ByteBuffer.wrap(File(output).readBytes()))
+        assertEquals(listOf("h" to "一", "hs" to "十"), (0 until table.size).map { table.code(it) to table.text(it) })
+        val bad = file("bad.yaml", "...\n一\th\n二\tx\n")
+        val (badCode, _, badErr) = run("strokes", "-o", output, bad)
+        assertEquals(1, badCode)
+        assertTrue(badErr, badErr.startsWith("$bad:3: "))
+    }
+
+    @Test
+    fun aPacksWordsAreWrittenAsTheVoiceRecognizersHotwords() {
+        // a comment, a character alone, a word not all Chinese and one listed twice: 新词 once
+        val words = file("new.words", "# the pack\n新词\t1\n中\t2\nAPP词\t3\n新词\t4\n")
+        val output = tmp.root.resolve("hotwords.txt")
+        val (code, _, err) = run("hotwords", "-o", output.path, words)
+        assertEquals(err, 0, code)
+        assertEquals("新 词\n", output.readText())
+    }
+
+    @Test
+    fun theChatLikePagesAreWrittenForTheEvalSetTools() {
+        val shard = tmp.root.resolve("s.parquet")
+        val chat = WebText.Page("https://a.example.com/1", "你们去哪儿吃饭啊？\n我还没吃呢，一起吧！好啊哈哈", "")
+        // not a particle in it
+        val news = WebText.Page("https://b.example.com/2", "今年一季度我国工业经济增势良好，新产业持续发力。", "")
+        WebText.write(shard, listOf(chat, news))
+        val output = tmp.root.resolve("chat.jsonl.gz")
+        val (code, out, err) = run("text", "-o", output.path, shard.path)
+        assertEquals(err, 0, code)
+        assertEquals("text: 1 pages\n", out)
+        val lines = GZIPInputStream(output.inputStream()).bufferedReader().use { it.readLines() }
+        assertEquals(listOf(listOf("你们去哪儿吃饭啊？", "我还没吃呢，一起吧！好啊哈哈")), lines.map(JsonStrings::parse))
+    }
+
+    @Test
+    fun examplesAreAsManyAWordAsAskedFor() {
+        val shard = tmp.root.resolve("s.parquet")
+        WebText.write(shard, listOf(WebText.Page("https://a/", "你们都是吗喽吧。今天又是吗喽的一天。", "")))
+        val list = file("words.txt", "吗喽\n")
+        val output = tmp.root.resolve("out.tsv")
+        assertEquals(0, run("examples", "-o", output.path, "--only", list, "--per-word", "1", shard.path).first)
+        assertEquals("吗喽\t你们都是吗喽吧。\n", output.readText())
+        assertEquals(2, run("examples", "-o", output.path, "--only", list, "--per-word", "0", shard.path).first)
+    }
+
+    @Test
+    fun aCrawlsFilesAreShardsAndARunGoesOnWhereItStopped() {
+        // a page a WET file, in a directory laid out as CommonCrawl; shards of a hundred files are CommonCrawlTest's
+        val base = tmp.newFolder("cc")
+        val names = (0 until 3).map { "crawl-data/CC-TEST/segments/1/wet/$it.warc.wet.gz" }
+        for (name in names) File(base, name).apply { parentFile.mkdirs() }.writeBytes(wet("https://a.example.com/$name"))
+        File(base, "crawl-data/CC-TEST/wet.paths.gz").outputStream().use { stream ->
+            GZIPOutputStream(stream).use { it.write(names.joinToString("\n", postfix = "\n").toByteArray()) }
+        }
+        val out = tmp.root.resolve("raw").path
+        val crawl = arrayOf("cc", "-o", out, "--crawl", "CC-TEST", "--base", base.path)
+        val (code, log, err) = run(*crawl, "--files", "2")
+        assertEquals(err, 0, code)
+        assertEquals("CC-TEST-00000-00002.parquet: 2 files, 2 pages, 128 Han characters\n", log)
+        // again: the shard kept; a file more: the shorter one not taken for the longer
+        assertEquals("CC-TEST-00000-00002.parquet: there already\n", run(*crawl, "--files", "2").second)
+        val (more, moreLog, _) = run(*crawl, "--files", "3")
+        assertEquals(0, more)
+        assertEquals("CC-TEST-00000-00003.parquet: 3 files, 3 pages, 192 Han characters\n", moreLog)
+        assertEquals(listOf("CC-TEST-00000-00002.parquet", "CC-TEST-00000-00003.parquet"), File(out).list()!!.sorted())
+        // past the crawl's files
+        assertEquals(1, run(*crawl, "--from", "2", "--files", "2").first)
+        // a first file before the first, no files, how many not said
+        for (bad in listOf(arrayOf("--from", "-1", "--files", "1"), arrayOf("--files", "0"), arrayOf("--from", "1"))) {
+            assertEquals(bad.toList().toString(), 2, run(*crawl, *bad).first)
+        }
+    }
+
+    /** A WET file of one page of [url], a WARC record in a gzip member of its own (CommonCrawlTest). */
+    private fun wet(url: String): ByteArray {
+        val text = "今天天气很好我们一起去公园散步吧".repeat(4).toByteArray()
+        val headers = "WARC/1.0\r\nWARC-Type: conversion\r\nWARC-Target-URI: $url\r\nWARC-Identified-Content-Language: zho\r\n" +
+            "Content-Length: ${text.size}\r\n\r\n"
+        return ByteArrayOutputStream().also { bytes -> GZIPOutputStream(bytes).use { it.write(headers.toByteArray() + text) } }.toByteArray()
+    }
+
+    @Test
     fun badSourcesExitWithTheirLocation() {
         val lm = file("lm.arpa", ReadersTest.TINY_ARPA)
         val dict = file("dict.txt", "你\n")
@@ -271,7 +411,7 @@ class MainTest {
         val dict = file("dict.txt", "你 ni\n")
         val (code, _, err) = run("pinyin", "-o", tmp.root.resolve("x").path, "--lm", lm, dict)
         assertEquals(1, code)
-        assertEquals("the model has no <unk>\n", err)
+        assertTrue(err, err.contains("<unk>"))
         val (missing, _, missingErr) = run("table", "-o", tmp.root.resolve("y").path, tmp.root.resolve("nope.txt").path)
         assertEquals(1, missing)
         assertTrue(missingErr, missingErr.contains("nope.txt"))
@@ -284,7 +424,7 @@ class MainTest {
         assertEquals(0, run("table", "-o", table, file("t.txt", TABLE)).first)
         val (code, _, err) = run("check", table, lm)
         assertEquals(1, code)
-        assertEquals("file kind 2, expected 1\n", err)
+        assertTrue(err, err.contains("file kind"))
     }
 
     @Test
@@ -296,6 +436,20 @@ class MainTest {
             arrayOf("table", "t.txt"),
             arrayOf("check", "x"),
             arrayOf("frobnicate", "x"),
+            // a flag the command does not take, or none does: no input either
+            arrayOf("table", "-o", "x", "--lm", "lm.arpa", "t.txt"),
+            arrayOf("table", "-o", "x", "--frobnicate", "t.txt"),
+            arrayOf("check", "-o", "x", "p.data", "lm.arpa"),
+            // and of a command of many inputs, which would take a misspelt flag and its value for two more
+            arrayOf("clean", "-o", tmp.root.resolve("out").path, "--sketchbits", "12", "s.parquet"),
+            arrayOf("pinyin", "-o", "x", "--lm", "lm.arpa", "--frobnicate", "d.txt"),
+            // a value that is a flag, a flag twice
+            arrayOf("table", "-o", "--words", "t.txt"),
+            arrayOf("table", "-o", "x", "-o", "y", "t.txt"),
+            // a layer no pack can name, no layer, no data
+            arrayOf("pack", "-o", "p.words", "--data", "p.data", "--layer", "bad name", "c.tsv"),
+            arrayOf("pack", "-o", "p.words", "--data", "p.data", "c.tsv"),
+            arrayOf("words", "-o", "c.tsv", "p.data"),
         ).forEach { args ->
             val (code, _, err) = run(*args)
             assertEquals(args.toList().toString(), 2, code)

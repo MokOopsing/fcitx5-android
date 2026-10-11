@@ -75,34 +75,35 @@ class ArpaModel(
     }
 
     /** Writes the model as ARPA text: what [ArpaReader] and the `pinyin` command read. */
-    fun write(out: Appendable) {
+    fun write(out: Appendable) = formatting(out) { formatter ->
         out.appendLine("\\data\\")
         out.appendLine("ngram 1=$size")
         out.appendLine("ngram 2=${bigrams.size}")
         out.appendLine("ngram 3=${trigrams.size}")
         out.appendLine().appendLine("\\1-grams:")
-        for (w in 0 until size) out.appendLine("${number(unigramProb[w])}\t${words[w]}\t${number(unigramBackoff[w])}")
+        for (w in 0 until size) formatter.format(UNIGRAM, unigramProb[w], words[w], unigramBackoff[w])
         out.appendLine().appendLine("\\2-grams:")
         for (i in 0 until bigrams.size) {
             val key = bigrams.keyAt(i)
-            out.append(number(bigramProb[i])).append('\t')
-                .append(words[NgramKey.word(key, 2, 0)]).append(' ').append(words[NgramKey.word(key, 2, 1)])
-                .append('\t').appendLine(number(bigramBackoff[i]))
+            formatter.format(BIGRAM, bigramProb[i], words[NgramKey.word(key, 2, 0)], words[NgramKey.word(key, 2, 1)], bigramBackoff[i])
         }
         out.appendLine().appendLine("\\3-grams:")
         for (i in 0 until trigrams.size) {
             val key = trigrams.keyAt(i)
-            out.append(number(trigramProb[i])).append('\t')
-                .append(words[NgramKey.word(key, 3, 0)]).append(' ')
-                .append(words[NgramKey.word(key, 3, 1)]).append(' ')
-                .appendLine(words[NgramKey.word(key, 3, 2)])
+            formatter.format(
+                TRIGRAM, trigramProb[i],
+                words[NgramKey.word(key, 3, 0)], words[NgramKey.word(key, 3, 1)], words[NgramKey.word(key, 3, 2)],
+            )
         }
         out.appendLine().appendLine("\\end\\")
     }
 
     companion object {
         // as many digits as the engine's quantisation could tell apart, and then some
-        private fun number(x: Double) = String.format(Locale.ROOT, "%.6g", x)
+        private const val NUMBER = "%.6g"
+        private const val UNIGRAM = "$NUMBER\t%s\t$NUMBER\n"
+        private const val BIGRAM = "$NUMBER\t%s %s\t$NUMBER\n"
+        private const val TRIGRAM = "$NUMBER\t%s %s %s\n"
 
         fun read(reader: BufferedReader, source: String): ArpaModel {
             val words = ArrayList<String>()

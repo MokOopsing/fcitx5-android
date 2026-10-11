@@ -5,11 +5,12 @@
 package org.fcitx.fcitx5.android.dicttool
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import java.io.File
 
 class ExamplesTest {
 
@@ -52,8 +53,19 @@ class ExamplesTest {
         assertEquals(0, runCli(arrayOf("examples", "-o", out.path, "--only", list.path, shard.path), log, StringBuilder()))
         assertEquals("尬聊\t最近流行尬聊 吗？\n吗喽\t你们都是吗喽吧。\n", out.readText())
         assertEquals("examples: 2 of 3 words found in 1 pages\n", log.toString())
-        // the list is wanted
+        // the list is wanted, and nothing is written without it
+        assertTrue(out.delete())
         assertEquals(2, runCli(arrayOf("examples", "-o", out.path, shard.path), StringBuilder(), StringBuilder()))
-        File(out.path).delete()
+        assertFalse(out.exists())
+    }
+
+    @Test
+    fun wordsOfThreeAndFourCharactersAreFound() {
+        // 龙 is past U+8000: the first of four chars in one key, it would make the key negative
+        val examples = Examples(listOf("打工人", "龙飞凤舞", "龙飞凤舞地"))
+        examples.page("打工人写得龙飞凤舞。他龙飞凤舞地签了名。")
+        assertEquals(listOf("打工人写得龙飞凤舞。"), examples.sentences()["打工人"])
+        assertEquals(listOf("打工人写得龙飞凤舞。", "他龙飞凤舞地签了名。"), examples.sentences()["龙飞凤舞"])
+        assertEquals(listOf("他龙飞凤舞地签了名。"), examples.sentences()["龙飞凤舞地"])
     }
 }

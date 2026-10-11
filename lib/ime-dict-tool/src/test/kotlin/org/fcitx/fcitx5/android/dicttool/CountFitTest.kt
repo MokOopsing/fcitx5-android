@@ -32,5 +32,15 @@ class CountFitTest {
     fun oneCountIsNoLine() {
         assertThrows(IllegalArgumentException::class.java) { CountFit.of(listOf(9L to -6f, 9L to -7f)) }
         assertThrows(IllegalArgumentException::class.java) { CountFit.of(emptyList()) }
+        // log10(50) is inexact: summed 100 times, rounding leaves d above 0
+        assertThrows(IllegalArgumentException::class.java) { CountFit.of(List(100) { 49L to -6f }) }
+    }
+
+    @Test
+    fun countsApartThatReadAlikeAreNoLineEither() {
+        // 10^17 + 1 is 10^17 as a double: the counts differ, their logs do not, and d is 0
+        assertThrows(IllegalArgumentException::class.java) {
+            CountFit.of(listOf(100_000_000_000_000_000L to -6f, 100_000_000_000_000_001L to -7f))
+        }
     }
 }

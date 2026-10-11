@@ -21,10 +21,10 @@ import java.util.TreeMap
  * so a new dictionary release with one odd entry still builds; [unknownSyllables] says what to
  * add.
  *
- * The curated corrections of `lexicon/` apply as it reads: a word of [removed] is left out, and a
- * word of [readings] is read as listed there instead of as the dictionary has it ([corrected]
- * adds those, once all is read); so is a word of [misread], its reading first, the rest
- * misreadings at [Misreadings.WEIGHT].
+ * The curated corrections of `lexicon/` apply as it reads: a word of [removed] is left out, even
+ * one the other lists name, and a word of [readings] is read as listed there instead of as the
+ * dictionary has it ([corrected] adds those, once all is read); so is a word of [misread], its
+ * reading first, the rest misreadings at [Misreadings.WEIGHT].
  */
 class PinyinDictReader(
     private val into: PinyinDataBuilder,
@@ -43,7 +43,9 @@ class PinyinDictReader(
     /** Unknown syllable to how many readings it made us skip. */
     val unknownSyllables = TreeMap<String, Int>()
 
-    val skipped: Int get() = unknownSyllables.values.sum()
+    /** Readings skipped for a syllable [Syllables] does not know. */
+    var skipped = 0
+        private set
 
     fun read(reader: BufferedReader, source: String) {
         reader.forEachNumberedLine(source) { line, _ ->
@@ -57,8 +59,8 @@ class PinyinDictReader(
 
     /** The words of [readings], each under the readings listed: after every dictionary is read. */
     fun corrected() {
-        for ((word, list) in readings) if (word !in misread) list.forEach { add(word, it, 0f) }
-        for ((word, list) in misread) list.forEachIndexed { i, r -> add(word, r, if (i == 0) 0f else Misreadings.WEIGHT) }
+        for ((word, list) in readings) if (word !in misread && word !in removed) list.forEach { add(word, it, 0f) }
+        for ((word, list) in misread) if (word !in removed) list.forEachIndexed { i, r -> add(word, r, if (i == 0) 0f else Misreadings.WEIGHT) }
     }
 
     /** One reading, [pinyin] with its syllables separated by `'`. */
@@ -67,7 +69,8 @@ class PinyinDictReader(
         val ids = IntArray(spellings.size) { Syllables.id(spellings[it]) }
         val unknown = spellings.filterIndexed { i, _ -> ids[i] < 0 }
         if (unknown.isNotEmpty()) {
-            unknown.forEach { unknownSyllables[it] = (unknownSyllables[it] ?: 0) + 1 }
+            unknown.distinct().forEach { unknownSyllables[it] = (unknownSyllables[it] ?: 0) + 1 }
+            skipped++
             return
         }
         into.entry(word, ids, weight)
