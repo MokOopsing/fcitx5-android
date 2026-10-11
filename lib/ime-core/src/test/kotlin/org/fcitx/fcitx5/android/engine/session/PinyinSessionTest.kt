@@ -7,6 +7,8 @@ package org.fcitx.fcitx5.android.engine.session
 import org.fcitx.fcitx5.android.engine.data.PinyinData
 import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
 import org.fcitx.fcitx5.android.engine.lattice.LayerPrior
+import org.fcitx.fcitx5.android.engine.phrase.CustomPhrases
+import org.fcitx.fcitx5.android.engine.phrase.PhraseBook
 import org.fcitx.fcitx5.android.engine.pinyin.Fuzzy
 import org.fcitx.fcitx5.android.engine.pinyin.PinyinSegmenter
 import org.fcitx.fcitx5.android.engine.pinyin.ShuangpinScheme
@@ -508,5 +510,75 @@ class PinyinSessionTest {
         val separator = session.apply(Key('\''))
         assertEquals("", separator.commit)
         assertFalse(separator.handled)
+    }
+
+    /**
+     * The decoder's words past the first it gives are read as the list is shown, or turned, that
+     * far: none is left out, and the count is told once they are all read.
+     */
+    @Test
+    fun wordsPastTheFirstAreReadAsTheListIsShownThatFar() {
+        // more characters of shi than the decoder gives at first
+        val chars = (0 until 100).map { (0x4E00 + it).toChar().toString() }
+        val many = PinyinData.load(
+            ByteBuffer.wrap(
+                PinyinDataBuilder().unigram("<unk>", -7f, 0f)
+                    .apply { chars.forEachIndexed { i, c -> unigram(c, -2f - i / 64f, 0f).entry(c, syl("shi")) } }
+                    .build().toByteArray(),
+            ),
+        )
+        val session = PinyinSession(many, PinyinSegmenter(), pageSize = 10)
+        val shown = session.type("shi")
+        assertEquals("not counted yet", -1, shown.total)
+        assertTrue(shown.hasNextPage)
+        assertEquals(chars.drop(90).take(5), session.candidates(90, 5).map { it.text })
+        assertEquals(chars, session.candidates(0, 200).map { it.text })
+        // counted now, and the last page turned to
+        var page = session.apply(NextPage)
+        repeat(8) { page = session.apply(NextPage) }
+        assertEquals(100, page.total)
+        assertEquals(chars.takeLast(10), page.candidates)
+        assertFalse(page.hasNextPage)
+    }
+
+    /** A page turned past the first words reads the decoder's next. */
+    @Test
+    fun aPageTurnedPastTheFirstWordsReadsTheNext() {
+        val chars = (0 until 100).map { (0x4E00 + it).toChar().toString() }
+        val many = PinyinData.load(
+            ByteBuffer.wrap(
+                PinyinDataBuilder().unigram("<unk>", -7f, 0f)
+                    .apply { chars.forEachIndexed { i, c -> unigram(c, -2f - i / 64f, 0f).entry(c, syl("shi")) } }
+                    .build().toByteArray(),
+            ),
+        )
+        val session = PinyinSession(many, PinyinSegmenter(), pageSize = 10)
+        session.type("shi")
+        var page = session.apply(NextPage)
+        repeat(5) { page = session.apply(NextPage) }
+        assertEquals(chars.subList(60, 70), page.candidates)
+        page = session.apply(NextPage)
+        assertEquals(chars.subList(70, 80), page.candidates)
+        // the page shown's first
+        assertEquals(chars[70], session.apply(Select(0)).commit)
+    }
+
+    /** A phrase placed past the decoder's first words is there from the start: it does not move as the rest are read. */
+    @Test
+    fun aPhrasePlacedPastTheFirstWordsStaysWhereItIs() {
+        val chars = (0 until 100).map { (0x4E00 + it).toChar().toString() }
+        val many = PinyinData.load(
+            ByteBuffer.wrap(
+                PinyinDataBuilder().unigram("<unk>", -7f, 0f)
+                    .apply { chars.forEachIndexed { i, c -> unigram(c, -2f - i / 64f, 0f).entry(c, syl("shi")) } }
+                    .build().toByteArray(),
+            ),
+        )
+        val session = PinyinSession(many, PinyinSegmenter(), pageSize = 10, phraseBook = PhraseBook(CustomPhrases.parse("shi,70=短语")) {})
+        session.type("shi")
+        val first = session.candidates(0, 80).map { it.text }
+        // order 70: the 70th
+        assertEquals("短语", first[69])
+        assertEquals(first, session.candidates(0, 200).map { it.text }.take(80))
     }
 }

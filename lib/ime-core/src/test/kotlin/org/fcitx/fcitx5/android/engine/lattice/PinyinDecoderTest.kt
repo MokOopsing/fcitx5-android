@@ -10,6 +10,7 @@ import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
 import org.fcitx.fcitx5.android.engine.pinyin.Fuzzy
 import org.fcitx.fcitx5.android.engine.pinyin.PinyinSegmenter
 import org.fcitx.fcitx5.android.engine.pinyin.Syllables
+import org.fcitx.fcitx5.android.engine.pinyin.T9Segmenter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
@@ -104,9 +105,12 @@ class PinyinDecoderTest {
     @Test
     fun firstWordsAreEveryWordTheInputStartsWith() {
         val words = decode("nihaoma").words
+        // none reads all of it: best first
         assertEquals(listOf("你", "你好", "拟"), texts(words))
         assertEquals(listOf(2, 5, 2), words.map { it.end })
         assertEquals(words.sortedByDescending { it.score }, words)
+        // 你好 reads all of nihao: first
+        assertEquals(listOf("你好", "你", "拟"), texts(decode("nihao").words))
     }
 
     @Test
@@ -359,5 +363,38 @@ class PinyinDecoderTest {
         fail = false
         val input = plain.segment("nihaonihaom")
         assertEquals(describe(decoder().decode(input)), describe(d.decode(input)))
+    }
+
+    /**
+     * The words reading all the input come before the rest, however common: a rarer
+     * character of jiao (觉) is not crowded out by the common ones of ji and jia, past the words
+     * returned.
+     */
+    @Test
+    fun theWordsReadingAllTheInputComeBeforeThoseReadingAPart() {
+        val jiao = PinyinData.load(
+            ByteBuffer.wrap(
+                PinyinDataBuilder()
+                    .unigram("<unk>", -7f, 0f)
+                    .unigram("几", -1f, 0f)
+                    .unigram("家", -1.25f, 0f)
+                    .unigram("见", -2f, 0f)
+                    .unigram("叫", -2.5f, 0f)
+                    .unigram("觉", -3f, 0f)
+                    .entry("几", syl("ji"))
+                    .entry("家", syl("jia"))
+                    .entry("见", syl("jian"))
+                    .entry("叫", syl("jiao"))
+                    .entry("觉", syl("jiao"))
+                    .build().toByteArray(),
+            ),
+        )
+        val decoder = PinyinDecoder(jiao.dictionary, jiao.vocabulary, WordScorer.of(jiao.model), Penalties())
+        assertEquals(listOf("叫", "觉", "几", "家"), texts(decoder.decode(plain.segment("jiao")).words))
+        // the first two only: those of all of it
+        assertEquals(listOf("叫", "觉"), texts(decoder.decode(plain.segment("jiao"), words = 2).words))
+        // not on the nine keys: by score alone, the syllable column there to narrow them
+        val nineKeys = PinyinDecoder(jiao.dictionary, jiao.vocabulary, WordScorer.of(jiao.model), Penalties(), wholeFirst = false)
+        assertEquals(listOf("几", "家", "见", "叫", "觉"), texts(nineKeys.decode(T9Segmenter().segment("5426")).words))
     }
 }

@@ -43,6 +43,13 @@ class PinyinDecoder(
     private val user: UserWords? = null,
     /** Where lookAhead keeps its longer words, an entry per [dictionary] node, asked for when first needed: one array for decoders of the same dictionary and scores to share. */
     extensions: () -> Array<IntArray?> = { arrayOfNulls<IntArray>(dictionary.nodeCount) },
+    /**
+     * Whether the words reading all the input go before the rest; else all by score. Not on the
+     * nine keys: there the digits read as many words of all of them that mean nothing, and a
+     * syllable picked in the column narrows the words as well (ime-eval ksc, 2026-10-10: of the
+     * chat samples, 9 fewer of 983 picked within ten pages, against 2 fewer of 1064 in full pinyin).
+     */
+    private val wholeFirst: Boolean = true,
 ) {
     init {
         require(beam >= 1 && wordsPerReading >= 1) { "beam $beam, words per reading $wordsPerReading" }
@@ -387,10 +394,11 @@ class PinyinDecoder(
     private fun text(word: Int) = if (word < vocabulary.size || user == null) vocabulary.word(word) else user.text(word)
 
     /**
-     * Words the input may start with, best first, each once. An initial alone may start with
-     * thousands (`s` is every sh and s syllable), so text is made only for those returned. Arcs
-     * that begin the group as they began the last decode's, of the [kept] it scored, keep their
-     * scores: a key changes the arcs ending near the end, and those come last.
+     * Words the input may start with, each once, best first: those reading all of it before the
+     * rest, if [wholeFirst]. An initial alone may start with thousands (`s` is
+     * every sh and s syllable), so text is made only for those returned. Arcs that begin the group
+     * as they began the last decode's, of the [kept] it scored, keep their scores: a key changes
+     * the arcs ending near the end, and those come last.
      */
     private fun firstWords(graph: SyllableGraph, prev2: Int, prev: Int, limit: Int, kept: Int): List<Candidate> {
         val from = arcs.start[graph.start]
@@ -412,11 +420,20 @@ class PinyinDecoder(
         }
         firstScored = until - from
         order.sort()
+        // those reading all the input first, the rest after them, in the order of the scores: by
+        // score alone the common characters of a part of it (几 家 加 of jiao) came before a
+        // rarer one of all of it (觉), far down the list. Not longest first: a word picked piece
+        // by piece is mostly short
+        val ranked = if (!wholeFirst) order else LongArray(order.size).also { ranked ->
+            var at = 0
+            for (k in order) if (arcs.to[k.toInt()] == graph.end) ranked[at++] = k
+            for (k in order) if (arcs.to[k.toInt()] != graph.end) ranked[at++] = k
+        }
+        var next = 0
         val out = ArrayList<Candidate>()
         val seen = HashSet<Int>()
-        var next = 0
-        while (out.size < limit && next < order.size) {
-            val a = order[next++].toInt()
+        while (out.size < limit && next < ranked.size) {
+            val a = ranked[next++].toInt()
             val word = arcs.word[a]
             if (word != NO_WORD && seen.add(word)) {
                 out += Candidate(text(word), arcs.to[a], scores[a - from], intArrayOf(word), intArrayOf(arcs.to[a]))

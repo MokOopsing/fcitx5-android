@@ -120,6 +120,9 @@ class PinyinSession(
         val candidates: List<Candidate> = emptyList(),
         val graph: SyllableGraph? = null,
         val decoderWords: List<Candidate> = emptyList(), // the decoder's words, after its sentences
+        val sentences: List<Candidate> = emptyList(), // the decoder's sentences, as placed: the reranker's or refiner's pick first
+        val moreWords: Boolean = false, // whether the decoder may have words past decoderWords, read when a list is shown that far
+        val time: Calendar? = null, // when the phrases were filled in, if the input has any: the same as more words are read
         val decoderFirst: Candidate? = null, // the first before the reranker and phrases moved it
         val placed: Map<String, Phrase> = emptyMap(), // the phrases among the candidates, by text
         val habit: String? = null, // the habit offered for what is left of the input, if any
@@ -137,6 +140,7 @@ class PinyinSession(
         penalties,
         user = user,
         extensions = extensions,
+        wholeFirst = segmenter.typesLetters,
     )
     private val predictor = Predictor(data.model, data.vocabulary, data.dictionary, user, charReadings = charReadings)
     private val textWords by lazy { TextWords(data.model, data.wordIndex) }
@@ -267,8 +271,26 @@ class PinyinSession(
     override fun reads(c: Char): Boolean =
         segmenter.reads(c) || (c == SyllableGraph.SEPARATOR || c == NINE_KEYS_SEPARATOR && nineKeys != null) && input.isNotEmpty()
 
-    override fun candidates(from: Int, count: Int): List<Choice> =
-        candidates.subList(minOf(from, candidates.size), minOf(from + count, candidates.size)).map { Choice(it.text, hint(it)) }
+    override fun candidates(from: Int, count: Int): List<Choice> {
+        readUntil(from + count)
+        return candidates.subList(minOf(from, candidates.size), minOf(from + count, candidates.size)).map { Choice(it.text, hint(it)) }
+    }
+
+    /**
+     * Reads the decoder's words until there are [count] candidates, or no more: it gives a few
+     * first, and those past them only as a list is shown, or turned, that far.
+     */
+    private fun readUntil(count: Int) {
+        while (lastRead.moreWords && candidates.size < count) {
+            val read = lastRead
+            val graph = read.graph ?: return
+            val (prev2, prev) = TextWords.previous(context + pieces.flatMap { it.words.asList() })
+            val asked = maxOf(read.decoderWords.size * 2, read.decoderWords.size + count - candidates.size)
+            // the same input in the same context: the decoder builds on what it read last, if it was this
+            val words = decoder.decode(graph, prev2, prev, words = asked).words
+            place(graph, words, read.decoderFirst, read.sentences, more = words.size >= asked, time = read.time)
+        }
+    }
 
     /**
      * A word often read wrongly ([PinyinData.misreadings]) typed by a misreading: the reading,
@@ -498,6 +520,7 @@ class PinyinSession(
     }
 
     private fun turn(to: Int): Snapshot {
+        readUntil((to + 1) * pageSize + 1)
         if (to < 0 || to * pageSize >= candidates.size) return snapshot(handled = candidates.isNotEmpty())
         page = to
         return snapshot()
@@ -597,18 +620,31 @@ class PinyinSession(
             refined = 0
         }
         nineKeys?.forgetBest()
-        place(graph, decoding.words, decoding.sentences.firstOrNull() ?: decoding.words.firstOrNull(), rerank(decoding.sentences))
+        place(
+            graph, decoding.words, decoding.sentences.firstOrNull() ?: decoding.words.firstOrNull(), rerank(decoding.sentences),
+            more = decoding.words.size >= PinyinDecoder.DEFAULT_WORDS,
+        )
+        // a phrase goes where its order says only in a list that long, else last: read that far,
+        // or it would move as the rest are read
+        lastRead.placed.values.maxOfOrNull { it.order }?.let { readUntil(it + lastRead.placed.size + 1) }
         // offered here only: the refiner's pick reordering them would drop a tap on the list shown
         nineKeys?.offer(input, readFrom(), graph)
     }
 
     /** Lists [sentences] of [graph], then [decoderWords], with the phrases the input has among them. */
-    private fun place(graph: SyllableGraph, decoderWords: List<Candidate>, decoderFirst: Candidate?, sentences: List<Candidate>) {
+    private fun place(
+        graph: SyllableGraph,
+        decoderWords: List<Candidate>,
+        decoderFirst: Candidate?,
+        sentences: List<Candidate>,
+        more: Boolean,
+        time: Calendar? = null,
+    ) {
         val rest = input.length - readFrom()
         val key = input.substring(readFrom())
         val phrases = phraseBook.phrases
         // the time asked once, for what is shown and what is kept of it to agree
-        val time = if (key in phrases) now() else null
+        val time = time ?: if (key in phrases) now() else null
         val placed: Map<String, Phrase> = if (time == null) emptyMap() else phrases.offered(key, time).associate { it.text to it.phrase }
         // a phrase is text, no word: nothing to learn, and what follows it reads after nothing
         val listed = phrases.place(
@@ -622,6 +658,9 @@ class PinyinSession(
             candidates = withHabit(habit, rest, listed, placed),
             graph = graph,
             decoderWords = decoderWords,
+            sentences = sentences,
+            moreWords = more,
+            time = time,
             decoderFirst = decoderFirst,
             placed = placed,
             habit = habit,
@@ -686,7 +725,9 @@ class PinyinSession(
         val picked = refiner.refine(textBefore(), sentences.map { it.text }, sentences.map { it.score }, REFINE_BUDGET)
             ?: return snapshot()
         unrefined = null
-        if (picked != SentenceRefiner.NONE) place(lastRead.graph!!, lastRead.decoderWords, lastRead.decoderFirst, first(sentences, picked))
+        if (picked != SentenceRefiner.NONE) {
+            place(lastRead.graph!!, lastRead.decoderWords, lastRead.decoderFirst, first(sentences, picked), lastRead.moreWords, lastRead.time)
+        }
         return snapshot()
     }
 
@@ -699,11 +740,12 @@ class PinyinSession(
             candidates = shown.map { it.text },
             page = page,
             hasPreviousPage = page > 0,
-            hasNextPage = from + pageSize < candidates.size,
+            hasNextPage = from + pageSize < candidates.size || lastRead.moreWords,
             handled = handled,
             predicting = predicting,
             hints = shown.map(::hint).takeIf { h -> h.any { it.isNotEmpty() } }.orEmpty(),
-            total = candidates.size,
+            // not counted while the decoder has words not yet read
+            total = if (lastRead.moreWords) -1 else candidates.size,
             first = from,
             // a prediction too: what was learned of it may be forgotten (see predictionOffers)
             actionable = candidates.isNotEmpty(),
