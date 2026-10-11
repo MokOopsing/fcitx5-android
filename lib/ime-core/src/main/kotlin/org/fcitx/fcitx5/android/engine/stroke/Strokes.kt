@@ -32,15 +32,27 @@ class Strokes(private val table: CodeTable, private val score: (String) -> Float
         IntArray(keys.size) { (keys[it] and INDEX_MASK).toInt() }
     }
 
-    /** The characters whose strokes start with [strokes], the likeliest first; none for nothing typed. */
-    fun find(strokes: String): List<String> {
-        if (strokes.isEmpty()) return emptyList()
+    /**
+     * The characters whose strokes start with [strokes], the likeliest first, each once; none for
+     * nothing typed. Made as they are gone through: the first stroke has thousands, a page shows a few.
+     */
+    fun find(strokes: String): Sequence<String> {
+        if (strokes.isEmpty()) return emptySequence()
         val range = table.prefixRange(strokes)
-        if (range.isEmpty()) return emptyList()
-        val found = ArrayList<String>()
-        val seen = HashSet<String>()
-        for (i in order) if (i in range && seen.add(table.text(i))) found += table.text(i)
-        return found
+        if (range.isEmpty()) return emptySequence()
+        return sequence {
+            val seen = HashSet<String>()
+            val ranked = order.iterator()
+            var left = range.last - range.first + 1
+            // till the range is all gone through: the rest of the order has none of it
+            while (left > 0) {
+                val i = ranked.nextInt()
+                if (i !in range) continue
+                left--
+                val text = table.text(i)
+                if (seen.add(text)) yield(text)
+            }
+        }
     }
 
     companion object {

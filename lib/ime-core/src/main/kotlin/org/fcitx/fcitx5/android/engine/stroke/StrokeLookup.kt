@@ -16,12 +16,14 @@ import org.fcitx.fcitx5.android.engine.session.Snapshot
  * ([Strokes]); each candidate shows its pinyin ([reading]) to learn it by. Picked, it is
  * committed, and the pinyin goes on after it. Any other letter ends the lookup, its keys and the
  * letter typed into pinyin instead: a Latin word (`usb` for USB) or a slip (`uan` for yan). Any
- * other key commits the first candidate, or with none what was typed, and is the app's, as in pinyin.
+ * other key commits the first candidate, or with none what was typed, and is the app's, as in
+ * pinyin: what is typed next does not run on from it, as after Enter.
  *
  * [strokes] is asked for at the first lookup: null, there are none, and [KEY] is [pinyin]'s. A
  * character the user [blocked] is not found. A character picked is handed to [follow], for the
  * pinyin to go on after: by default as the app's text ([Action.Context]); a PinyinSession's
- * `follow` keeps what it committed before too, whatever wraps either session.
+ * `follow` keeps what it committed before too, whatever wraps either session. The keys of a
+ * lookup a letter ended are handed to [retype], by default typed into the pinyin a key at a time.
  */
 class StrokeLookup(
     private val pinyin: Session,
@@ -30,11 +32,15 @@ class StrokeLookup(
     private val pageSize: Int = DEFAULT_PAGE_SIZE,
     private val blocked: (String) -> Boolean = { false },
     private val follow: (String) -> Snapshot = { pinyin.apply(Action.Context(it)) },
+    private val retype: (String) -> Snapshot = { keys ->
+        val typed = keys.map { pinyin.apply(Action.Key(it)) }
+        typed.last().copy(commit = typed.joinToString("") { it.commit })
+    },
 ) : Session {
 
     private var looking = false
     private val input = StringBuilder()
-    private var found: List<String> = emptyList()
+    private var found = Found.none()
     private var page = 0
 
     // whether pinyin shows nothing typed: only then does the key start a lookup
@@ -64,7 +70,7 @@ class StrokeLookup(
             is Action.Pick -> pick(action.index)
             Action.NextPage -> turn(page + 1)
             Action.PreviousPage -> turn(page - 1)
-            Action.CommitRaw -> end(commit = "$KEY$input")
+            Action.CommitRaw -> leave("$KEY$input")
             Action.Reset, is Action.Context -> {
                 end()
                 pinyin.apply(action).also { idle = it.preedit.isEmpty() }
@@ -76,7 +82,7 @@ class StrokeLookup(
 
     override fun candidates(from: Int, count: Int): List<Choice> =
         if (!looking) pinyin.candidates(from, count)
-        else found.subList(minOf(from, found.size), minOf(from + count, found.size)).map { Choice(it, reading(it)) }
+        else found.page(from, count).map { Choice(it, reading(it)) }
 
     override fun offers(index: Int): Set<Offer> = if (looking) emptySet() else pinyin.offers(index)
 
@@ -84,62 +90,92 @@ class StrokeLookup(
         c in Strokes.KEYS -> lookUp { input.append(c) }
         c in 'a'..'z' -> toPinyin(c)
         // a key not read: the first candidate, or what was typed as Enter has it; then the key is the app's
-        else -> end(commit = found.firstOrNull() ?: "$KEY$input", handled = false)
+        else -> leave(found[0] ?: "$KEY$input", handled = false)
     }
 
     /** Ends the lookup, [KEY], the strokes and [c] typed into [pinyin] instead. */
     private fun toPinyin(c: Char): Snapshot {
         val keys = "$KEY$input$c"
         end()
-        val typed = keys.map { pinyin.apply(Action.Key(it)) }
-        idle = typed.last().preedit.isEmpty()
-        return typed.last().copy(commit = typed.joinToString("") { it.commit })
+        return retype(keys).also { idle = it.preedit.isEmpty() }
     }
 
     private inline fun lookUp(change: () -> Unit = {}): Snapshot {
         change()
-        found = strokes()?.find(input.toString()).orEmpty().filterNot(blocked)
+        found = Found(strokes()?.find(input.toString()).orEmpty().filterNot(blocked).iterator())
         page = 0
         return snapshot()
     }
 
     private fun pick(index: Int): Snapshot {
-        val text = found.getOrNull(index) ?: return snapshot()
+        val text = found[index] ?: return snapshot()
         // what follows follows it, after what the pinyin committed before, as the pinyin would have it
         val after = follow(text)
         idle = after.preedit.isEmpty()
         return end(commit = text)
     }
 
+    /**
+     * Ends the lookup, [text] committed as typed or before a key that is the app's: what is typed
+     * next does not run on from it, as after the pinyin's own.
+     */
+    private fun leave(text: String, handled: Boolean = true): Snapshot {
+        idle = pinyin.apply(Action.Reset).preedit.isEmpty()
+        return end(commit = text, handled = handled)
+    }
+
     private fun turn(to: Int): Snapshot {
-        if (to >= 0 && to * pageSize < found.size) page = to
+        if (to >= 0 && found[to * pageSize] != null) page = to
         return snapshot()
     }
 
     private fun end(commit: String = "", handled: Boolean = true): Snapshot {
         looking = false
         input.setLength(0)
-        found = emptyList()
+        found = Found.none()
         page = 0
         return Snapshot(commit, "", emptyList(), 0, hasPreviousPage = false, hasNextPage = false, handled = handled, predicting = false)
     }
 
     private fun snapshot(): Snapshot {
         val from = page * pageSize
-        val shown = found.subList(minOf(from, found.size), minOf(from + pageSize, found.size))
+        val shown = found.page(from, pageSize)
         return Snapshot(
             commit = "",
             preedit = "$KEY" + Strokes.shown(input),
             candidates = shown,
             page = page,
             hasPreviousPage = page > 0,
-            hasNextPage = from + pageSize < found.size,
+            hasNextPage = found[from + pageSize] != null,
             handled = true,
             predicting = false,
             hints = shown.map(reading),
             total = found.size,
             first = from,
         )
+    }
+
+    /** The characters found, kept as they are made: the first stroke finds thousands, a page shows a few. */
+    private class Found(private val rest: Iterator<String>) {
+        private val made = ArrayList<String>()
+        private var done = false
+
+        operator fun get(i: Int): String? {
+            while (made.size <= i && !done) {
+                if (rest.hasNext()) made += rest.next() else done = true
+            }
+            return made.getOrNull(i)
+        }
+
+        /** How many there are, -1 until all were made. */
+        val size: Int get() = if (done) made.size else -1
+
+        fun page(from: Int, count: Int): List<String> = (from until from + count).mapNotNull { get(it) }
+
+        companion object {
+            // a new one each time, not one every StrokeLookup shares: get() writes done, on whichever thread a session is on
+            fun none() = Found(emptySequence<String>().iterator())
+        }
     }
 
     companion object {

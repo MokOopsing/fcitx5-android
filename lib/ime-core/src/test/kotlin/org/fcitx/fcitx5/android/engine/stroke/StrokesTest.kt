@@ -27,7 +27,8 @@ import java.nio.ByteBuffer
 
 class StrokesTest {
 
-    // 一 h, 十 hs, 土 hsh, 王 hhsh, 丰 hhhs; 㐄 (rare, unknown to the model) hzs
+    // 一 h, 十 hs, 土 hsh, 王 hhsh, 丰 hhhs, 干 hhs; rare, unknown to the model: 㐄 hzs and 亖 hhhh, of
+    // more strokes but first by code; 𠀀 hzs, past the BMP, is not kept
     private val dict = """
         # Rime dictionary: stroke
         ---
@@ -40,6 +41,7 @@ class StrokesTest {
         王	hhsh
         丰	hhhs
         㐄	hzs
+        亖	hhhh
         干	hhs
         𠀀	hzs
     """.trimIndent()
@@ -53,12 +55,22 @@ class StrokesTest {
     @Test
     fun theCommonestWhoseStrokesStartSoComeFirstTheUnknownAfterFewestStrokesFirst() {
         val s = strokes()
-        assertEquals(listOf("一", "十", "干", "王", "土", "丰", "㐄"), s.find("h"))
-        assertEquals(listOf("干", "王", "丰"), s.find("hh"))
-        assertEquals(listOf("㐄"), s.find("hzs"))
-        assertEquals(emptyList<String>(), s.find("z"))
-        assertEquals(emptyList<String>(), s.find(""))
+        val h = s.find("h")
+        val all = listOf("一", "十", "干", "王", "土", "丰", "㐄", "亖")
+        assertEquals(all, h.toList())
+        // gone through again, it finds them all again
+        assertEquals(all, h.toList())
+        assertEquals(listOf("干", "王", "丰", "亖"), s.find("hh").toList())
+        assertEquals(listOf("㐄"), s.find("hzs").toList())
+        assertEquals(emptyList<String>(), s.find("z").toList())
+        assertEquals(emptyList<String>(), s.find("").toList())
         assertEquals("一丨丿丶乛", Strokes.shown("hspnz"))
+    }
+
+    @Test
+    fun onlyTheCharactersOfTheBmpAreKept() {
+        val read = Strokes.read("...\n㐄\thzs\n𠀀\thzs\n".reader().buffered(), "stroke")
+        assertEquals(listOf("hzs" to "㐄"), read.entryList)
     }
 
     @Test
@@ -82,7 +94,7 @@ class StrokesTest {
                 is Action.Select, Action.Reset, is Action.Context -> typed.setLength(0)
                 else -> {}
             }
-            return Snapshot("", typed.toString(), emptyList(), 0, false, false, true, false)
+            return Snapshot("", typed.toString(), emptyList(), 0, hasPreviousPage = false, hasNextPage = false, handled = true, predicting = false)
         }
         override fun candidates(from: Int, count: Int) = listOf(Choice("拼"))
         override fun offers(index: Int) = setOf(Offer.FORGET)
@@ -123,6 +135,22 @@ class StrokesTest {
     }
 
     @Test
+    fun theKeysOfALookupALetterEndedAreHandedOverAtOnce() {
+        val pinyin = Pinyin()
+        val handed = ArrayList<String>()
+        val l = StrokeLookup(pinyin, { strokes() }, retype = { keys ->
+            handed += keys
+            Snapshot("", keys, emptyList(), 0, hasPreviousPage = false, hasNextPage = false, handled = true, predicting = false)
+        })
+        "uhh".forEach { l.apply(Action.Key(it)) }
+        assertEquals("uhha", l.apply(Action.Key('a')).preedit)
+        assertEquals(listOf("uhha"), handed)
+        // the pinyin shows what was typed: u is its own
+        l.apply(Action.Key('u'))
+        assertEquals(listOf(Action.Key('u')), pinyin.actions)
+    }
+
+    @Test
     fun aLatinWordStartingWithUIsTypedAsPinyinReadsIt() {
         val data = PinyinData.load(
             ByteBuffer.wrap(
@@ -133,13 +161,17 @@ class StrokesTest {
                     .build().toByteArray(),
             ),
         )
-        val l = StrokeLookup(PinyinSession(data, PinyinSegmenter(latin = LatinWords.of(data.dictionary))), { strokes() })
-        l.apply(Action.Key('u'))
-        // s is 丨, b no stroke
-        assertEquals("u丨", l.apply(Action.Key('s')).preedit)
-        val s = l.apply(Action.Key('b'))
-        assertEquals("USB", s.candidates.first())
-        assertEquals("usb", s.preedit)
+        // typed into the pinyin a key at a time, and handed over at once, as Engines has it
+        for (handedOver in listOf(false, true)) {
+            val pinyin = PinyinSession(data, PinyinSegmenter(latin = LatinWords.of(data.dictionary)))
+            val l = if (handedOver) StrokeLookup(pinyin, { strokes() }, retype = pinyin::typeAll) else StrokeLookup(pinyin, { strokes() })
+            l.apply(Action.Key('u'))
+            // s is 丨, b no stroke
+            assertEquals("u丨", l.apply(Action.Key('s')).preedit)
+            val s = l.apply(Action.Key('b'))
+            assertEquals("$handedOver", "USB", s.candidates.first())
+            assertEquals("$handedOver", "usb", s.preedit)
+        }
     }
 
     @Test
@@ -156,6 +188,29 @@ class StrokesTest {
         // the reranker reads the text before the cursor: both, not 再 alone
         "zai".forEach { l.apply(Action.Key(it)) }
         assertEquals("我再", contexts.last())
+    }
+
+    @Test
+    fun aCharacterCommittedByAnotherKeyOrWhatEnterCommitsIsNoContext() {
+        val contexts = ArrayList<String>()
+        val pinyin = PinyinSession(sessionTestData(), PinyinSegmenter()) { context, _, _ -> contexts += context; 0 }
+        val zai = strokes("...\n再\th\n")
+        val l = StrokeLookup(pinyin, { zai }, follow = pinyin::follow)
+        "wo".forEach { l.apply(Action.Key(it)) }
+        assertEquals("我", l.apply(Action.Select(0)).commit)
+        "uh".forEach { l.apply(Action.Key(it)) }
+        assertEquals("再", l.apply(Action.Key(',')).commit)
+        // 我再，: what follows does not run on from it, as after pinyin's own 我，
+        "zai".forEach { l.apply(Action.Key(it)) }
+        assertEquals("", contexts.last())
+        l.apply(Action.Reset)
+        "wo".forEach { l.apply(Action.Key(it)) }
+        l.apply(Action.Select(0))
+        "uh".forEach { l.apply(Action.Key(it)) }
+        assertEquals("uh", l.apply(Action.CommitRaw).commit)
+        // nor from letters committed as typed
+        "zai".forEach { l.apply(Action.Key(it)) }
+        assertEquals("", contexts.last())
     }
 
     @Test
@@ -187,7 +242,8 @@ class StrokesTest {
 
     @Test
     fun pagesBackspaceEnterAndOtherKeys() {
-        val l = lookup()
+        val pinyin = Pinyin()
+        val l = lookup(pinyin)
         l.apply(Action.Key('u'))
         l.apply(Action.Key('h'))
         val next = l.apply(Action.NextPage)
@@ -213,7 +269,26 @@ class StrokesTest {
         assertEquals("u一", l.apply(Action.Refine).preedit)
         assertEquals("", l.apply(Action.Reset).preedit)
         l.learning = false
-        assertFalse(l.learning)
+        assertFalse(pinyin.learning)
+    }
+
+    @Test
+    fun theCharactersFoundAreMadeAsAskedForTheTotalKnownOnceAllAre() {
+        val l = lookup()
+        l.apply(Action.Key('u'))
+        val first = l.apply(Action.Key('h'))
+        assertEquals(listOf("一", "十", "干"), first.candidates)
+        assertTrue(first.hasNextPage)
+        assertEquals(-1, first.total)
+        l.apply(Action.NextPage)
+        val last = l.apply(Action.NextPage)
+        assertEquals(listOf("㐄", "亖"), last.candidates)
+        assertFalse(last.hasNextPage)
+        assertEquals(8, last.total)
+        // no page past the last
+        assertEquals(2, l.apply(Action.NextPage).page)
+        assertEquals(listOf(Choice("十"), Choice("干")), l.candidates(1, 2))
+        assertEquals(8, l.candidates(0, 20).size)
     }
 
     @Test
