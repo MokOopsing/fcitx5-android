@@ -27,9 +27,6 @@ fun interface SentenceRefiner {
     /** Calls at most for one input; past them the order shown stands. */
     val slices: Int get() = SLICES
 
-    /** This refiner without what sends the text off the device: for a password, or an incognito field. */
-    fun offline(): SentenceRefiner? = this
-
     companion object {
         const val NONE = -1
 
@@ -50,7 +47,7 @@ fun interface SentenceRefiner {
  * Added, not replacing: where the dictionary has the evidence (a word read whole, a frequent
  * phrase) the decoder's margin holds, and the model decides where it is thin (简拼, sentences
  * put together from pieces). Replacing the decoder's order with the model's lost 2.2 points of
- * top1 on the evaluation set; adding it gained 3 to 5 (see dev/ENGINE-DESIGN.md 2.6b).
+ * top1 on the evaluation set; adding it gained 3 to 5.
  */
 class Reranker(
     model: SentenceModel,

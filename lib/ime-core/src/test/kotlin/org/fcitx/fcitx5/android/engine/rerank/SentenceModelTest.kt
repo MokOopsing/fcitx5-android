@@ -27,11 +27,14 @@ class SentenceModelTest {
     @Test
     fun itComputesWhatTheTextbookPassDoes() {
         val tokens = intArrayOf(3, 5, 4, 1, 7, 6)
-        val expected = tiny.logProbs(intArrayOf(SentenceModel.BOS) + tokens)
-        val got = run(model, tokens)
-        for (i in tokens.indices) assertEquals("at $i", expected[i][tokens[i]], got[i].toDouble(), 1e-4)
-        // floats instead of int8: the same weights, the same numbers
-        assertArrayEquals(got, run(tiny.load(unpack = true), tokens), 1e-4f)
+        // and 12 wide: the kernels take eight columns at a time, and these leave four over
+        for (t in listOf(tiny, TinyModel(width = 12))) {
+            val expected = t.logProbs(intArrayOf(SentenceModel.BOS) + tokens)
+            val got = run(t.load(), tokens)
+            for (i in tokens.indices) assertEquals("${t.width} wide, at $i", expected[i][tokens[i]], got[i].toDouble(), 1e-4)
+            // floats instead of int8: the same weights, the same numbers
+            assertArrayEquals(got, run(t.load(unpack = true), tokens), 1e-4f)
+        }
     }
 
     @Test
@@ -41,6 +44,8 @@ class SentenceModelTest {
         // the textbook sum, row by row, in doubles: what any kernel should come near
         val kernel = MatrixKernel { q, scales, rows, columns, x, y ->
             shapes += rows to columns
+            // the app's kernel refuses a slice of the file that has more than its matrix
+            assertEquals(rows * columns, q.capacity())
             for (r in 0 until rows) y[r] = (0 until columns).sumOf { x[it].toDouble() * q[r * columns + it] }.toFloat() * scales[r]
         }
         val got = run(SentenceModel.load(ByteBuffer.wrap(tiny.bytes()), kernel = kernel), tokens)
@@ -106,7 +111,7 @@ class SentenceModelTest {
         var tries = 0
         while (got == null) {
             got = scorer.within("好", readings, relative = true, budget = 2)
-            tries++
+            assertTrue("never done", ++tries < 100)
         }
         assertTrue(tries > 1)
         assertArrayEquals(whole, got, 1e-6f)
@@ -165,7 +170,7 @@ class SentenceModelTest {
         // nothing to score: what it costs is the context, a position a try
         fun tries(context: String, budget: Int): Int {
             var tries = 1
-            while (scorer.within(context, listOf(""), relative = false, budget = budget) == null) tries++
+            while (scorer.within(context, listOf(""), relative = false, budget = budget) == null) assertTrue("never done", ++tries < 100)
             return tries
         }
         assertEquals(3, tries("我好你", 1))
@@ -239,5 +244,9 @@ class SentenceModelTest {
         assertThrows(IllegalArgumentException::class.java) { Json.parse("[".repeat(Json.MAX_DEPTH + 2) + "]".repeat(Json.MAX_DEPTH + 2)) }
         assertTrue(Json.parse("[".repeat(Json.MAX_DEPTH) + "]".repeat(Json.MAX_DEPTH)) is List<*>)
         assertThrows(IllegalArgumentException::class.java) { Json.parse("[" + "0,".repeat(Json.MAX_VALUES) + "0]") }
+        // at the limits: the depth counted from 0, so one array more than MAX_DEPTH; the array a value too
+        assertTrue(Json.parse("[".repeat(Json.MAX_DEPTH + 1) + "]".repeat(Json.MAX_DEPTH + 1)) is List<*>)
+        assertEquals(Json.MAX_VALUES - 1, (Json.parse("[" + "0,".repeat(Json.MAX_VALUES - 2) + "0]") as List<*>).size)
+        assertThrows(IllegalArgumentException::class.java) { Json.parse("[" + "0,".repeat(Json.MAX_VALUES - 1) + "0]") }
     }
 }

@@ -5,8 +5,9 @@
 package org.fcitx.fcitx5.android.core
 
 import org.fcitx.fcitx5.android.engine.rerank.MatrixKernel
+import java.nio.ByteBuffer
 
 /** [MatrixKernel] in C++ (`matrix-kernel.cpp`), in native-lib: loaded by [Fcitx] before the engine runs. */
 object NativeMatrixKernel : MatrixKernel {
-    external override fun times(q: ByteArray, scales: FloatArray, rows: Int, columns: Int, x: FloatArray, y: FloatArray)
+    external override fun times(q: ByteBuffer, scales: FloatArray, rows: Int, columns: Int, x: FloatArray, y: FloatArray)
 }

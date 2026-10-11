@@ -4,16 +4,23 @@
  */
 package org.fcitx.fcitx5.android.engine.rerank
 
+import java.nio.ByteBuffer
+
 /**
  * Multiplies an int8 matrix by a vector: `y[r] = scales[r] × (row r · x)` for each of [rows] rows
- * of [columns], [q] row-major and exactly `rows × columns` long; [x] and [y] are different
- * arrays, as y is written while x is still read. Nearly all of a sentence model's time is spent
- * here; the app does it in C++, as ART runs the loop in [JVM] several times slower than a
- * vectorised one — too slow for the large model in the pauses between keys.
+ * of [columns], [q] row-major in its `rows × columns` bytes from index 0, read with absolute gets
+ * whatever its position; [x] and [y] are different arrays, as y is written while x is still read.
+ * Nearly all of a sentence model's time is spent here; the app does it in C++, as ART runs the
+ * loop in [JVM] several times slower than a vectorised one — too slow for the large model in the
+ * pauses between keys. The app's [q] is the model file as mapped, its megabytes not copied: a
+ * direct buffer, which the app's kernel takes only with a capacity of exactly `rows × columns`.
+ * Implementations add in [JVM]'s order but may fuse each multiply-add (the app's does on arm64),
+ * so a result may differ from [JVM]'s in its last bits: NativeMatrixKernelTest allows 1e-5 of the
+ * sum of its terms' sizes.
  */
 fun interface MatrixKernel {
     @Suppress("LongParameterList")
-    fun times(q: ByteArray, scales: FloatArray, rows: Int, columns: Int, x: FloatArray, y: FloatArray)
+    fun times(q: ByteBuffer, scales: FloatArray, rows: Int, columns: Int, x: FloatArray, y: FloatArray)
 
     companion object {
         val JVM = MatrixKernel { q, scales, rows, columns, x, y ->
@@ -25,7 +32,7 @@ fun interface MatrixKernel {
 private const val LANES = 8
 
 // eight sums, so the additions need not wait on each other
-internal fun dotQ(q: ByteArray, scales: FloatArray, columns: Int, x: FloatArray, r: Int): Float {
+internal fun dotQ(q: ByteBuffer, scales: FloatArray, columns: Int, x: FloatArray, r: Int): Float {
     val base = r * columns
     var s0 = 0f; var s1 = 0f; var s2 = 0f; var s3 = 0f
     var s4 = 0f; var s5 = 0f; var s6 = 0f; var s7 = 0f

@@ -4,7 +4,9 @@
  */
 package org.fcitx.fcitx5.android.engine.rerank
 
+import org.fcitx.fcitx5.android.core.CoreLog
 import java.nio.ByteBuffer
+import java.util.concurrent.TimeUnit
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.sqrt
@@ -67,6 +69,15 @@ class SentenceModel private constructor(
         internal var summed = false
     }
 
+    /** The arrays [next] works in, written over at each position. */
+    internal class Scratch(config: Config) {
+        val y = FloatArray(config.width)
+        val qkv = FloatArray(3 * config.width)
+        val hidden = FloatArray(4 * config.width)
+        val att = FloatArray(config.window)
+        val add = FloatArray(config.width)
+    }
+
     private val index: Map<Char, Int> = HashMap<Char, Int>().apply {
         vocab.forEachIndexed { id, s -> if (s.length == 1 && id > BOS) put(s[0], id) }
     }
@@ -88,7 +99,9 @@ class SentenceModel private constructor(
     }
 
     /** Runs [token] after [parent] (or first of all). */
-    fun next(parent: Node?, token: Int): Node {
+    fun next(parent: Node?, token: Int): Node = next(parent, token, Scratch(config))
+
+    private fun next(parent: Node?, token: Int, scratch: Scratch): Node {
         val position = (parent?.position ?: -1) + 1
         require(position < config.window) { "past the model's window" }
         require(token in 0 until config.vocab) { "no token $token" }
@@ -104,11 +117,11 @@ class SentenceModel private constructor(
         for (i in 0 until width) x[i] += pos[position * width + i]
         val keys = Array(config.layers) { FloatArray(width) }
         val values = Array(config.layers) { FloatArray(width) }
-        val y = FloatArray(width)
-        val qkv = FloatArray(3 * width)
-        val hidden = FloatArray(4 * width)
-        val att = FloatArray(position + 1)
-        val add = FloatArray(width)
+        val y = scratch.y
+        val qkv = scratch.qkv
+        val hidden = scratch.hidden
+        val att = scratch.att
+        val add = scratch.add
         for ((l, b) in blocks.withIndex()) {
             layerNorm(x, b.ln1, y)
             b.qkv.apply(y, b.qkvBias, qkv)
@@ -170,10 +183,11 @@ class SentenceModel private constructor(
      * The log of the softmax's denominator after [node]: a logit for every token in the
      * vocabulary, the costliest part of a position, done once per node.
      */
-    fun logSum(node: Node): Float {
+    fun logSum(node: Node): Float = if (node.summed) node.logSum else logSum(node, FloatArray(config.vocab))
+
+    private fun logSum(node: Node, logits: FloatArray): Float {
         if (node.summed) return node.logSum
         val normed = normed(node)
-        val logits = FloatArray(config.vocab)
         tok.times(normed, logits)
         var max = Float.NEGATIVE_INFINITY
         for (v in 0 until config.vocab) if (logits[v] > max) max = logits[v]
@@ -199,7 +213,11 @@ class SentenceModel private constructor(
         /** Context tokens the window has room for, before [room] positions of reading. */
         private val maxContext = maxOf(0, window - 1 - room)
 
-        private val bos by lazy(LazyThreadSafetyMode.NONE) { next(null, BOS) }
+        // what a position and a denominator work in, made once rather than at each of them
+        private val scratch = Scratch(config)
+        private val allLogits = FloatArray(config.vocab)
+
+        private val bos by lazy(LazyThreadSafetyMode.NONE) { next(null, BOS, scratch) }
 
         private var context: String? = null
 
@@ -220,12 +238,16 @@ class SentenceModel private constructor(
         private var budget = Int.MAX_VALUE
 
         private fun nodeOf(step: Step): Node? =
-            step.node ?: if (spent++ >= budget) null else next(step.parent, step.token).also { step.node = it }
+            step.node ?: if (spent++ >= budget) null else next(step.parent, step.token, scratch).also { step.node = it }
 
         private fun denominator(node: Node): Float? =
-            if (node.summed) node.logSum else if (spent++ >= budget) null else logSum(node)
+            if (node.summed) node.logSum else if (spent++ >= budget) null else logSum(node, allLogits)
 
         private val kept = HashMap<String, Step>()
+
+        // the key in [kept] of the step to [token]: [token] appended to [tokens], the reading's
+        // tokens before it, as chars (token ids are below 2^16)
+        private fun key(tokens: StringBuilder, token: Int): String = tokens.append(token.toChar()).toString()
 
         /**
          * The log-probability of each of [readings] after [context], of as much of it as fits
@@ -250,7 +272,6 @@ class SentenceModel private constructor(
             if (kept.size > limit) keepOnly(tokens)
             val shared = if (relative) shared(tokens) else 0
             val n = readings.size
-            // the tokens so far of each, as chars: token ids are below 2^16
             val keys = Array(n) { StringBuilder() }
             val parents = Array(n) { first }
             val logits = FloatArray(n)
@@ -259,10 +280,9 @@ class SentenceModel private constructor(
                 for (i in 0 until n) {
                     val reading = tokens[i]
                     if (t >= reading.size) continue
-                    keys[i].append(reading[t].toChar())
                     val parent = parents[i]
                     val sum = logits[i]
-                    val step = kept.getOrPut(keys[i].toString()) { Step(parent, reading[t], sum + logit(parent, reading[t])) }
+                    val step = kept.getOrPut(key(keys[i], reading[t])) { Step(parent, reading[t], sum + logit(parent, reading[t])) }
                     if (t >= shared) denominators[i] += denominator(step.parent) ?: return null
                     logits[i] = step.logits
                     if (t < reading.lastIndex) parents[i] = nodeOf(step) ?: return null
@@ -283,7 +303,7 @@ class SentenceModel private constructor(
             }
             while (chain.size < target.size) {
                 if (spent++ >= budget) return null
-                chain += next(chain.lastOrNull() ?: bos, target[chain.size])
+                chain += next(chain.lastOrNull() ?: bos, target[chain.size], scratch)
             }
             return chain.lastOrNull() ?: bos
         }
@@ -292,8 +312,8 @@ class SentenceModel private constructor(
         private fun keepOnly(tokens: List<IntArray>) {
             val needed = HashSet<String>()
             for (reading in tokens) {
-                val key = StringBuilder()
-                for (token in reading) needed += key.append(token.toChar()).toString()
+                val before = StringBuilder()
+                for (token in reading) needed += key(before, token)
             }
             kept.keys.retainAll(needed)
         }
@@ -377,6 +397,7 @@ class SentenceModel private constructor(
          * Weights as stored are multiplied by [kernel].
          */
         fun load(buffer: ByteBuffer, unpack: Boolean = false, kernel: MatrixKernel = MatrixKernel.JVM): SentenceModel {
+            val start = System.nanoTime()
             val file = Safetensors(buffer)
             val meta = file.metadata
             require(meta["format"] == "chinese-ime-lm" && meta["version"] == "1") { "not a chinese-ime-lm v1 model" }
@@ -398,10 +419,14 @@ class SentenceModel private constructor(
                     matrix(p + "out.weight", w, 4 * w), file.floats(p + "out.bias", w),
                 )
             }
-            return SentenceModel(
+            val model = SentenceModel(
                 config, vocab, matrix("tok.weight", config.vocab, w), file.floats("pos.weight", config.window, w),
                 blocks, norm("ln_f"), meta["license"].orEmpty(), meta["attribution"].orEmpty(),
             )
+            // read on the thread that asked, in the app fcitx's: how long a key waited on it
+            val ms = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
+            CoreLog.d { "sentence model of ${config.layers} layers of $w read in $ms ms" }
+            return model
         }
 
         private fun config(text: String): Config {
