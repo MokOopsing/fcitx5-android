@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.core.data
 
+import org.fcitx.fcitx5.android.data.clipboard.CLIPBOARD_DATABASE
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.w3c.dom.Element
@@ -23,6 +24,22 @@ class BackupRulesTest {
         for (section in listOf("cloud-backup", "device-transfer")) {
             val excluded = excludes(rules.getElementsByTagName(section).item(0) as Element)
             for (path in SYNCED) assertTrue("$section: device_root/$path", ("device_root" to path) in excluded)
+        }
+    }
+
+    /** Clips marked sensitive (a password copied) go no further than the phone: the rules cannot pick rows, so none of them. */
+    @Test
+    fun cloudBackupAndDeviceTransferLeaveOutTheClipboard() {
+        val rules = parse("src/main/res/xml/data_extraction_rules.xml")
+        for (section in listOf("cloud-backup", "device-transfer")) {
+            val excluded = excludes(rules.getElementsByTagName(section).item(0) as Element)
+            // device_database: the one a start before the first unlock made, in device-protected storage
+            for (domain in listOf("database", "device_database")) {
+                for (suffix in listOf("", "-wal", "-shm", "-journal")) {
+                    val path = CLIPBOARD_DATABASE + suffix
+                    assertTrue("$section: $domain/$path", (domain to path) in excluded)
+                }
+            }
         }
     }
 

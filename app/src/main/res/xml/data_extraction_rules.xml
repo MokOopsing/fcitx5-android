@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- DataManager.dataDir's assets, synced again on the next start, live in device-protected
-     storage (device_root), not in files/ -->
+     storage (device_root), not in files/. The clipboard history (databases/clbdb and its journals)
+     stays on the phone, and the one made in device-protected storage (device_database) by a start
+     before the first unlock: it holds clips marked sensitive, a password from a password manager say,
+     which the app's own export takes out (UserDataManager) and these rules cannot -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude
@@ -15,6 +18,30 @@
         <exclude
             domain="root"
             path="no_backup" />
+        <exclude
+            domain="database"
+            path="clbdb" />
+        <exclude
+            domain="database"
+            path="clbdb-wal" />
+        <exclude
+            domain="database"
+            path="clbdb-shm" />
+        <exclude
+            domain="database"
+            path="clbdb-journal" />
+        <exclude
+            domain="device_database"
+            path="clbdb" />
+        <exclude
+            domain="device_database"
+            path="clbdb-wal" />
+        <exclude
+            domain="device_database"
+            path="clbdb-shm" />
+        <exclude
+            domain="device_database"
+            path="clbdb-journal" />
     </cloud-backup>
     <device-transfer>
         <exclude
@@ -29,5 +56,29 @@
         <exclude
             domain="root"
             path="no_backup" />
+        <exclude
+            domain="database"
+            path="clbdb" />
+        <exclude
+            domain="database"
+            path="clbdb-wal" />
+        <exclude
+            domain="database"
+            path="clbdb-shm" />
+        <exclude
+            domain="database"
+            path="clbdb-journal" />
+        <exclude
+            domain="device_database"
+            path="clbdb" />
+        <exclude
+            domain="device_database"
+            path="clbdb-wal" />
+        <exclude
+            domain="device_database"
+            path="clbdb-shm" />
+        <exclude
+            domain="device_database"
+            path="clbdb-journal" />
     </device-transfer>
 </data-extraction-rules>
