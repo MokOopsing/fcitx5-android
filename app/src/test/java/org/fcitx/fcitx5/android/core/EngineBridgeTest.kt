@@ -239,6 +239,19 @@ class EngineBridgeTest {
     }
 
     @Test
+    fun aDictionaryThatCannotBeReadIsLeftOutAndTheEngineToldAfterTheRest() {
+        val dictionaries = File(folder.root, "dictionaries").apply { mkdirs() }
+        val gone = File(dictionaries, "a.txt").apply { writeText("搭子 da'zi 0.0\n") }
+        File(dictionaries, "b.txt").writeText("你好 ni'hao 0.0\n")
+        val added = EngineBridge.additions(folder.root)
+        gone.delete()
+        val read = ArrayList<String>()
+        // as UserLexicon reads them: what failed is heard of only after the others went in
+        assertThrows(IOException::class.java) { added.dictionary().forEach { read += it } }
+        assertEquals(listOf("你好 ni'hao 0.0"), read)
+    }
+
+    @Test
     fun aWordPackIsReadOnlyAsTheEngineParsesItAndOneThatCannotBeIsLeftOut() {
         val dictionaries = File(folder.root, "dictionaries").apply { mkdirs() }
         File(dictionaries, "a.words").writeText("# youmo words 1\n搭子 da'zi -5.6\n")

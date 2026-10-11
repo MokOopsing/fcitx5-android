@@ -244,13 +244,22 @@ object EngineBridge {
         val save = PhraseFile(phraseFile, phrases, read, phraseSaves)::save
         // each read only as the engine parses it, and dropped after: not every pack in the heap at once
         val readPacks = { packs.map { Engines.Pack(it.name, it.packLines(), it.intoNew()) } }
-        fun read(files: List<File>) = files.asSequence().flatMap { file ->
-            try {
-                file.readLines()
-            } catch (e: IOException) {
-                Timber.w(e, "pinyin dictionary %s", file.name)
-                emptyList()
+        // one that cannot be read is left out, the rest still read; then the first failure is
+        // thrown, for the engine to know a dictionary is missing: removing a word it may list
+        // forgets nothing then (UserLexicon.selfMade)
+        fun read(files: List<File>) = sequence {
+            var failure: IOException? = null
+            for (file in files) {
+                val lines = try {
+                    file.readLines()
+                } catch (e: IOException) {
+                    Timber.w(e, "pinyin dictionary %s", file.name)
+                    if (failure == null) failure = e
+                    emptyList()
+                }
+                yieldAll(lines)
             }
+            failure?.let { throw it }
         }
         val (newDictionaries, baseDictionaries) = dictionaries.partition { it.intoNew() }
         return Engines.Additions(
