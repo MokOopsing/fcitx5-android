@@ -82,10 +82,10 @@ class T9KeyboardTest {
         val keys = KeyActionListener.Source.Keyboard
         val one = KeyAction.FcitxKeyAction("1")
         assertEquals(KeyAction.CommitAction("，"), T9Keyboard.typed(one, keys, tap, 0, composing = false))
-        assertEquals(KeyAction.CommitAction("。", replacing = 1), T9Keyboard.typed(one, keys, tap, 100, composing = false))
-        assertEquals(KeyAction.CommitAction("？", replacing = 1), T9Keyboard.typed(one, keys, tap, 200, composing = false))
-        assertEquals(KeyAction.CommitAction("！", replacing = 1), T9Keyboard.typed(one, keys, tap, 300, composing = false))
-        assertEquals(KeyAction.CommitAction("，", replacing = 1), T9Keyboard.typed(one, keys, tap, 400, composing = false))
+        assertEquals(KeyAction.CommitAction("。", replacing = "，"), T9Keyboard.typed(one, keys, tap, 100, composing = false))
+        assertEquals(KeyAction.CommitAction("？", replacing = "。"), T9Keyboard.typed(one, keys, tap, 200, composing = false))
+        assertEquals(KeyAction.CommitAction("！", replacing = "？"), T9Keyboard.typed(one, keys, tap, 300, composing = false))
+        assertEquals(KeyAction.CommitAction("，", replacing = "！"), T9Keyboard.typed(one, keys, tap, 400, composing = false))
         // after a pause, a ， of its own
         assertEquals(KeyAction.CommitAction("，"), T9Keyboard.typed(one, keys, tap, 2000, composing = false))
         // while typing, the separator the engine reads

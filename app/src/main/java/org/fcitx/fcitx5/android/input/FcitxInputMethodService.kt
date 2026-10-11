@@ -428,13 +428,16 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
      * [text] put in by the app itself, not the engine (a paste, a word from a long press): what
      * the engine has typed goes in first, and the engine forgets what it committed, no longer
      * before the cursor (English would put its space behind punctuation typed next, in [text]).
-     * With [replacing], [text] takes the place of that many code points before the cursor: what
-     * the app put in just before (九键's 1 pressed again, 。 for ，).
+     * With [replacing], [text] takes its place before the cursor: what the app put in just before
+     * (九键's 1 pressed again, 。 for ，), if it is still there; the field may have refused it, or
+     * the cursor moved.
      */
-    fun commitOverEngine(text: String, replacing: Int = 0) = postFcitxJob {
+    fun commitOverEngine(text: String, replacing: String = "") = postFcitxJob {
         commitAndReset()
         lifecycleScope.launch {
-            if (replacing > 0) handleDeleteSurrounding(replacing, 0)
+            if (replacing.isNotEmpty() && currentInputConnection?.getTextBeforeCursor(replacing.length, 0)?.toString() == replacing) {
+                handleDeleteSurrounding(replacing.codePointCount(0, replacing.length), 0)
+            }
             commitText(text)
         }
     }

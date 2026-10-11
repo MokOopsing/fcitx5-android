@@ -129,7 +129,8 @@ class T9Keyboard(
             if (key == '1' && source != KeyActionListener.Source.Popup && !composing) {
                 // as a digit key's letters: pressed again soon, the next in place of the last
                 val next = tap.press(key, ONE, time) ?: return KeyAction.CommitAction(ONE.take(1))
-                return KeyAction.CommitAction(next.toString(), replacing = 1)
+                val last = ONE[(ONE.indexOf(next) + ONE.length - 1) % ONE.length]
+                return KeyAction.CommitAction(next.toString(), replacing = last.toString())
             }
             if (source == KeyActionListener.Source.Popup && key != null && key.toString() in ONE_MORE) {
                 tap.reset()
@@ -251,6 +252,16 @@ class T9Keyboard(
     /** What the column shows, read by its items when picked. */
     private var columnState = EngineBridge.T9State()
 
+    // something typed, as the engine last told, or a key sent since that types
+    private var typing = false
+
+    // a digit, or a letter a digit key's long press or 连按 sends
+    private fun types(action: KeyAction) = when (action) {
+        is KeyAction.FcitxKeyAction -> action.act.singleOrNull()?.let { it in '2'..'9' } == true
+        is KeyAction.SymAction -> action.sym.sym - UNICODE in Keyboard.LETTERS
+        else -> false
+    }
+
     init {
         add(column, lParams {
             topToTop = keyRows[0].existingOrNewId
@@ -311,6 +322,7 @@ class T9Keyboard(
         // of nothing typed again, and its next press must still be the next symbol
         if (!state.composing && columnState.composing) multiTap.reset()
         columnState = state
+        typing = state.composing
         one.mainText.text = if (state.composing) SEPARATOR else ONE
         val labels = labels(state)
         while (items.childCount < labels.size) items.addView(item(items.childCount))
@@ -341,7 +353,11 @@ class T9Keyboard(
         val key = (action as? KeyAction.FcitxKeyAction)?.act?.singleOrNull()
         val time = pressed?.takeIf { it.first == key }?.second ?: SystemClock.uptimeMillis()
         pressed = null
-        super.onAction(typed(action, source, multiTap, time, columnState.composing), source)
+        val out = typed(action, source, multiTap, time, typing)
+        // a key the engine reads as typing: 1 right after it is the separator, though the engine
+        // has not told of what is typed yet
+        if (types(out)) typing = true
+        super.onAction(out, source)
     }
 
     // the letters a digit key's preview shows in place of its own (GHI), while it is held

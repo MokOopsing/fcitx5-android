@@ -12,7 +12,6 @@ import org.fcitx.fcitx5.android.core.FcitxAPI
 import org.fcitx.fcitx5.android.daemon.launchOnReady
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.input.broadcast.PreeditEmptyStateComponent
-import org.fcitx.fcitx5.android.input.candidates.horizontal.HorizontalCandidateComponent
 import org.fcitx.fcitx5.android.input.dependency.context
 import org.fcitx.fcitx5.android.input.dependency.fcitx
 import org.fcitx.fcitx5.android.input.dependency.inputMethodService
@@ -49,7 +48,6 @@ class CommonKeyActionListener :
     private val fcitx by manager.fcitx()
     private val service by manager.inputMethodService()
     private val preeditState: PreeditEmptyStateComponent by manager.must()
-    private val horizontalCandidate: HorizontalCandidateComponent by manager.must()
     private val windowManager: InputWindowManager by manager.must()
     private val inputView by manager.inputView()
     private val popup: PopupComponent by manager.must()
@@ -117,8 +115,9 @@ class CommonKeyActionListener :
                 is ShowInputMethodPickerAction -> showInputMethodPicker()
                 is BeginSelectionSwipeAction -> backspaceSwipe.onTouchDown()
                 is MoveSelectionAction -> {
-                    // `total` is -1 until the candidate list has been populated once
-                    val composing = !preeditState.isEmpty || horizontalCandidate.adapter.total > 0
+                    // something typed: candidates with nothing typed are the words that may come
+                    // next (pinyin's 联想, English's), which the swipe deletes before as ever
+                    val composing = !preeditState.isEmpty
                     when (backspaceSwipe.onMove(composing)) {
                         BackspaceSwipeBehavior.MoveEffect.ExtendSelection ->
                             service.applySelectionOffset(action.start, action.end)

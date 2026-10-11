@@ -159,6 +159,40 @@ class SoftKeyboardTest {
         assertFieldBecomes("你好")
     }
 
+    // nothing typed, 1 is ，。？！: pressed again soon, the next in place of the last; while typing, 分词
+    @Test
+    fun nineKeysOneIsPunctuationTillSomethingIsTyped() {
+        launch(inputMethod = Engines.T9)
+        val one = key(onKeyboard().text("，。？！")).visibleBounds
+        // within the multi-tap timeout: injected, as a click waits for the screen to settle
+        repeat(2) {
+            val down = SystemClock.uptimeMillis()
+            for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+                val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, one.exactCenterX(), one.exactCenterY(), 0)
+                event.source = InputDevice.SOURCE_TOUCHSCREEN
+                assertTrue("injected", instrumentation.uiAutomation.injectInputEvent(event, true))
+                event.recycle()
+            }
+            SystemClock.sleep(100)
+        }
+        assertFieldBecomes("。")
+        key(onKeyboard().text("ABC")).click()
+        key(onKeyboard().text("分词"))
+        tap(R.string.a11y_key_backspace)
+        key(onKeyboard().text("，。？！"))
+    }
+
+    // a real field, learning: the word the data lacks typed once is offered by its keys
+    @Test
+    fun englishOffersAWordOnceTyped() {
+        launch(inputMethod = ENGLISH)
+        tapLetters("qwzx")
+        tapSpace()
+        assertFieldBecomes("qwzx ")
+        tapLetters("qwz")
+        key(candidate("qwzx"))
+    }
+
     @Test
     fun aCandidateCanBePicked() {
         launch(inputMethod = PINYIN)
@@ -189,12 +223,13 @@ class SoftKeyboardTest {
     @Test
     fun backspaceDeletesTypedText() {
         launch(inputMethod = ENGLISH)
-        tapLetters("abc")
+        // words as written: "abc" a space corrects (ABC), which backspace would take back
+        tapLetters("cat")
         tapSpace()
-        assertFieldBecomes("abc ")
+        assertFieldBecomes("cat ")
         tap(R.string.a11y_key_backspace)
         tap(R.string.a11y_key_backspace)
-        assertFieldBecomes("ab")
+        assertFieldBecomes("ca")
     }
 
     /**
@@ -259,18 +294,18 @@ class SoftKeyboardTest {
     @Test
     fun swipingLeftFromBackspaceDeletesWhatItSelected() {
         launch(inputMethod = ENGLISH)
-        tapLetters("ab")
+        tapLetters("to")
         tapSpace()
-        tapLetters("cd")
+        tapLetters("be")
         tapSpace()
-        assertFieldBecomes("ab cd ")
+        assertFieldBecomes("to be ")
         val backspace = key(onKeyboard().desc(string(R.string.a11y_key_backspace))).visibleBounds
         device.swipe(backspace.centerX(), backspace.centerY(), backspace.centerX() - backspace.width() * 3, backspace.centerY(), 40)
         device.waitForIdle()
         var selection = -1 to -1
         scenario.onActivity { selection = it.field.selectionStart to it.field.selectionEnd }
         val text = fieldText()
-        assertTrue("deleted from the end: '$text' at $selection", text.length < "ab cd ".length && "ab cd ".startsWith(text))
+        assertTrue("deleted from the end: '$text' at $selection", text.length < "to be ".length && "to be ".startsWith(text))
         assertEquals(text.length to text.length, selection)
         // a tap afterwards is a plain Backspace again
         tap(R.string.a11y_key_backspace)
@@ -290,7 +325,7 @@ class SoftKeyboardTest {
         vivo.setValue(true)
         try {
             launch(inputMethod = ENGLISH)
-            tapLetters("ab") // composed
+            tapLetters("to") // composed
             val bounds = key(onKeyboard().desc(string(R.string.a11y_key_backspace))).visibleBounds
             val y = bounds.centerY().toFloat()
             val x0 = bounds.centerX().toFloat()
@@ -310,14 +345,14 @@ class SoftKeyboardTest {
             inject(MotionEvent.ACTION_CANCEL, x1)
             device.waitForIdle()
             tapSpace()
-            assertFieldBecomes("ab ")
+            assertFieldBecomes("to ")
             // nothing composed now: this swipe selects, and letting go deletes
             device.swipe(x0.toInt(), y.toInt(), x1.toInt(), y.toInt(), 40)
             device.waitForIdle()
             val deadline = SystemClock.uptimeMillis() + 5_000
-            while (fieldText() == "ab " && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(50)
+            while (fieldText() == "to " && SystemClock.uptimeMillis() < deadline) SystemClock.sleep(50)
             val text = fieldText()
-            assertTrue("the swipe deleted from the end: '$text'", text.length < "ab ".length && "ab ".startsWith(text))
+            assertTrue("the swipe deleted from the end: '$text'", text.length < "to ".length && "to ".startsWith(text))
         } finally {
             vivo.setValue(before)
         }
