@@ -210,7 +210,9 @@ if(SHERPA_ONNX_USE_PRE_INSTALLED_ONNXRUNTIME_IF_AVAILABLE)
   message(STATUS "location_onnxruntime_lib: ${location_onnxruntime_lib}")
 endif()
 
-if(location_onnxruntime_header_dir AND location_onnxruntime_lib)
+# youmo: find_path and find_library cache what they found, read only with ON
+if(SHERPA_ONNX_USE_PRE_INSTALLED_ONNXRUNTIME_IF_AVAILABLE AND
+   location_onnxruntime_header_dir AND location_onnxruntime_lib)
   if(NOT DEFINED onnxruntime_lib_files)
     add_library(onnxruntime SHARED IMPORTED)
 

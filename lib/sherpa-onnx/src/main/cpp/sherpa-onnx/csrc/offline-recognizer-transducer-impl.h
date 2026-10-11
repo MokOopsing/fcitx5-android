@@ -8,12 +8,14 @@
 #include <fstream>
 #include <ios>
 #include <memory>
+#include <mutex>  // NOLINT
 #include <regex>  // NOLINT
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "sherpa-onnx/csrc/blocked-phrases.h"
 #include "sherpa-onnx/csrc/context-graph.h"
 #include "sherpa-onnx/csrc/log.h"
 #include "sherpa-onnx/csrc/macros.h"
@@ -176,7 +178,30 @@ class OfflineRecognizerTransducerImpl : public OfflineRecognizerImpl {
 
   std::unique_ptr<OfflineStream> CreateStream(
       const std::string &hotwords) const override {
+    // youmo: as with none of the user's words where they would not count:
+    // greedy search reads no context graph
+    if (config_.decoding_method != "modified_beam_search") {
+      return CreateStream();
+    }
+    // youmo: the same words' graph again (last_hotwords_graph_)
+    std::lock_guard<std::mutex> lock(last_hotwords_mutex_);
+    if (last_hotwords_graph_ != nullptr && hotwords == last_hotwords_) {
+      return std::make_unique<OfflineStream>(config_.feat_config,
+                                             last_hotwords_graph_);
+    }
     auto hws = std::regex_replace(hotwords, std::regex("/"), "\n");
+    // youmo: EncodeHotwords would dereference a missing BPE encoder
+    if (bpe_encoder_ == nullptr) {
+      std::string kept;
+      int32_t left_out =
+          WithoutBpeHotwords(hws, config_.model_config.modeling_unit, &kept);
+      // the user's words, not for the log: how many only
+      if (left_out > 0) {
+        SHERPA_ONNX_LOGE("%d hotwords left out, no BPE encoder for them",
+                         left_out);
+      }
+      hws = std::move(kept);
+    }
     std::istringstream is(hws);
     std::vector<std::vector<int32_t>> current;
     std::vector<float> current_scores;
@@ -208,6 +233,8 @@ class OfflineRecognizerTransducerImpl : public OfflineRecognizerImpl {
 
     auto context_graph = std::make_shared<ContextGraph>(
         current, config_.hotwords_score, current_scores);
+    last_hotwords_ = hotwords;
+    last_hotwords_graph_ = context_graph;
     return std::make_unique<OfflineStream>(config_.feat_config, context_graph);
   }
 
@@ -219,25 +246,15 @@ class OfflineRecognizerTransducerImpl : public OfflineRecognizerImpl {
   std::unique_ptr<OfflineStream> CreateStream(
       const std::string &hotwords, const std::string &blocked) const override {
     auto s = hotwords.empty() ? CreateStream() : CreateStream(hotwords);
-    if (blocked.empty()) return s;
-
-    // one at a time: a phrase with a token the model lacks is left out, not
-    // shortened to what it has (which would block something else)
-    std::vector<std::vector<int32_t>> phrases;
-    int32_t left_out = 0;
-    std::istringstream all(blocked);
-    for (std::string line; std::getline(all, line, '/');) {
-      std::istringstream is(line);
-      std::vector<std::vector<int32_t>> encoded;
-      std::vector<float> unused_scores;
-      if (EncodeHotwords(is, config_.model_config.modeling_unit, symbol_table_,
-                         bpe_encoder_.get(), &encoded, &unused_scores) &&
-          encoded.size() == 1) {
-        phrases.push_back(std::move(encoded[0]));
-      } else if (!line.empty()) {
-        ++left_out;
-      }
+    // greedy search reads no block graph, and has no BPE encoder to build one
+    if (blocked.empty() || config_.decoding_method != "modified_beam_search") {
+      return s;
     }
+
+    std::vector<std::vector<int32_t>> phrases;
+    int32_t left_out = EncodeBlockedPhrases(
+        blocked, config_.model_config.modeling_unit, symbol_table_,
+        bpe_encoder_.get(), &phrases);
     // the user's words, not for the log: how many only
     if (left_out > 0) {
       SHERPA_ONNX_LOGE("%d blocked phrases left out, not encodable", left_out);
@@ -300,7 +317,8 @@ class OfflineRecognizerTransducerImpl : public OfflineRecognizerImpl {
       r.text = ApplyInverseTextNormalization(std::move(r.text));
       r.text = ApplyHomophoneReplacer(std::move(r.text));
       for (auto &text : r.nbest) {
-        text = ApplyHomophoneReplacer(ApplyInverseTextNormalization(std::move(text)));
+        text = ApplyHomophoneReplacer(
+            ApplyInverseTextNormalization(std::move(text)));
       }
 
       ss[i]->SetResult(r);
@@ -359,6 +377,13 @@ class OfflineRecognizerTransducerImpl : public OfflineRecognizerImpl {
   std::vector<std::vector<int32_t>> hotwords_;
   std::vector<float> boost_scores_;
   ContextGraphPtr hotwords_graph_;
+  // youmo: CreateStream(hotwords)'s last graph, built again only for other
+  // words: a listener asks with the same ones for each of its stretches. Held,
+  // the pack's size, till the recognizer is freed (VoiceEngine keeps it a while
+  // after its last user), not let go with the last stream
+  mutable std::mutex last_hotwords_mutex_;
+  mutable std::string last_hotwords_;
+  mutable ContextGraphPtr last_hotwords_graph_;
   std::unique_ptr<ssentencepiece::Ssentencepiece> bpe_encoder_;
   std::unique_ptr<OfflineTransducerModel> model_;
   std::unique_ptr<OfflineTransducerDecoder> decoder_;

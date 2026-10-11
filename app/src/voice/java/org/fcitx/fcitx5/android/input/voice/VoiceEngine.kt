@@ -10,13 +10,15 @@ import android.os.Looper
 import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
-import com.k2fsa.sherpa.onnx.OfflineRecognizerResult
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
+import com.k2fsa.sherpa.onnx.OfflineRecognizerResult
 import com.k2fsa.sherpa.onnx.OfflineStream
 import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
 import com.k2fsa.sherpa.onnx.SileroVadModelConfig
 import com.k2fsa.sherpa.onnx.Vad
 import com.k2fsa.sherpa.onnx.VadModelConfig
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.withTimeoutOrNull
 import org.fcitx.fcitx5.android.daemon.FcitxConnection
 
@@ -43,11 +45,14 @@ object VoiceEngine {
     private var recognizer: OfflineRecognizer? = null
     private var users = 0
     private val main = Handler(Looper.getMainLooper())
+    // on a worker: onnxruntime tearing its sessions down on the main thread could drop the keyboard's frames
     private val letGo = Runnable {
-        synchronized(lock) {
-            if (users == 0) {
-                recognizer?.release()
-                recognizer = null
+        Dispatchers.IO.asExecutor().execute {
+            synchronized(lock) {
+                if (users == 0) {
+                    recognizer?.release()
+                    recognizer = null
+                }
             }
         }
     }
@@ -68,8 +73,11 @@ object VoiceEngine {
     // the VAD hears speech start a little late: this much before is put back (AudioHistory)
     private const val LEAD_IN = SAMPLE_RATE * 3 / 10
 
-    /** enough for the longest stretch the VAD lets through, its pause and lead-in */
-    fun history() = AudioHistory(SAMPLE_RATE * 22)
+    // the longest stretch the VAD lets through, in seconds: the history holds as much and more
+    private const val MAX_SPEECH_S = 20
+
+    /** enough for the longest stretch the VAD lets through, its pause and lead-in (under 2 s) */
+    fun history() = AudioHistory(SAMPLE_RATE * (MAX_SPEECH_S + 2))
 
     /** The front stretch the VAD has cut, popped, with its lead-in from [history]. */
     fun nextStretch(vad: Vad, history: AudioHistory): FloatArray {
@@ -82,72 +90,43 @@ object VoiceEngine {
      * A stream to recognize a stretch in, listening for the user's [words] (VoiceHotwords.ofUser)
      * besides the pack's; with [block], its search never completing a word they blocked, even
      * within a longer one (see [recognize]). With hotwords of theirs, the recognizer builds its
-     * graph of hotwords again, the pack's 78 thousand too: a tenth of a second or more, so made
-     * before the stretch it is for.
+     * graph of hotwords, the pack's 78 thousand too, only when they differ from the last stream's
+     * (it keeps that graph): a tenth of a second or more, so made before the stretch it is for.
      */
-    fun stream(r: OfflineRecognizer, words: VoiceHotwords.Words, block: Boolean = false): OfflineStream = when {
-        block && words.blocked.isNotEmpty() -> r.createStream(words.hotwords, words.blocked)
-        words.hotwords.isNotEmpty() -> r.createStream(words.hotwords)
-        else -> r.createStream()
+    fun stream(recognizer: OfflineRecognizer, words: VoiceHotwords.Words, block: Boolean = false): OfflineStream = when {
+        block && words.blocked.isNotEmpty() -> recognizer.createStream(words.hotwords, words.blocked)
+        words.hotwords.isNotEmpty() -> recognizer.createStream(words.hotwords)
+        else -> recognizer.createStream()
     }
 
     /** A stretch of speech to the recognizer's result, in [stream], which it releases. */
-    fun result(r: OfflineRecognizer, stream: OfflineStream, samples: FloatArray): OfflineRecognizerResult {
+    fun result(recognizer: OfflineRecognizer, stream: OfflineStream, samples: FloatArray): OfflineRecognizerResult {
         return try {
             stream.acceptWaveform(samples, SAMPLE_RATE)
-            r.decode(stream)
-            r.getResult(stream)
+            recognizer.decode(stream)
+            recognizer.getResult(stream)
         } finally {
             stream.release()
         }
     }
 
-    /** What the pinyin engine knows of Chinese, asked of it on its thread: for [recognize]. */
-    interface Language {
-        /** where each of [texts] splits into words (Engines.wordBoundaries), none for some if it cannot say */
-        suspend fun boundaries(texts: List<String>): Map<String, IntArray>
-
-        /** how likely each of [texts] is (Engines.logProbs), null if it cannot say */
-        suspend fun logProbs(texts: List<String>): FloatArray?
-    }
-
     /**
-     * A stretch of speech to text, in [stream] (made by [stream] for [words], not blocking),
-     * which it releases. The best of the recognizer's hypotheses by [language]'s model too
-     * ([VoiceRerank]); of them, that first, the first with none of the words the user blocked standing as a
-     * word in it ([VoiceBlocking]); if each has one, the stretch searched again with them blocked,
-     * and of that search's hypotheses again the first with none, its best if each still has one.
+     * A stretch of speech to text, in [prepared] (made by [stream] for [words], not blocking),
+     * which it releases: of the recognizer's hypotheses, the one [VoiceChoice] chooses with
+     * [language]; if each has a word the user blocked, the stretch searched again with them blocked.
      */
     suspend fun recognize(
-        r: OfflineRecognizer,
-        stream: OfflineStream,
+        recognizer: OfflineRecognizer,
+        prepared: OfflineStream,
         samples: FloatArray,
         words: VoiceHotwords.Words,
-        language: Language,
-    ): String {
-        val result = result(r, stream, samples)
-        val heard = VoiceRerank.distinct(
-            result.nbest.indices.map { VoiceRerank.Hypothesis(result.nbest[it], result.nbestScores.getOrElse(it) { 0f }) }
-                .ifEmpty { listOf(VoiceRerank.Hypothesis(result.text, 0f)) },
-        )
-        // the best first, the rest as the recognizer has them
-        val candidates = VoiceRerank.candidates(heard)
-        val best = if (candidates.size < 2) heard[0] else {
-            VoiceRerank.best(candidates, language.logProbs(candidates.map { VoiceRerank.bare(it.text) }))
-        }
-        val texts = listOf(best.text) + heard.filter { it !== best }.map { it.text }
-        val blocked = words.blockedWords
-        if (blocked.isEmpty()) return texts[0]
-        val suspects = VoiceBlocking.suspects(texts, blocked)
-        if (suspects.isEmpty()) return texts[0]
-        VoiceBlocking.pick(texts, blocked, language.boundaries(suspects))?.let { return texts[it] }
-        val again = result(r, VoiceEngine.stream(r, words, block = true), samples)
-        // the search blocks a word as the model spells it: written in other tokens it can still win
-        val retried = again.nbest.toList().ifEmpty { listOf(again.text) }
-        val still = VoiceBlocking.suspects(retried, blocked)
-        if (still.isEmpty()) return again.text
-        return VoiceBlocking.pick(retried, blocked, language.boundaries(still))?.let { retried[it] } ?: again.text
+        language: VoiceChoice.Language,
+    ): String = VoiceChoice.choose(heard(result(recognizer, prepared, samples)), words.blockedWords, language) {
+        heard(result(recognizer, stream(recognizer, words, block = true), samples))
     }
+
+    private fun heard(result: OfflineRecognizerResult) =
+        VoiceChoice.Heard(result.nbest.toList(), result.nbestScores, result.text)
 
     /** the words the user added and made (VoiceHotwords.ofUser), read again for each listener */
     suspend fun userHotwords(fcitx: FcitxConnection): VoiceHotwords.Words =
@@ -157,10 +136,10 @@ object VoiceEngine {
     private const val USER_WORDS_MS = 2000L
 
     /**
-     * The pinyin engine's [Language], each answer in time or none: no boundaries (VoiceBlocking
-     * takes a text as having the word), no scores (the recognizer's order).
+     * The pinyin engine's [VoiceChoice.Language], each answer in time or none: no boundaries
+     * (VoiceBlocking takes a text as having the word), no scores (the recognizer's order).
      */
-    fun language(fcitx: FcitxConnection) = object : Language {
+    fun language(fcitx: FcitxConnection) = object : VoiceChoice.Language {
         override suspend fun boundaries(texts: List<String>) =
             withTimeoutOrNull(LANGUAGE_MS) { fcitx.runOnReady { wordBoundaries(texts) } }.orEmpty()
 
@@ -183,7 +162,7 @@ object VoiceEngine {
                 minSpeechDuration = 0.25f,
                 windowSize = WINDOW,
                 // a long run is cut and goes in by parts, each recognized while the next is heard
-                maxSpeechDuration = 20f,
+                maxSpeechDuration = MAX_SPEECH_S.toFloat(),
             ),
             sampleRate = SAMPLE_RATE,
             numThreads = 1,

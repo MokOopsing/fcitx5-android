@@ -11,6 +11,7 @@ import android.graphics.RectF
 import android.os.SystemClock
 import android.view.View
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.sin
 
 /**
@@ -42,7 +43,7 @@ class VoiceWaveView(context: Context) : View(context) {
     private var shown = 0f
 
     // the middle bars the tallest
-    private val shape = FloatArray(BARS) { i -> 1f - 0.55f * kotlin.math.abs(i - (BARS - 1) / 2f) / ((BARS - 1) / 2f) }
+    private val shape = FloatArray(BARS) { i -> 1f - 0.55f * abs(i - (BARS - 1) / 2f) / ((BARS - 1) / 2f) }
 
     /** how loud, 0 to 1 */
     fun level(level: Float) {

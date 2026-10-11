@@ -101,12 +101,15 @@ class OfflineRecognizer {
       const std::string &hotwords) const;
 
   /** youmo: as CreateStream(hotwords), and the result does not contain any of
-   *  the "/"-separated phrases of `blocked` (written as hotwords are), as a run
-   *  of the tokens the phrase encodes to, anywhere: the beam search does not
-   *  let a hypothesis complete one. The same characters in other tokens (if
-   *  the model has another way to write them) are not blocked. A transducer's
-   *  modified_beam_search only, others ignore `blocked`; a phrase with a token
-   *  the model lacks is left out.
+   *  the "/"-separated phrases of `blocked` (written as hotwords are, one line
+   *  and no score each), as a run of the tokens the phrase encodes to,
+   *  anywhere: the beam search does not let a hypothesis complete one. The
+   *  same characters in other tokens (if the model has another way to write
+   *  them) are not blocked. A transducer's modified_beam_search only, others
+   *  ignore `blocked`. Left out are a phrase with a token the model lacks or
+   *  with ':', '#' or '@' (marks of the hotword grammar), and, of a BPE
+   *  modeling unit without its bpe_vocab, every phrase (of cjkchar+bpe, every
+   *  one with a letter).
    */
   std::unique_ptr<OfflineStream> CreateStream(
       const std::string &hotwords, const std::string &blocked) const;

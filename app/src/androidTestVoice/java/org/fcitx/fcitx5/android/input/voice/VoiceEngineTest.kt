@@ -50,6 +50,19 @@ class VoiceEngineTest {
     }
 
     @Test
+    fun theLastWordsGraphIsTakenAgainForTheSameWordsOnly() {
+        // the recognizer keeps the graph of the words last asked for: the same words take it again,
+        // others (苹果, not said) get their own, without the bonus on 早上, and 早上 its graph back
+        val said = VoiceHotwords.ofUser(listOf(Engines.UserWord("早上", "zao shang", Engines.UserWord.Kind.ADDED)))
+        val unsaid = VoiceHotwords.ofUser(listOf(Engines.UserWord("苹果", "ping guo", Engines.UserWord.Kind.ADDED)))
+        val first = topScore(said)
+        assertEquals(first, topScore(said), SAME_SCORE)
+        val other = topScore(unsaid)
+        assertTrue("$other other, $first first", other < first)
+        assertEquals(first, topScore(said), SAME_SCORE)
+    }
+
+    @Test
     fun aBlockedWordStandingAloneIsNotWritten() {
         // 开放, said in each stretch, blocked: split char by char, it stands as words wherever it
         // is, and another hypothesis or the search again wins
@@ -124,19 +137,20 @@ class VoiceEngineTest {
                 VoiceRerank.distinct(heard.nbest.indices.map { VoiceRerank.Hypothesis(heard.nbest[it], heard.nbestScores[it]) }),
             )
             assertTrue(candidates.toString(), candidates.size > 1)
-            // a model sure of the last of them, the bare texts asked about
+            // a model sure of the last of them, each bare text asked about
+            val last = VoiceRerank.bare(candidates.last().text)
             var asked = emptyList<String>()
-            val sure = object : VoiceEngine.Language {
+            val sure = object : VoiceChoice.Language {
                 override suspend fun boundaries(texts: List<String>) = emptyMap<String, IntArray>()
                 override suspend fun logProbs(texts: List<String>): FloatArray {
                     asked = texts
-                    return FloatArray(texts.size) { if (it == texts.size - 1) 0f else -1000f }
+                    return FloatArray(texts.size) { if (texts[it] == last) 0f else -1000f }
                 }
             }
             val text = runBlocking {
                 VoiceEngine.recognize(recognizer, VoiceEngine.stream(recognizer, VoiceHotwords.Words.NONE), samples, VoiceHotwords.Words.NONE, sure)
             }
-            assertEquals(candidates.map { VoiceRerank.bare(it.text) }, asked)
+            assertTrue(asked.toString(), candidates.all { VoiceRerank.bare(it.text) in asked })
             assertEquals(candidates.last().text, text)
         } finally {
             VoiceEngine.release()
@@ -190,10 +204,12 @@ class VoiceEngineTest {
 
     companion object {
         private const val WAV_HEADER = 44
+        // the same decode twice, give or take float sums; another graph is off by VoiceHotwords.SCORE a token
+        private const val SAME_SCORE = 1e-3f
     }
 
     // the recognizer's order, and split as [split] says
-    private fun language(split: (String) -> IntArray) = object : VoiceEngine.Language {
+    private fun language(split: (String) -> IntArray) = object : VoiceChoice.Language {
         override suspend fun boundaries(texts: List<String>) = texts.associateWith(split)
         override suspend fun logProbs(texts: List<String>) = null
     }

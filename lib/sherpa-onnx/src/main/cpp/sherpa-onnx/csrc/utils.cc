@@ -120,8 +120,11 @@ bool EncodeHotwords(std::istream &is, const std::string &modeling_unit,
   std::vector<std::string> lines;
   std::string line;
   std::string word;
+  // youmo: the lines may be the user's words; which one only, for the log
+  int32_t line_number = 0;
 
   while (std::getline(is, line)) {
+    ++line_number;
     std::string score;
     std::string phrase;
 
@@ -135,9 +138,9 @@ bool EncodeHotwords(std::istream &is, const std::string &modeling_unit,
         default:
           if (!score.empty()) {
             SHERPA_ONNX_LOGE(
-                "Boosting score should be put after the words/phrase, given "
-                "%s.",
-                line.c_str());
+                "Boosting score should be put after the words/phrase, on "
+                "line %d.",
+                line_number);
             return false;
           }
           oss << " " << word;

@@ -21,8 +21,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.joinAll
@@ -45,7 +45,7 @@ class VoiceListener(
     /** the user's words to listen for and blocked (VoiceHotwords.ofUser), asked for as the models load */
     private val hotwords: suspend () -> VoiceHotwords.Words,
     /** the pinyin engine's models (VoiceEngine.language): to rank what is heard, and for the blocked words */
-    private val language: VoiceEngine.Language,
+    private val language: VoiceChoice.Language,
 ) {
 
     enum class Failure { NoModel, NoMicrophone }
@@ -87,6 +87,8 @@ class VoiceListener(
     // the decoder's: the hotwords, and the stream made ready for the next stretch
     private var words = VoiceHotwords.Words.NONE
     private var next: OfflineStream? = null
+    // read on the decoder too: no stream made for a next stretch once the microphone is closed
+    @Volatile
     private var capture: Job? = null
     // read off the main thread too, as the models load
     @Volatile
@@ -94,6 +96,16 @@ class VoiceListener(
 
     private fun tell(event: Events.() -> Unit) {
         main.post { if (!closed) events.event() }
+    }
+
+    // a failure logged and [fallback] in its place: one part lost, not the panel
+    private inline fun <T> orFallback(tag: String, fallback: T, block: () -> T): T = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
+        Timber.w(e, tag)
+        fallback
     }
 
     fun load() {
@@ -104,11 +116,13 @@ class VoiceListener(
                 VoiceEngine.acquire(assets)
             } catch (e: CancellationException) {
                 throw e
-            } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
-                // sherpa-onnx's IllegalArgumentException for a model it could not read, or worse
+            } catch (@Suppress("TooGenericExceptionCaught") e: Throwable) {
+                // an Error too (its library not loading, memory running out); a model missing from
+                // the assets is no exception: sherpa-onnx ends the process (file-utils.cc)
                 Timber.w(e, "voice model")
                 user.cancel()
-                ready.completeExceptionally(e)
+                // what waits for the models: dropped, not waiting for good
+                ready.cancel()
                 tell { failed(Failure.NoModel) }
                 return@launch
             }
@@ -126,7 +140,8 @@ class VoiceListener(
                 handed = true
             } catch (e: CancellationException) {
                 throw e
-            } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
+            } catch (@Suppress("TooGenericExceptionCaught") e: Throwable) {
+                // memory running out for the graph of hotwords too: the models, not the microphone
                 Timber.w(e, "voice stream")
                 tell { failed(Failure.NoModel) }
             } finally {
@@ -153,35 +168,16 @@ class VoiceListener(
     }
 
     // the engine failing: the text as heard, and each taken as having a blocked word
-    private val safeLanguage = object : VoiceEngine.Language {
-        override suspend fun boundaries(texts: List<String>) = try {
-            language.boundaries(texts)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
-            Timber.w(e, "voice word boundaries")
-            emptyMap()
-        }
+    private val safeLanguage = object : VoiceChoice.Language {
+        override suspend fun boundaries(texts: List<String>): Map<String, IntArray> =
+            orFallback("voice word boundaries", emptyMap()) { language.boundaries(texts) }
 
-        override suspend fun logProbs(texts: List<String>) = try {
-            language.logProbs(texts)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
-            Timber.w(e, "voice log probs")
-            null
-        }
+        override suspend fun logProbs(texts: List<String>): FloatArray? =
+            orFallback("voice log probs", null) { language.logProbs(texts) }
     }
 
-    private suspend fun userHotwords() = try {
-        hotwords()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
-        // voice input without them, not none
-        Timber.w(e, "voice hotwords")
-        VoiceHotwords.Words.NONE
-    }
+    // voice input without them, not none
+    private suspend fun userHotwords() = orFallback("voice hotwords", VoiceHotwords.Words.NONE) { hotwords() }
 
     /**
      * Opens the microphone; the caller has checked the permission. The models may still be
@@ -277,6 +273,10 @@ class VoiceListener(
             } catch (e: IllegalArgumentException) {
                 Timber.w(e, "microphone")
                 null
+            } catch (e: SecurityException) {
+                // the permission taken back since the caller checked it: in no encoding either
+                Timber.w(e, "microphone")
+                return null
             }
             if (record?.state == AudioRecord.STATE_INITIALIZED) return record
             record?.release()
@@ -322,41 +322,30 @@ class VoiceListener(
         while (!vad.empty()) {
             val samples = VoiceEngine.nextStretch(vad, history)
             tell { speechEnded() }
-            val job = scope.launch(decoder) {
-                // the stretch before it suspended (its words split on the fcitx thread): still in order
-                serial.withLock {
-                    // dropped, not told, if the models never came in (told as such) or it closed first
-                    val r = try {
-                        ready.await()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
-                        Timber.d(e, "voice: a stretch dropped, no models")
-                        return@launch
-                    }
-                    val text = try {
-                        val stream = next ?: VoiceEngine.stream(r, words)
-                        next = null
-                        VoiceEngine.recognize(r, stream, samples, words, safeLanguage)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
-                        // one stretch lost, not the panel
-                        Timber.w(e, "recognize")
-                        ""
-                    }
-                    tell { recognized(text) }
-                    // the next one's, made while it is said, once this one's text is out
-                    next = try {
-                        VoiceEngine.stream(r, words)
-                    } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
-                        Timber.w(e, "voice stream")
-                        null
-                    }
-                }
-            }
+            // the stretch before it suspended (its words split on the fcitx thread): still in order
+            val job = scope.launch(decoder) { serial.withLock { recognizeStretch(samples) } }
             pending += job
             job.invokeOnCompletion { pending -= job }
+        }
+    }
+
+    /** A stretch to its text, told; on the [decoder], within [serial]. */
+    private suspend fun recognizeStretch(samples: FloatArray) {
+        // ready cancelled, the stretch dropped untold: the models never came in (told as such) or it closed first
+        val recognizer = ready.await()
+        // closed meanwhile: its text would not be told, so it is not worked out either
+        if (closed) return
+        // one stretch lost, not the panel
+        val text = orFallback("recognize", "") {
+            val stream = next ?: VoiceEngine.stream(recognizer, words)
+            next = null
+            VoiceEngine.recognize(recognizer, stream, samples, words, safeLanguage)
+        }
+        tell { recognized(text) }
+        // the next one's, made while it is said, once this one's text is out: none once the
+        // microphone is closed, nothing more to hear and finish waiting for it
+        if (capture?.isActive == true) {
+            next = orFallback("voice stream", null) { VoiceEngine.stream(recognizer, words) }
         }
     }
 

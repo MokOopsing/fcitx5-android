@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.input.voice
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -47,7 +48,7 @@ class VoicePermissionActivity : ComponentActivity() {
         private const val PREFS = "voice"
         private const val ASKED = "microphone_asked"
 
-        fun start(context: android.content.Context) {
+        fun start(context: Context) {
             // before the first unlock the keyboard runs, this activity cannot
             if (!UserManagerCompat.isUserUnlocked(context)) return
             context.startActivity(

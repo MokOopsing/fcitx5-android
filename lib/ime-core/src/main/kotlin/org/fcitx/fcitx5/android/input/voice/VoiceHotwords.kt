@@ -29,20 +29,8 @@ object VoiceHotwords {
     // a few thousand add little to the pack's 78 thousand
     const val MAX_USER = 3000
 
-    // Character.UnicodeScript is API 24
-    private val HAN_WORD = Regex("\\p{IsHan}{2,12}")
-
-    /**
-     * [word] as sherpa-onnx reads a hotword of X-ASR's ("bpe" unit: each part apart by spaces is
-     * encoded alone, and each Chinese character is a token of its own): its characters apart by
-     * spaces. Null for one not all Chinese, or of one character, which would only push that
-     * character everywhere it might be heard.
-     */
-    fun spelled(word: String): String? {
-        // a character beyond the BMP is two chars: not split in halves, left out as the pack's are
-        if (!HAN_WORD.matches(word) || word.any { it.isSurrogate() }) return null
-        return word.toList().joinToString(" ")
-    }
+    /** [HotwordSpelling.spelled], which the dict tool spells the pack's words by. */
+    fun spelled(word: String): String? = HotwordSpelling.spelled(word)
 
     /** What a stream is told of the user's words: each list's words [spelled], apart by `/`. */
     data class Words(val hotwords: String, val blocked: String) {

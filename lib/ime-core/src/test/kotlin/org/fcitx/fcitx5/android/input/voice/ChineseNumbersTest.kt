@@ -88,6 +88,25 @@ class ChineseNumbersTest {
         check("12345678901234567890.5分", "一二三四五六七八九零一二三四五六七八九零点五分")
         // no 分: a time or a decimal, not to be guessed
         check("九点五十", "九点五十")
+        // the hour kept as its minutes are, whatever its shape
+        check("十点五十", "十点五十")
+        check("十二点五十", "十二点五十")
+        check("早上九点五十", "早上九点五十")
+        // not an hour alone: any whole number before a bare 点 and a number
+        check("一百点五十", "一百点五十")
+        // minutes said digit by digit, with no 分: as 十点三五, whatever the hour's length
+        check("十点三五", "十点三五")
+        check("十一点三五", "十一点三五")
+        // a decimal all the same with a unit, or past the hours
+        check("12.35元", "十二点三五元")
+        check("25.35", "二十五点三五")
+        // or with no minutes after 点: one digit, or two past 59
+        check("13.6", "十三点六")
+        check("12.75", "十二点七五")
+        // 早上 and 晚上 end in 上, but the 十 after them is an hour, not 上十 ("ten or so")
+        check("早上10点", "早上十点")
+        check("晚上10点", "晚上十点")
+        check("上十个人", "上十个人")
     }
 
     @Test

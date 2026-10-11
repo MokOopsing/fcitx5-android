@@ -42,7 +42,6 @@ class VoiceHoldSession(
         fun ended(@StringRes message: Int?)
     }
 
-
     // the field it is said for
     private val field = service.currentInputEditorInfo
     private val main = Handler(Looper.getMainLooper())
@@ -102,9 +101,13 @@ class VoiceHoldSession(
         // the models not coming in, or a stretch not coming back: not waiting for good
         main.postDelayed({ end(R.string.voice_hold_nothing) }, FINISH_MS)
         listener?.finish {
-            val text = hold.text
             // still the field it was said for: not text landing somewhere else
-            if (text.isNotEmpty() && service.currentInputEditorInfo === field && !service.inPasswordField) {
+            val text = VoiceCommit.typed(
+                hold.text,
+                sameField = service.currentInputEditorInfo === field,
+                passwordField = service.inPasswordField,
+            )
+            if (text != null) {
                 commit(text)
                 end(null)
             } else {

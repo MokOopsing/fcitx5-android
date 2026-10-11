@@ -17,7 +17,10 @@ object VoiceText {
     // and spells an abbreviation out: "C E P". Not \b: Android's regex (ICU) and Java up to 18
     // count 了 as a word char, so 订了C had no boundary there and C E P stayed spelled; Java 19+
     // looks at ASCII only, which hid it on the desktop
-    private val SPELLED = Regex("(?<![A-Za-z0-9])[A-Z](?: [A-Z](?![A-Za-z0-9]))+")
+    private val SPELLED = Regex("(?<![$LATIN_WORD])[A-Z](?: [A-Z](?![$LATIN_WORD]))+")
+
+    // the Latin letters, digits and _ \b counts as a word's: "éA B" and "x_A B" are not spelled
+    private const val LATIN_WORD = "\\p{IsLatin}0-9_"
 
     /**
      * [raw] as typed: no spaces in Chinese, an abbreviation in one piece, numbers in digits

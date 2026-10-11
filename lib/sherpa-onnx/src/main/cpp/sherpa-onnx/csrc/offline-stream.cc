@@ -476,7 +476,8 @@ std::string OfflineRecognitionResult::AsJsonString() const {
   }
   os << "], ";
 
-  // youmo: the beam's hypotheses and their scores, for evaluating reranking off the device
+  // youmo: the beam's hypotheses and their scores, for evaluating
+  // reranking off the device
   os << "\"nbest\": [";
   sep = "";
   for (const auto &n : nbest) {

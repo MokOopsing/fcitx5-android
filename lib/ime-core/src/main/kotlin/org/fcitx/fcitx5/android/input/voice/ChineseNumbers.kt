@@ -15,7 +15,8 @@ package org.fcitx.fcitx5.android.input.voice
  * (十五, 一百二十, 三十三万) or of three digits and more (一一七, 一一零), 九零后.
  * Kept: a single digit otherwise (一个, 三年, 五分钟), two digits side by side (三四线, 七八个),
  * a place without a digit before it (万一, 千万, 成千上万), 十 alone before 分/足/全 (十分有趣),
- * a rough count (几十万, 二十几岁), and what does not read as a number (十六十七, 二十亿万).
+ * a rough count (几十万, 二十几岁), a time with no 分 (九点五十, 十点五十, 十一点三五), and what does not read
+ * as a number (十六十七, 二十亿万).
  */
 object ChineseNumbers {
 
@@ -100,11 +101,18 @@ object ChineseNumbers {
             out.append(text, start, end)
             return end
         }
-        out.append(decide(text, start, run) ?: run.raw)
+        out.append(decide(run) ?: run.raw)
         return run.end
     }
 
-    private class Run(val end: Int, val digits: String, val raw: String, val decimal: Boolean = false, val time: Boolean = false)
+    private enum class Kind { Whole, Decimal, Time }
+
+    /** The number of [text] from [start] to [end], written [digits]; [before] it two chars, [after] it one. */
+    private class Run(val text: String, val start: Int, val end: Int, val digits: String, val kind: Kind = Kind.Whole) {
+        val raw = text.substring(start, end)
+        val before = text.substring(maxOf(0, start - 2), start)
+        val after = text.getOrNull(end)
+    }
 
     /** The number starting at [start] and its digits, with a decimal or a time's 点 in it; null if none. */
     private fun numberAt(text: String, start: Int): Run? {
@@ -114,13 +122,13 @@ object ChineseNumbers {
         // 二六六万: digits read one by one, then a place
         val prefix = raw.dropLast(1)
         if (raw.last() in BIG && prefix.length >= 3 && prefix.all { it in DIGITS }) {
-            return Run(end, integer(prefix) + raw.last(), raw)
+            return Run(text, start, end, integerDigits(prefix) + raw.last())
         }
-        val whole = integer(raw) ?: return null
+        val whole = integerDigits(raw) ?: return null
         if (end + 1 < text.length && text[end] == '点') {
             (time(text, start, end, whole) ?: decimal(text, start, end, whole))?.let { return it }
         }
-        return Run(end, written(raw, whole), raw)
+        return Run(text, start, end, written(raw, whole))
     }
 
     /**
@@ -129,53 +137,56 @@ object ChineseNumbers {
      */
     private fun time(text: String, start: Int, point: Int, whole: String): Run? {
         val hour = whole.toLongOrNull()
-        if (hour == null || hour > HOURS || text.getOrNull(start - 1)?.let { it in NOT_HOUR_BEFORE } == true) return null
+        if (hour == null || hour > HOURS || text.getOrNull(start - 1).isIn(NOT_HOUR_BEFORE)) return null
         val next = text[point + 1]
         if (halfOrSharp(next, text.getOrNull(point + 2), whole)) {
-            return Run(point + 2, "${whole}点$next", text.substring(start, point + 2), time = true)
+            return Run(text, start, point + 2, "${whole}点$next", Kind.Time)
         }
-        var m = point + 1
-        while (m < text.length && (text[m] in DIGITS || text[m] in SMALL)) m++
-        val said = text.substring(point + 1, m)
-        val minutes = integer(said)?.toLongOrNull() ?: return null
-        if (text.getOrNull(m) != '分' || minutes >= MINUTES || text.getOrNull(m + 1) == '钟') return null
+        var minuteEnd = point + 1
+        while (minuteEnd < text.length && (text[minuteEnd] in DIGITS || text[minuteEnd] in SMALL)) minuteEnd++
+        val said = text.substring(point + 1, minuteEnd)
+        val minutes = integerDigits(said)?.toLongOrNull() ?: return null
+        if (text.getOrNull(minuteEnd) != '分' || minutes >= MINUTES || text.getOrNull(minuteEnd + 1) == '钟') return null
         // 一点十分奇怪: "a bit very strange", no time
-        if (said == "十" && text.getOrNull(m + 1)?.let { it !in AFTER_TEN_PAST } == true) return null
+        if (said == "十" && minuteEnd + 1 < text.length && text[minuteEnd + 1] !in AFTER_TEN_PAST) return null
         // 十点零五分 as 10点05分; not %02d, which writes the phone's language's digits (٠٥ in Arabic)
         val written = if (said.startsWith('零')) "$minutes".padStart(2, '0') else "$minutes"
-        return Run(m + 1, "${whole}点${written}分", text.substring(start, m + 1), time = true)
+        return Run(text, start, minuteEnd + 1, "${whole}点${written}分", Kind.Time)
     }
 
     /** 六点半 or 八点整, from [next] after the 点 of the hour [whole] and [after] after it; not 一点半点 or 一点整体. */
     private fun halfOrSharp(next: Char, after: Char?, whole: String) = when (next) {
-        '半' -> !(whole == "1" && after?.let { it in NOT_HALF_AFTER } == true)
-        '整' -> after?.let { it in NOT_SHARP_AFTER } != true
+        '半' -> !(whole == "1" && after.isIn(NOT_HALF_AFTER))
+        '整' -> !after.isIn(NOT_SHARP_AFTER)
         else -> false
     }
 
     /** 十三点六, 三点五亿; 九点五十, with no 分, neither a decimal nor sure to be a time. */
     private fun decimal(text: String, start: Int, point: Int, whole: String): Run? {
-        var f = point + 1
-        while (f < text.length && text[f] in DIGITS && text[f] != '两') f++
-        if (f == point + 1 || text.getOrNull(f)?.let { it in SMALL } == true) return null
-        val fraction = text.substring(point + 1, f).map { DIGITS.getValue(it) }.joinToString("")
-        val unit = text.getOrNull(f)?.takeIf { it in BIG }
-        val end = if (unit != null) f + 1 else f
-        return Run(end, "$whole.$fraction${unit ?: ""}", text.substring(start, end), decimal = true)
+        var fractionEnd = point + 1
+        while (fractionEnd < text.length && text[fractionEnd] in DIGITS && text[fractionEnd] != '两') fractionEnd++
+        if (fractionEnd == point + 1 || (fractionEnd < text.length && text[fractionEnd] in SMALL)) return null
+        val fraction = text.substring(point + 1, fractionEnd).map { DIGITS.getValue(it) }.joinToString("")
+        val unit = text.getOrNull(fractionEnd)?.takeIf { it in BIG }
+        val end = if (unit != null) fractionEnd + 1 else fractionEnd
+        return Run(text, start, end, "$whole.$fraction${unit ?: ""}", Kind.Decimal)
     }
+
+    // a char not there (before the text or past it) is in no set
+    private fun Char?.isIn(chars: String) = this != null && this in chars
 
     /** 三十三万 as 33万, 四百亿 as 400亿 and 三万亿 as 3万亿, as written; 十二万三千 in full. */
     private fun written(raw: String, value: String): String {
         val places = raw.takeLastWhile { it in BIG }
         val before = raw.dropLast(places.length)
         if (places.isNotEmpty() && before.isNotEmpty() && before.none { it in BIG }) {
-            integer(before)?.let { return "$it$places" }
+            integerDigits(before)?.let { return "$it$places" }
         }
         return value
     }
 
     /** The integer [raw] reads as, as digits; null if it does not read as one (万一, 十十, 二十亿万). */
-    private fun integer(raw: String): String? {
+    private fun integerDigits(raw: String): String? {
         if (raw.isEmpty()) return null
         // digits only: 二零零二, 一一七
         if (raw.all { it in DIGITS }) return raw.map { DIGITS.getValue(it) }.joinToString("")
@@ -189,7 +200,7 @@ object ChineseNumbers {
     private class Reading {
         private var total = 0L
         private var section = 0L
-        private var digit = -1L
+        private var pendingDigit = -1L
         private var zero = false
         // the place last read: a digit after it is the next place down, 三千五 3500, but after 零 a one
         private var place = 1L
@@ -206,20 +217,20 @@ object ChineseNumbers {
         // two digits side by side among places: 二十三四 is no number
         // 零零 too
         private fun digit(d: Long): Boolean {
-            if (digit >= 0 || (d == 0L && zero)) return false
-            if (d == 0L) zero = true else digit = d
+            if (pendingDigit >= 0 || (d == 0L && zero)) return false
+            if (d == 0L) zero = true else pendingDigit = d
             return true
         }
 
         private fun trailing() = when {
-            digit < 0 -> 0L
-            zero -> digit
-            else -> digit * maxOf(place / 10, 1)
+            pendingDigit < 0 -> 0L
+            zero -> pendingDigit
+            else -> pendingDigit * maxOf(place / 10, 1)
         }
 
         private fun small(unit: Long): Boolean {
             if (unit >= lastSmall) return false
-            section += (if (digit < 0) 1 else digit) * unit
+            section += (if (pendingDigit < 0) 1 else pendingDigit) * unit
             next(unit)
             lastSmall = unit
             return true
@@ -227,7 +238,7 @@ object ChineseNumbers {
 
         private fun big(unit: Long): Boolean {
             // 三万亿: a place on a place, the larger on the smaller
-            val bare = section == 0L && digit < 0
+            val bare = section == 0L && pendingDigit < 0
             if (unit > lastBig && bare && !zero) {
                 total *= unit
                 lastBig = unit
@@ -237,7 +248,7 @@ object ChineseNumbers {
             // 二十亿万, 万万: a misrecognition, no number
             if (unit >= lastBig || bare) return false
             // 十万二 is 120000: the place below that of the number before 万, not below 万
-            val lowest = if (digit >= 0 || zero || lastSmall == Long.MAX_VALUE) 1 else lastSmall
+            val lowest = if (pendingDigit >= 0 || zero || lastSmall == Long.MAX_VALUE) 1 else lastSmall
             total += (section + trailing()) * unit
             section = 0
             next(unit * lowest)
@@ -247,60 +258,73 @@ object ChineseNumbers {
         }
 
         private fun next(unit: Long) {
-            digit = -1
+            pendingDigit = -1
             zero = false
             place = unit
         }
 
         // 一千零: a 零 with nothing after it is no number
-        fun value() = if (zero && digit < 0) null else total + section + trailing()
+        fun value() = if (zero && pendingDigit < 0) null else total + section + trailing()
     }
 
-    /** What [run] at [start] is written as, or null to leave it in characters. */
-    private fun decide(text: String, start: Int, run: Run): String? {
+    /** What [run] is written as, or null to leave it in characters. */
+    private fun decide(run: Run): String? {
         val raw = run.raw
-        val before = text.substring(maxOf(0, start - 2), start)
-        val after = text.getOrNull(run.end)
         return when {
-            run.time -> run.digits
-            run.decimal -> run.digits.takeIf { isQuantity(raw, after) }
-            roughOrMinutes(before, after) -> null
+            run.kind == Kind.Time -> run.digits
+            run.kind == Kind.Decimal -> run.digits.takeIf { isQuantity(run) }
+            rough(run) || besideBarePoint(run) -> null
             // a single digit: in a date or at a time, else in characters
-            raw.length == 1 && raw[0] in DIGITS -> run.digits.takeIf { single(text, start, run, before) }
-            raw.all { it in DIGITS } -> run.digits.takeIf { digitsAsDigits(text, run, after) }
-            raw == "十" -> run.digits.takeIf { ten(text, run, before, after) }
+            raw.length == 1 && raw[0] in DIGITS -> run.digits.takeIf { singleDigitAsDigit(run) }
+            raw.all { it in DIGITS } -> run.digits.takeIf { digitsAsDigits(run) }
+            raw == "十" -> run.digits.takeIf { tenAsDigits(run) }
             else -> run.digits
         }
     }
 
-    // 一点一点 is "bit by bit": a decimal is one with a unit, or more than a digit before it
-    private fun isQuantity(raw: String, after: Char?) =
-        raw.substringBefore('点').length > 1 || raw.first() == '零' || raw.last() in BIG || (after != null && after in UNITS)
+    // 一点一点 is "bit by bit": a decimal is one with a unit, or more than a digit before it, but for
+    // an hour with minutes said digit by digit (十一点三五, as 十点三五): with no 分, a time as likely
+    private fun isQuantity(run: Run) =
+        run.raw.first() == '零' || run.raw.last() in BIG || run.after.isIn(UNITS) ||
+            (run.raw.substringBefore('点').length > 1 && !minutesDigitByDigit(run))
 
-    // a rough count (几十万, 数百, 二十几岁), or the minutes of a time left in characters (九点五十)
-    private fun roughOrMinutes(before: String, after: Char?) =
-        before.endsWith('几') || before.endsWith('数') || after == '几' ||
-            (before.length == 2 && before[1] == '点' && isNumberChar(before[0]))
+    private fun minutesDigitByDigit(run: Run): Boolean {
+        val hour = run.digits.substringBefore('.').toLongOrNull() ?: return false
+        val minutes = run.digits.substringAfter('.').takeIf { it.length == 2 }?.toIntOrNull() ?: return false
+        return hour <= HOURS && minutes < MINUTES
+    }
+
+    // a rough count (几十万, 数百, 二十几岁)
+    private fun rough(run: Run) = run.before.endsWith('几') || run.before.endsWith('数') || run.after == '几'
+
+    // the hour or the minutes of a time left in characters, 九点五十 and 十点五十 alike: a 点 with no 分
+    // after its number is neither a decimal nor sure to be a time
+    private fun besideBarePoint(run: Run) =
+        (run.before.length == 2 && run.before[1] == '点' && isNumberChar(run.before[0])) ||
+            (run.after == '点' && run.end + 1 < run.text.length && isNumberChar(run.text[run.end + 1]))
 
     // a year (二零零二年, 九八年), a decade (九零后, 八零年代), three digits and more (一一七);
     // not two side by side (三四线, 七八个), nor two pairs (三三两两, 七七八八)
-    private fun digitsAsDigits(text: String, run: Run, after: Char?): Boolean {
+    private fun digitsAsDigits(run: Run): Boolean {
         val r = run.raw
         val pairs = r.length == 4 && r[0] == r[1] && r[2] == r[3] && DIGITS[r[0]] != DIGITS[r[2]]
-        if (pairs && after != '年') return false
-        return r.length >= 3 || after == '年' || after == '后' || text.startsWith("年代", run.end)
+        if (pairs && run.after != '年') return false
+        return r.length >= 3 || run.after == '年' || run.after == '后' || run.text.startsWith("年代", run.end)
     }
 
-    // 十 alone: 十分有趣, 十足, 十全十美, 上十 kept; 十分钟, 十个 not
-    private fun ten(text: String, run: Run, before: String, after: Char?) =
-        text.startsWith("分钟", run.end) ||
-            (after != '分' && after != '足' && after != '全' && !before.endsWith('上') && !before.endsWith('全'))
+    // 十 alone: 十分有趣, 十足, 十全十美, 上十 kept, but not the hour of 早上十点; 十分钟, 十个 not
+    private fun tenAsDigits(run: Run) =
+        run.text.startsWith("分钟", run.end) ||
+            (!run.after.isIn("分足全") && (!run.before.endsWith('上') || atTimeOfDay(run)) && !run.before.endsWith('全'))
+
+    // 早上九点, 晚上十点: an hour after a time of day
+    private fun atTimeOfDay(run: Run) = run.after == '点' && TIME_BEFORE.any { run.before.endsWith(it) }
 
     /** A single digit as a digit: 六月 before a day, 二十三日 after a month, 九点 at a time. */
-    private fun single(text: String, start: Int, run: Run, before: String): Boolean = when (text.getOrNull(run.end)) {
-        '月' -> numberAt(text, run.end + 1)?.let { text.getOrNull(it.end) == '日' || text.getOrNull(it.end) == '号' } == true
-        '日', '号' -> before.endsWith('月')
-        '点' -> TIME_BEFORE.any { text.substring(maxOf(0, start - 3), start).endsWith(it) }
+    private fun singleDigitAsDigit(run: Run): Boolean = when (run.after) {
+        '月' -> numberAt(run.text, run.end + 1)?.after.isIn("日号")
+        '日', '号' -> run.before.endsWith('月')
+        '点' -> TIME_BEFORE.any { run.text.substring(maxOf(0, run.start - 3), run.start).endsWith(it) }
         else -> false
     }
 }

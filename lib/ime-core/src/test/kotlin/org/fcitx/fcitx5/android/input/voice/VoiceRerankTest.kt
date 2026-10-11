@@ -38,6 +38,13 @@ class VoiceRerankTest {
     }
 
     @Test
+    fun aChineseCharacterOutsideTheCommonBlockIsOneToo() {
+        val zero = Hypothesis("二〇二四年", -0.1f)
+        val ling = Hypothesis("二零二四年", -0.2f)
+        assertEquals(listOf(zero, ling), VoiceRerank.candidates(listOf(zero, ling)))
+    }
+
+    @Test
     fun theModelOutweighsALittleOfTheRecognizers() {
         val heard = Hypothesis("他现在恨佛系", -0.15f)
         val written = Hypothesis("他现在很佛系", -0.26f)

@@ -41,3 +41,9 @@ g++ -std=c++17 -O1 -I "$src" -I $ssp -I $gtest/googletest/include \
   "$csrc/bbpe.cc" "$csrc/base64-decode.cc" "$csrc/file-utils.cc" "$csrc/log.cc" \
   $ssp/ssentencepiece/csrc/ssentencepiece.cc libgtest.a -lpthread -o utils-test
 ./utils-test
+
+g++ -std=c++17 -O1 -I "$src" -I $ssp -I $gtest/googletest/include \
+  "$csrc/blocked-phrases-test.cc" "$csrc/utils.cc" "$csrc/symbol-table.cc" "$csrc/text-utils.cc" \
+  "$csrc/bbpe.cc" "$csrc/base64-decode.cc" "$csrc/file-utils.cc" "$csrc/log.cc" \
+  $ssp/ssentencepiece/csrc/ssentencepiece.cc libgtest.a -lpthread -o blocked-phrases-test
+./blocked-phrases-test

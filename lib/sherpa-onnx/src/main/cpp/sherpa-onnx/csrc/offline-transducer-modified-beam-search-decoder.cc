@@ -130,7 +130,11 @@ OfflineTransducerModifiedBeamSearchDecoder::Decode(
     for (int32_t i = 0; i != n; ++i) {
       if (block_graphs[i] == nullptr) continue;
       for (int32_t h = hyps_row_splits[i]; h != hyps_row_splits[i + 1]; ++h) {
-        for (auto token : block_graphs[i]->CompletingTokens(prev[h].block_state)) {
+        const auto &completing =
+            block_graphs[i]->CompletingTokens(prev[h].block_state);
+        for (auto token : completing) {
+          // a token of tokens.txt the joiner lacks would write past the row
+          if (token < 0 || token >= vocab_size) continue;
           p_logprob[h * vocab_size + token] =
               -std::numeric_limits<float>::infinity();
         }
@@ -208,12 +212,15 @@ OfflineTransducerModifiedBeamSearchDecoder::Decode(
 
   std::vector<OfflineTransducerDecoderResult> unsorted_ans(batch_size);
   for (int32_t i = 0; i != batch_size; ++i) {
-    Hypothesis hyp = cur[i].GetMostProbable(true);
+    // youmo: the best from the n-best's own ranking, so on a tie it is still
+    // the first of them
+    std::vector<Hypothesis> topk = cur[i].GetTopK(max_active_paths_, true);
+    Hypothesis &hyp = topk[0];
 
     auto &r = unsorted_ans[packed_encoder_out.sorted_indexes[i]];
 
     // youmo: the others too, ranked as the best was
-    for (const auto &h : cur[i].GetTopK(max_active_paths_, true)) {
+    for (const auto &h : topk) {
       r.nbest_tokens.emplace_back(h.ys.begin() + context_size, h.ys.end());
       r.nbest_scores.push_back(h.TotalLogProb() / h.ys.size());
     }

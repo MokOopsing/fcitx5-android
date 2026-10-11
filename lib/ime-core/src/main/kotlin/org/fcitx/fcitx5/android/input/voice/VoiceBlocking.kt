@@ -10,7 +10,7 @@ package org.fcitx.fcitx5.android.input.voice
  * and 打开饭盒 with it. Instead its hypotheses (best first) are split into words as the pinyin
  * engine's model finds likeliest (TextWords.boundaries), and the first in which no blocked word
  * stands as words of its own is written: starting and ending where words do. If each has one, the
- * user said it, and the search is run again with the words blocked in it (VoiceListener).
+ * user said it, and the search is run again with the words blocked in it (VoiceChoice).
  */
 object VoiceBlocking {
 

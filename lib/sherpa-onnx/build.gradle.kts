@@ -28,6 +28,8 @@ android {
                 // the recognizer, the VAD and the JNI to them: nothing to speak, nothing to run alone
                 arguments(
                     "-DBUILD_SHARED_LIBS=ON",
+                    // the pinned, SHA-256 checked onnxruntime, not one found on the build machine
+                    "-DSHERPA_ONNX_USE_PRE_INSTALLED_ONNXRUNTIME_IF_AVAILABLE=OFF",
                     "-DSHERPA_ONNX_ENABLE_JNI=ON",
                     "-DSHERPA_ONNX_ENABLE_C_API=OFF",
                     "-DSHERPA_ONNX_ENABLE_TTS=OFF",

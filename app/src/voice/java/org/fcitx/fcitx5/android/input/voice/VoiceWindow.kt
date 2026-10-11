@@ -13,7 +13,6 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
 import android.os.Handler
 import android.os.Looper
-import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
@@ -80,9 +79,7 @@ class VoiceWindow : InputWindow.ExtendedInputWindow<VoiceWindow>(), InputBroadca
         // AppCompat's: autosizing below Android 8.1 too
         heard = AppCompatTextView(ctx).apply {
             gravity = Gravity.CENTER
-            maxLines = 2
-            // the end of a long one is what was just said
-            ellipsize = TextUtils.TruncateAt.START
+            VoiceStyle.heard(this)
         }
         // smaller rather than cut, on a short keyboard
         TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(heard, TEXT_MIN, TEXT_MAX, 1, TypedValue.COMPLEX_UNIT_SP)
@@ -261,11 +258,11 @@ class VoiceWindow : InputWindow.ExtendedInputWindow<VoiceWindow>(), InputBroadca
 
         override fun zone(cancel: Boolean) {
             mic.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
-            val color = if (cancel) CANCEL_RED else theme.accentKeyBackgroundColor
+            val color = if (cancel) VoiceStyle.CANCEL_RED else theme.accentKeyBackgroundColor
             micBackground.micColors(color)
             pulse.color = color
             label.setText(if (cancel) R.string.voice_release_to_cancel else R.string.voice_release_to_type)
-            label.setTextColor(if (cancel) CANCEL_RED else theme.keyTextColor)
+            label.setTextColor(if (cancel) VoiceStyle.CANCEL_RED else theme.keyTextColor)
         }
 
         override fun recognizing() {
@@ -288,13 +285,13 @@ class VoiceWindow : InputWindow.ExtendedInputWindow<VoiceWindow>(), InputBroadca
     private fun talking() {
         say(R.string.voice_hold_listening)
         label.setText(R.string.voice_release_to_type)
-        mic.animate().scaleX(PRESSED_SCALE).scaleY(PRESSED_SCALE).setDuration(ANIMATE_MS).start()
+        mic.animate().scaleX(PRESSED_SCALE).scaleY(PRESSED_SCALE).setDuration(VoiceStyle.ANIMATE_MS).start()
         pulse.active = true
     }
 
     // the microphone let go: back to its size and colour, the rings out
     private fun settle() {
-        mic.animate().scaleX(1f).scaleY(1f).setDuration(ANIMATE_MS).start()
+        mic.animate().scaleX(1f).scaleY(1f).setDuration(VoiceStyle.ANIMATE_MS).start()
         pulse.active = false
         micBackground.micColors(theme.accentKeyBackgroundColor)
         pulse.color = theme.accentKeyBackgroundColor
@@ -327,7 +324,5 @@ class VoiceWindow : InputWindow.ExtendedInputWindow<VoiceWindow>(), InputBroadca
         private const val TEXT_MIN = 12
         private const val TEXT_MAX = 17
         private const val PRESSED_SCALE = 1.1f
-        private const val ANIMATE_MS = 150L
-        private const val CANCEL_RED = 0xFFC62828.toInt()
     }
 }

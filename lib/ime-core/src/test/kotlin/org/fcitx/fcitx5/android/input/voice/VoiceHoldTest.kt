@@ -60,7 +60,7 @@ class VoiceHoldTest {
     }
 
     @Test
-    fun `on a round button, out of it whichever way cancels`() {
+    fun onARoundButtonOutOfItWhicheverWayCancels() {
         val round = VoiceHold(cancelDistance = 50f, around = true)
         assertFalse(round.moved(30f, -30f))
         assertTrue(round.moved(60f, 0f))

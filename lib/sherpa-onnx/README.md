@@ -24,6 +24,9 @@ upstream's AAR, so that it is ours to change.
   complete any of them (`ContextGraph::CompletingTokens`), so the next best is written instead.
 - **N-best:** `OfflineRecognizerResult.nbest` and `nbestScores`, the beam's hypotheses best first
   (in `AsJsonString` too). The app ranks them again with its pinyin model (`VoiceRerank`).
+- **Hotwords graph:** `CreateStream(hotwords)` keeps the graph of the last hotwords it was given and
+  returns it again for the same ones, rather than building the pack's hotwords into a new graph for
+  each stream.
 
 Each change is marked `youmo` in the source. Their C++ unit tests run on this machine with
 `lib/sherpa-onnx/host-test.sh`; the app's `VoiceEngineTest` covers them through the JNI.

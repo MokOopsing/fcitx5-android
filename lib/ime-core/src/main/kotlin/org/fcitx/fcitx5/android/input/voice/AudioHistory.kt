@@ -11,6 +11,10 @@ package org.fcitx.fcitx5.android.input.voice
  */
 class AudioHistory(private val capacity: Int) {
 
+    init {
+        require(capacity > 0) { "capacity $capacity" }
+    }
+
     private val ring = FloatArray(capacity)
 
     /** samples heard so far */

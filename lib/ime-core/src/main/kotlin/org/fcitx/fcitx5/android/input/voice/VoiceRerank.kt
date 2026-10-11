@@ -4,6 +4,8 @@
  */
 package org.fcitx.fcitx5.android.input.voice
 
+import org.fcitx.fcitx5.android.input.UnicodePunctuation
+
 /**
  * The recognizer's hypotheses (its n-best) ranked again with what the pinyin engine knows of
  * Chinese: the recognizer hears sounds, and of 恨佛系 and 很佛系, heard alike, it may prefer the
@@ -28,7 +30,7 @@ object VoiceRerank {
     data class Hypothesis(val text: String, val score: Float)
 
     /** What is read of [text]: no punctuation, no spaces. Hypotheses alike in it are one. */
-    fun bare(text: String): String = text.filterNot { it.isWhitespace() || Character.getType(it) in PUNCTUATION }
+    fun bare(text: String): String = text.filterNot { it.isWhitespace() || it in UnicodePunctuation }
 
     /**
      * [nbest] (best first), one of each [bare] text, the best scored of each: the recognizer's
@@ -56,13 +58,10 @@ object VoiceRerank {
             .let { candidates[it] }
     }
 
-    private fun notHan(text: String) = text.filterNot { it in '一'..'鿿' }
+    private fun notHan(text: String) = text.replace(HAN, "")
 
-    private val PUNCTUATION = setOf(
-        Character.CONNECTOR_PUNCTUATION, Character.DASH_PUNCTUATION, Character.START_PUNCTUATION,
-        Character.END_PUNCTUATION, Character.INITIAL_QUOTE_PUNCTUATION, Character.FINAL_QUOTE_PUNCTUATION,
-        Character.OTHER_PUNCTUATION,
-    ).map { it.toInt() }.toSet()
+    // a Chinese character as VoiceText and VoiceHotwords have it, 〇 and Extension A too
+    private val HAN = Regex("\\p{IsHan}")
 
     private const val WEIGHT = 0.7f
 }

@@ -6,6 +6,7 @@ package org.fcitx.fcitx5.android.input.voice
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class AudioHistoryTest {
@@ -36,5 +37,11 @@ class AudioHistoryTest {
         val history = AudioHistory(10)
         history.add(samples(0, 6), count = 4)
         assertArrayEquals(samples(2, 4), history.before(9, 2), 0f)
+    }
+
+    @Test
+    fun noRoomIsRefused() {
+        assertThrows(IllegalArgumentException::class.java) { AudioHistory(0) }
+        assertThrows(IllegalArgumentException::class.java) { AudioHistory(-1) }
     }
 }

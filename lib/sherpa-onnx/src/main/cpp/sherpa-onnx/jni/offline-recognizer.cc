@@ -696,7 +696,6 @@ Java_com_k2fsa_sherpa_onnx_OfflineRecognizer_getResult(JNIEnv *env,
   jclass string_cls = env->FindClass("java/lang/String");
   jobjectArray jtokens =
       env->NewObjectArray(result.tokens.size(), string_cls, nullptr);
-  env->DeleteLocalRef(string_cls);
 
   for (size_t i = 0; i < result.tokens.size(); ++i) {
     jstring token_str = SafeNewStringUTF(env, result.tokens[i]);
@@ -717,10 +716,9 @@ Java_com_k2fsa_sherpa_onnx_OfflineRecognizer_getResult(JNIEnv *env,
                            result.durations.data());
 
   // youmo: the beam's hypotheses, best first, and their scores
-  jclass string_cls2 = env->FindClass("java/lang/String");
   jobjectArray jnbest =
-      env->NewObjectArray(result.nbest.size(), string_cls2, nullptr);
-  env->DeleteLocalRef(string_cls2);
+      env->NewObjectArray(result.nbest.size(), string_cls, nullptr);
+  env->DeleteLocalRef(string_cls);
   for (size_t i = 0; i < result.nbest.size(); ++i) {
     jstring s = SafeNewStringUTF(env, result.nbest[i]);
     env->SetObjectArrayElement(jnbest, i, s);
