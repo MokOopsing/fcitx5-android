@@ -27,7 +27,7 @@ class SettingsSearchTest {
 
     @Test
     fun titlesStartingWithTheQueryComeFirstThenTitlesThenTheRest() {
-        // 空格键上滑 starts with it; 长按空格 has it in its title; 按键声音 only under it
+        // 空格键上滑 starts with it; 长按空格 has it in its title; 按键声音 has it nowhere
         assertEquals(listOf(3, 2), found("空格"))
         // in the titles of 按键声音 and 空格键上滑, in the pages' order; 长按空格 only says it below
         assertEquals(listOf(1, 3, 2), found("键"))

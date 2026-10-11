@@ -17,6 +17,7 @@ import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceProvider
 import org.fcitx.fcitx5.android.data.theme.ThemeManager
 import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
+import org.fcitx.fcitx5.android.ui.main.settings.behavior.AdvancedSettingsFragment
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodSettings
 import org.fcitx.fcitx5.android.ui.search.SettingsSearch.Entry
 
@@ -27,15 +28,8 @@ import org.fcitx.fcitx5.android.ui.search.SettingsSearch.Entry
  */
 object SettingsIndex {
 
-    /** The page to open, and the setting on it to point at (its title), if not the page itself. */
-    data class Target(val route: SettingsRoute, val title: String?)
-
-    // the app's own input methods, whose pages InputMethodSettings draws; each table has a page of its own
-    private val InputMethods = listOf(
-        "engine-pinyin", "engine-t9", "engine-shuangpin",
-        "engine-wubi", "engine-cangjie", "engine-ziranma", "engine-erbi", "engine-wubipinyin",
-        "keyboard-us",
-    )
+    /** The page to open, and the setting on it to point at (its preference's key), if not the page itself. */
+    data class Target(val route: SettingsRoute, val key: String?)
 
     fun build(context: Context): List<Entry<Target>> = buildList {
         fun page(@StringRes title: Int, route: SettingsRoute, vararg under: Int) =
@@ -54,12 +48,14 @@ object SettingsIndex {
         managed(context, R.string.emoji_and_symbols, SettingsRoute.Symbol, AppPrefs.getInstance().symbols, this)
         managed(context, R.string.advanced, SettingsRoute.Advanced, AppPrefs.getInstance().advanced, this)
         managed(context, R.string.candidates_window, SettingsRoute.CandidatesWindow, AppPrefs.getInstance().candidates, this, R.string.advanced)
-        page(R.string.punctuation_map, SettingsRoute.Punctuation(context.getString(R.string.punctuation_map), "zh_CN"), R.string.advanced)
+        page(R.string.punctuation_map, SettingsRoute.Punctuation(context.getString(R.string.punctuation_map)), R.string.advanced)
         page(R.string.table_im, SettingsRoute.TableInputMethods, R.string.advanced)
-        add(Entry(context.getString(R.string.export_user_data), context.getString(R.string.export_user_data_summary),
-            listOf(context.getString(R.string.advanced)), Target(SettingsRoute.Advanced, context.getString(R.string.export_user_data))))
-        add(Entry(context.getString(R.string.import_user_data), "",
-            listOf(context.getString(R.string.advanced)), Target(SettingsRoute.Advanced, context.getString(R.string.import_user_data))))
+        // drawn by hand on that page: its own ids, so a title changed there is still the one pointed at
+        val advanced = listOf(context.getString(R.string.advanced))
+        add(Entry(context.getString(AdvancedSettingsFragment.EXPORT_USER_DATA), context.getString(AdvancedSettingsFragment.EXPORT_USER_DATA_SUMMARY), advanced,
+            Target(SettingsRoute.Advanced, AdvancedSettingsFragment.EXPORT_USER_DATA_KEY)))
+        add(Entry(context.getString(AdvancedSettingsFragment.IMPORT_USER_DATA), "", advanced,
+            Target(SettingsRoute.Advanced, AdvancedSettingsFragment.IMPORT_USER_DATA_KEY)))
         page(R.string.about, SettingsRoute.About)
     }
 
@@ -73,13 +69,13 @@ object SettingsIndex {
         into += Entry(path.last(), "", path.dropLast(1), Target(route, null))
         // over storage that keeps nothing: a preference attached saves its default, which would
         // pin every default the user never touched to what it is today
-        val manager = PreferenceManager(context).apply { preferenceDataStore = Nothing }
+        val manager = PreferenceManager(context).apply { preferenceDataStore = DiscardingDataStore }
         val screen = manager.createPreferenceScreen(context)
         provider.createUi(screen)
-        walk(screen, path) { pref, at -> into += Entry(pref.title.toString(), summary(pref), at, Target(route, pref.title.toString())) }
+        walk(screen, path) { pref, at -> into += Entry(pref.title.toString(), summary(pref), at, Target(route, pref.key)) }
     }
 
-    private object Nothing : PreferenceDataStore() {
+    private object DiscardingDataStore : PreferenceDataStore() {
         override fun putString(key: String?, value: String?) = Unit
         override fun putStringSet(key: String?, values: MutableSet<String>?) = Unit
         override fun putInt(key: String?, value: Int) = Unit
@@ -101,26 +97,27 @@ object SettingsIndex {
 
     internal fun inputMethods(context: Context, into: MutableList<Entry<Target>>) {
         val top = context.getString(R.string.input_methods)
-        for (name in InputMethods) {
+        for (name in InputMethodSettings.BUILT_IN) {
             val items = InputMethodSettings.of(name) ?: continue
             val page = InputMethodNames.of(context, name, name)
             val route = SettingsRoute.InputMethodConfig(page, name)
             into += Entry(page, "", listOf(top), Target(route, null))
-            items(context, items, listOf(top, page)) { title, summary, path ->
-                into += Entry(title, summary, path, Target(route, title))
+            items(context, items, listOf(top, page)) { title, summary, key, path ->
+                into += Entry(title, summary, path, Target(route, key))
             }
         }
     }
 
+    // each with the key InputMethodSettings.create gives its preference
     private fun items(
         context: Context, items: List<InputMethodSettings.Item>, path: List<String>,
-        visit: (String, String, List<String>) -> Unit,
+        visit: (String, String, String, List<String>) -> Unit,
     ) {
         fun text(@StringRes id: Int) = if (id == 0) "" else context.getString(id)
         for (item in items) when (item) {
-            is InputMethodSettings.Toggle -> visit(item.title(context), text(item.summary), path)
-            is InputMethodSettings.Choice -> visit(text(item.title), text(item.message), path)
-            is InputMethodSettings.Flags -> visit(text(item.title), item.flags.joinToString(" ") { it.second }, path)
+            is InputMethodSettings.Toggle -> visit(item.title(context), text(item.summary), item.key, path)
+            is InputMethodSettings.Choice -> visit(text(item.title), text(item.summary), item.key, path)
+            is InputMethodSettings.Flags -> visit(text(item.title), item.flags.joinToString(" ") { it.second }, item.path, path)
             is InputMethodSettings.Section -> items(context, item.items, path + text(item.title), visit)
         }
     }

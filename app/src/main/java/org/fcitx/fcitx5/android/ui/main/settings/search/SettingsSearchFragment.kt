@@ -10,12 +10,12 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
-import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.content.getSystemService
 import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -32,6 +32,7 @@ import splitties.views.dsl.core.lParams
 import splitties.views.dsl.core.matchParent
 import splitties.views.dsl.core.textView
 import splitties.views.dsl.core.verticalLayout
+import splitties.views.dsl.core.wrapContent
 import splitties.views.setPaddingDp
 
 /** Finds a setting by its name, or by what it says, on any page; a result opens its page at it. */
@@ -44,46 +45,48 @@ class SettingsSearchFragment : Fragment() {
     // kept while the fragment is on the back stack: coming back shows the same results
     private var query = ""
 
-    private lateinit var none: TextView
+    private var none: TextView? = null
 
     private var list: RecyclerView? = null
 
-    private val adapter = object : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
+    private class ResultHolder(row: View, val title: TextView, val detail: TextView) : RecyclerView.ViewHolder(row)
+
+    private val adapter = object : RecyclerView.Adapter<ResultHolder>() {
         override fun getItemCount() = results.size
 
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ResultHolder {
             val ctx = parent.context
-            val row = LinearLayout(ctx).apply {
-                orientation = LinearLayout.VERTICAL
+            val title = ctx.textView {
+                textSize = 16f
+                setTextColor(ctx.styledColor(android.R.attr.textColorPrimary))
+            }
+            val detail = ctx.textView {
+                textSize = 13f
+                setTextColor(ctx.styledColor(android.R.attr.textColorSecondary))
+            }
+            val row = ctx.verticalLayout {
                 setPaddingDp(20, 12, 20, 12)
                 isClickable = true
                 isFocusable = true
                 background = ctx.obtainStyledAttributes(intArrayOf(android.R.attr.selectableItemBackground)).run {
                     getDrawable(0).also { recycle() }
                 }
-                addView(TextView(ctx).apply {
-                    textSize = 16f
-                    setTextColor(ctx.styledColor(android.R.attr.textColorPrimary))
-                })
-                addView(TextView(ctx).apply {
-                    textSize = 13f
-                    setTextColor(ctx.styledColor(android.R.attr.textColorSecondary))
-                })
+                add(title, lParams(matchParent))
+                add(detail, lParams(matchParent))
+                layoutParams = RecyclerView.LayoutParams(matchParent, wrapContent)
             }
-            row.layoutParams = RecyclerView.LayoutParams(-1, -2)
-            return object : RecyclerView.ViewHolder(row) {}
+            return ResultHolder(row, title, detail)
         }
 
-        override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
+        override fun onBindViewHolder(holder: ResultHolder, position: Int) {
             val entry = results[position]
-            val row = holder.itemView as LinearLayout
-            (row.getChildAt(0) as TextView).text = entry.title
-            (row.getChildAt(1) as TextView).apply {
+            holder.title.text = entry.title
+            holder.detail.apply {
                 // where it is, then what it says
                 text = listOf(entry.path.joinToString(" › "), entry.summary).filter { it.isNotEmpty() }.joinToString("\n")
                 isVisible = text.isNotEmpty()
             }
-            row.setOnClickListener { open(entry.target) }
+            holder.itemView.setOnClickListener { open(entry.target) }
         }
     }
 
@@ -97,12 +100,12 @@ class SettingsSearchFragment : Fragment() {
             setText(query)
             doAfterTextChanged { show(it.toString()) }
         }
-        none = ctx.textView {
+        val none = ctx.textView {
             setPaddingDp(20, 16, 20, 16)
             setText(R.string.search_settings_none)
             setTextColor(ctx.styledColor(android.R.attr.textColorSecondary))
             isVisible = false
-        }
+        }.also { none = it }
         val list = RecyclerView(ctx).also { list = it }.apply {
             layoutManager = LinearLayoutManager(ctx)
             adapter = this@SettingsSearchFragment.adapter
@@ -122,10 +125,11 @@ class SettingsSearchFragment : Fragment() {
         }
     }
 
-    // the adapter outlives the view on the back stack: let go of the old list, or it is kept
+    // the adapter and these fields outlive the view on the back stack: let go of the old views, or they keep it
     override fun onDestroyView() {
         list?.adapter = null
         list = null
+        none = null
         super.onDestroyView()
     }
 
@@ -134,12 +138,13 @@ class SettingsSearchFragment : Fragment() {
         results = search.find(query)
         @Suppress("NotifyDataSetChanged") // a new list each key, nothing to diff against
         adapter.notifyDataSetChanged()
-        none.isVisible = results.isEmpty() && query.isNotBlank()
+        none?.isVisible = results.isEmpty() && query.isNotBlank()
     }
 
     private fun open(target: SettingsIndex.Target) {
         view?.let { requireContext().getSystemService<InputMethodManager>()?.hideSoftInputFromWindow(it.windowToken, 0) }
-        SearchHighlight.point(target.title)
         navigateWithAnim(target.route)
+        // the result's entry, on the back stack before its fragment is made: its page reads the key there
+        findNavController().currentBackStackEntry?.let { SearchHighlight.point(it, target.key) }
     }
 }

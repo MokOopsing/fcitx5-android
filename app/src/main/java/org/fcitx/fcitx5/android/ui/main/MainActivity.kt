@@ -113,8 +113,12 @@ class MainActivity : AppCompatActivity() {
                     Timber.w(e, "Unreadable settings route")
                     null
                 }
+                if (route == null) return
                 // any app can send this: only the pages the keyboard itself opens
-                if (route == null || !AppUtil.isLaunchRoute(route)) return
+                if (!AppUtil.isLaunchRoute(route)) {
+                    Timber.w("Settings route not opened from outside: ${route::class.simpleName}")
+                    return
+                }
                 navController.popBackStack(SettingsRoute.Index, false)
                 navController.navigateWithAnim(route)
             }

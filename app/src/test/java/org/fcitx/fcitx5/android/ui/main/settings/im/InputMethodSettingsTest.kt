@@ -4,16 +4,13 @@
  */
 package org.fcitx.fcitx5.android.ui.main.settings.im
 
-import android.content.Context
-import android.content.ContextWrapper
-import android.content.res.Resources
-import androidx.preference.ListPreference
-import androidx.preference.PreferenceGroup
-import androidx.preference.PreferenceManager
-import androidx.preference.PreferenceScreen
-import org.fcitx.fcitx5.android.core.RawConfig
-import org.fcitx.fcitx5.android.ui.main.modified.hasDefault
+import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.engine.host.EngineSettings
+import org.fcitx.fcitx5.android.engine.host.Engines
+import org.fcitx.fcitx5.android.engine.host.TableSettings
+import org.fcitx.fcitx5.android.engine.pinyin.Fuzzy
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodSettings.Choice
+import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodSettings.Flags
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodSettings.Item
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodSettings.Section
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodSettings.Toggle
@@ -21,55 +18,24 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import org.junit.runner.RunWith
-import org.robolectric.RobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
 
-@RunWith(RobolectricTestRunner::class)
+/** Every input method of the engine's (nine keys too) and English: those the app has a page of. */
+internal val appInputMethods = listOf(Engines.PINYIN, Engines.SHUANGPIN, Engines.T9) + Engines.TABLES.keys + "keyboard-us"
+
+internal fun List<Item>.flat(): List<Item> = flatMap { if (it is Section) it.items.flat() else listOf(it) }
+
+internal fun item(page: String, key: String) = InputMethodSettings.of(page)!!.flat().first {
+    (it is Choice && it.key == key) || (it is Toggle && it.key == key)
+}
+
+/** The pages as items, which need no Android: see InputMethodSettingsScreenTest for them as preferences. */
 class InputMethodSettingsTest {
-
-    private val names = listOf(
-        "engine-pinyin", "engine-shuangpin", "engine-wubi", "engine-cangjie", "engine-ziranma", "engine-erbi",
-        "engine-wubipinyin", "keyboard-us",
-    )
-
-    private fun List<Item>.flat(): List<Item> = flatMap { if (it is Section) it.items.flat() else listOf(it) }
-
-    private fun item(page: String, key: String) = InputMethodSettings.of(page)!!.flat().first {
-        (it is Choice && it.key == key) || (it is Toggle && it.key == key)
-    }
-
-    // the app's own strings are not on the unit-test classpath (isIncludeAndroidResources): "#<id>" stands in
-    private class PlaceholderStrings(base: Context) : ContextWrapper(base) {
-        private val res = object : Resources(base.assets, base.resources.displayMetrics, base.resources.configuration) {
-            override fun getText(id: Int): CharSequence = placeholder(id)
-            override fun getString(id: Int): String = placeholder(id)
-            override fun getString(id: Int, vararg formatArgs: Any?): String = placeholder(id)
-            override fun getQuantityString(id: Int, quantity: Int, vararg formatArgs: Any?): String = placeholder(id)
-        }
-
-        override fun getResources(): Resources = res
-    }
-
-    private fun screen(page: String): PreferenceScreen {
-        val ctx = PlaceholderStrings(RuntimeEnvironment.getApplication())
-        return InputMethodSettings.create(PreferenceManager(ctx), InputMethodSettings.of(page)!!, RawConfig()) {}
-    }
-
-    private fun PreferenceGroup.lists(): List<ListPreference> = (0 until preferenceCount).flatMap {
-        when (val pref = getPreference(it)) {
-            is ListPreference -> listOf(pref)
-            is PreferenceGroup -> pref.lists()
-            else -> emptyList()
-        }
-    }
 
     @Test
     fun everyInputMethodOfTheAppHasAPageAndOthersNone() {
-        names.forEach { assertNotNull(it, InputMethodSettings.of(it)) }
+        appInputMethods.forEach { assertNotNull(it, InputMethodSettings.of(it)) }
         assertNull(InputMethodSettings.of("keyboard-de"))
     }
 
@@ -78,7 +44,7 @@ class InputMethodSettingsTest {
     @Test
     fun anyValueStoredShowsAsOneOfTheChoices() {
         val stored = listOf("", "x", "-5", "-1", "0", "1", "4", "7", "100", "Fast", "Ziranma", "Alt")
-        names.forEach { page ->
+        appInputMethods.forEach { page ->
             InputMethodSettings.of(page)!!.flat().filterIsInstance<Choice>().forEach { choice ->
                 stored.forEach { v ->
                     assertTrue("$page ${choice.key} $v", choice.nearest(v) in choice.values)
@@ -104,43 +70,42 @@ class InputMethodSettingsTest {
         assertEquals("-1", length.nearest("-1"))
         assertEquals("6", length.nearest("8"))
         assertEquals("0", length.nearest("0"))
+        // 1, as libime's settings may have it, makes no phrase here: off, not up to 2
+        assertEquals("0", length.nearest("1"))
+        assertEquals("2", length.nearest("2"))
         val after = item("engine-wubi", "SaveAutoPhraseAfter") as Choice
         assertEquals("0", after.nearest("-1"))
         assertEquals("3", after.nearest("3"))
     }
 
-    // a list's dialog looks its preference up by key: one without a key crashed on a tap
+    // 九键 greys the options it has no use for, and only on its own page: the others share them
     @Test
-    fun everyChoiceOnAPageIsFoundByItsOwnKey() {
-        names.forEach { page ->
-            val screen = screen(page)
-            val lists = screen.lists()
-            assertEquals(page, InputMethodSettings.of(page)!!.flat().count { it is Choice }, lists.size)
-            lists.forEach {
-                assertNotNull(page, it.key)
-                assertSame("$page ${it.key}", it, screen.findPreference<ListPreference>(it.key))
+    fun nineKeysGreyOnlyWhatTheyHaveNoUseFor() {
+        fun unused(page: String) = InputMethodSettings.of(page)!!.flat().flatMap {
+            when (it) {
+                is Toggle -> if (it.unused != 0) listOf(it.key) else emptyList<String>()
+                is Flags -> it.unused.map { key -> "${it.path}/$key" }
+                else -> emptyList<String>()
             }
-        }
+        }.toSet()
+        val fuzzy = EngineSettings.FUZZY
+        assertEquals(setOf("$fuzzy/${EngineSettings.TYPOS}", EngineSettings.LATIN_WORDS, "$fuzzy/${Fuzzy.V_U.name}"), unused(Engines.T9))
+        assertEquals(emptySet<String>(), unused(Engines.PINYIN))
+        assertEquals(emptySet<String>(), unused(Engines.SHUANGPIN))
+        // its reason under each pair greyed, as under each switch
+        val pairs = InputMethodSettings.of(Engines.T9)!!.flat().filterIsInstance<Flags>().single()
+        assertEquals(R.string.im_not_for_t9, pairs.unusedNote)
+        // 双拼 types its letters as its scheme has them: no Latin words to read in them
+        assertTrue(InputMethodSettings.of(Engines.SHUANGPIN)!!.flat().none { it is Toggle && it.key == EngineSettings.LATIN_WORDS })
     }
 
-    // a dialog message would leave the list's dialog with no choices in it
+    // the labels are the app's, the pairs and a table's options the engine's: one it adds gets a row
     @Test
-    fun anExplanationIsUnderTheValueNotInTheDialog() {
-        names.forEach { page -> screen(page).lists().forEach { assertNull("$page ${it.key}", it.dialogMessage) } }
-        val length = item("engine-wubi", "AutoPhraseLength") as Choice
-        val pref = screen("engine-wubi").findPreference<ListPreference>(length.key)!!
-        assertEquals("${pref.entry}\n${placeholder(length.message)}", pref.summary?.toString())
-    }
-
-    // a list's dialog offers Default only with a default to go back to, which these lists have not
-    @Test
-    fun aChoiceHasNoDefaultSoItsDialogOffersNone() {
-        names.forEach { page -> screen(page).lists().forEach { assertFalse("$page ${it.key}", it.hasDefault()) } }
-        val given = screen("keyboard-us").lists().first().apply { setDefaultValue("5") }
-        assertTrue(given.hasDefault())
-    }
-
-    private companion object {
-        fun placeholder(id: Int) = "#$id"
+    fun everyFuzzyPairAndTableOptionOfTheEngineHasARow() {
+        val fuzzy = InputMethodSettings.of(Engines.PINYIN)!!.flat().filterIsInstance<Flags>().single()
+        assertEquals(EngineSettings.FUZZY, fuzzy.path)
+        assertEquals(Fuzzy.entries.map { it.name }.sorted(), fuzzy.flags.map { it.first }.sorted())
+        val table = InputMethodSettings.of("engine-wubi")!!.flat().map { if (it is Toggle) it.key else (it as Choice).key }
+        assertEquals(TableSettings.KEYS.sorted(), table.sorted())
     }
 }

@@ -18,7 +18,13 @@ import androidx.preference.PreferenceManager
 import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
 import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.core.InputMethodNames
 import org.fcitx.fcitx5.android.core.RawConfig
+import org.fcitx.fcitx5.android.engine.host.EngineSettings
+import org.fcitx.fcitx5.android.engine.host.Engines
+import org.fcitx.fcitx5.android.engine.host.TableSettings
+import org.fcitx.fcitx5.android.engine.pinyin.Fuzzy
+import org.fcitx.fcitx5.android.engine.pinyin.ShuangpinScheme
 import kotlin.math.abs
 
 /**
@@ -50,14 +56,15 @@ object InputMethodSettings {
         val key: String,
         @StringRes val title: Int,
         val values: List<String>,
-        @StringRes val message: Int = 0,
+        @StringRes val summary: Int = 0,
         val label: (Context, String) -> String,
         val nearest: (String) -> String = { it },
     ) : Item
 
     /**
      * Switches of the same kind, picked together in one dialog: [flags] of key and label, under
-     * [path]; those [unused] by this input method greyed there, as [Toggle.unused].
+     * [path]; those [unused] by this input method greyed there, as [Toggle.unused], with
+     * [unusedNote] under each.
      */
     class Flags(
         val path: String,
@@ -65,6 +72,7 @@ object InputMethodSettings {
         @StringRes val none: Int,
         val flags: List<Pair<String, String>>,
         val unused: Set<String> = emptySet(),
+        @StringRes val unusedNote: Int = 0,
     ) : Item
 
     class Section(@StringRes val title: Int, val items: List<Item>) : Item
@@ -81,25 +89,26 @@ object InputMethodSettings {
         if (n == null) values.first() else values.minBy { abs(it.toInt() - n) }
     }
 
-    private val PAGE_SIZES = (3..10).map { it.toString() }
+    private val PAGE_SIZES = EngineSettings.PAGE_SIZES.map { it.toString() }
 
-    private val SHUANGPIN = listOf(
-        "Ziranma" to R.string.shuangpin_ziranma,
-        "MS" to R.string.shuangpin_ms,
-        "Ziguang" to R.string.shuangpin_ziguang,
-        "ABC" to R.string.shuangpin_abc,
-        "Zhongwenzhixing" to R.string.shuangpin_zhongwenzhixing,
-        "PinyinJiajia" to R.string.shuangpin_pinyinjiajia,
-        "Xiaohe" to R.string.shuangpin_xiaohe,
-        "GB Standard" to R.string.shuangpin_gb,
+    // a label for each of EngineSettings.SCHEMES
+    private val SHUANGPIN = mapOf(
+        ShuangpinScheme.ZIRANMA to R.string.shuangpin_ziranma,
+        ShuangpinScheme.MICROSOFT to R.string.shuangpin_ms,
+        ShuangpinScheme.ZIGUANG to R.string.shuangpin_ziguang,
+        ShuangpinScheme.ABC to R.string.shuangpin_abc,
+        ShuangpinScheme.ZHONGWENZHIXING to R.string.shuangpin_zhongwenzhixing,
+        ShuangpinScheme.PINYINJIAJIA to R.string.shuangpin_pinyinjiajia,
+        ShuangpinScheme.XIAOHE to R.string.shuangpin_xiaohe,
+        ShuangpinScheme.GB to R.string.shuangpin_gb,
     )
 
-    // keys as fcitx's Fuzzy options have them (androidengine.h)
+    // keyed by Fuzzy's names, as the engine reads them (EngineSettings.parse)
     private val FUZZY = listOf(
-        "V_U" to "u ↔ v", "AN_ANG" to "an ↔ ang", "EN_ENG" to "en ↔ eng", "IAN_IANG" to "ian ↔ iang",
-        "IN_ING" to "in ↔ ing", "U_OU" to "u ↔ ou", "UAN_UANG" to "uan ↔ uang", "C_CH" to "c ↔ ch",
-        "F_H" to "f ↔ h", "L_N" to "l ↔ n", "L_R" to "l ↔ r", "S_SH" to "s ↔ sh", "Z_ZH" to "z ↔ zh",
-    )
+        Fuzzy.V_U to "u ↔ v", Fuzzy.AN_ANG to "an ↔ ang", Fuzzy.EN_ENG to "en ↔ eng", Fuzzy.IAN_IANG to "ian ↔ iang",
+        Fuzzy.IN_ING to "in ↔ ing", Fuzzy.U_OU to "u ↔ ou", Fuzzy.UAN_UANG to "uan ↔ uang", Fuzzy.C_CH to "c ↔ ch",
+        Fuzzy.F_H to "f ↔ h", Fuzzy.L_N to "l ↔ n", Fuzzy.L_R to "l ↔ r", Fuzzy.S_SH to "s ↔ sh", Fuzzy.Z_ZH to "z ↔ zh",
+    ).map { (fuzzy, label) -> fuzzy.name to label }
 
     /** [nineKeys]: the options 九键 has no use for greyed: slips onto a neighbouring key, u ↔ v (both on 8). */
     private fun pinyin(shuangpin: Boolean, nineKeys: Boolean = false) = buildList {
@@ -108,9 +117,9 @@ object InputMethodSettings {
                 Section(
                     R.string.im_section_scheme, listOf(
                         Choice(
-                            "ShuangpinProfile", R.string.im_shuangpin_scheme, SHUANGPIN.map { it.first },
-                            label = { ctx, v -> ctx.getString(SHUANGPIN.first { it.first == v }.second) },
-                            nearest = { v -> if (SHUANGPIN.any { it.first == v }) v else SHUANGPIN.first().first },
+                            EngineSettings.SHUANGPIN_PROFILE, R.string.im_shuangpin_scheme, EngineSettings.SCHEMES.keys.toList(),
+                            label = { ctx, v -> ctx.getString(SHUANGPIN.getValue(EngineSettings.SCHEMES.getValue(v))) },
+                            nearest = { v -> if (v in EngineSettings.SCHEMES) v else EngineSettings.ZIRANMA },
                         )
                     )
                 )
@@ -119,14 +128,17 @@ object InputMethodSettings {
         add(
             Section(
                 R.string.im_section_typing, listOfNotNull(
-                    Choice("PageSize", R.string.im_page_size, PAGE_SIZES, label = { _, v -> v }, nearest = numbers(3..10)),
-                    Toggle("Prediction", text(R.string.im_prediction), R.string.im_prediction_summary),
-                    Toggle("SentenceModel", text(R.string.im_sentence_model), R.string.im_sentence_model_summary),
-                    Toggle("Fuzzy/NG_GN", text(R.string.im_typos), R.string.im_typos_summary, unused = if (nineKeys) R.string.im_not_for_t9 else 0),
+                    Choice(EngineSettings.PAGE_SIZE, R.string.im_page_size, PAGE_SIZES, label = { _, v -> v }, nearest = numbers(EngineSettings.PAGE_SIZES)),
+                    Toggle(EngineSettings.PREDICTION, text(R.string.im_prediction), R.string.im_prediction_summary),
+                    Toggle(EngineSettings.SENTENCE_MODEL, text(R.string.im_sentence_model), R.string.im_sentence_model_summary),
+                    Toggle("${EngineSettings.FUZZY}/${EngineSettings.TYPOS}", text(R.string.im_typos), R.string.im_typos_summary, unused = if (nineKeys) R.string.im_not_for_t9 else 0),
                     // full pinyin's alone: 双拼 types its letters otherwise, the nine keys digits
-                    Toggle("LatinWords", text(R.string.im_latin_words), R.string.im_latin_words_summary, unused = if (nineKeys) R.string.im_not_for_t9 else 0)
+                    Toggle(EngineSettings.LATIN_WORDS, text(R.string.im_latin_words), R.string.im_latin_words_summary, unused = if (nineKeys) R.string.im_not_for_t9 else 0)
                         .takeUnless { shuangpin },
-                    Flags("Fuzzy", R.string.im_fuzzy, R.string.im_fuzzy_none, FUZZY, unused = if (nineKeys) setOf("V_U") else emptySet()),
+                    Flags(
+                        EngineSettings.FUZZY, R.string.im_fuzzy, R.string.im_fuzzy_none, FUZZY,
+                        unused = if (nineKeys) setOf(Fuzzy.V_U.name) else emptySet(), unusedNote = R.string.im_not_for_t9,
+                    ),
                 )
             )
         )
@@ -138,16 +150,16 @@ object InputMethodSettings {
     private val table = listOf(
         Section(
             R.string.im_section_typing, listOf(
-                Toggle("AutoSelect", text(R.string.im_auto_select), R.string.im_auto_select_summary),
-                Toggle("Hint", text(R.string.im_hint), R.string.im_hint_summary),
+                Toggle(TableSettings.AUTO_SELECT, text(R.string.im_auto_select), R.string.im_auto_select_summary),
+                Toggle(TableSettings.HINT, text(R.string.im_hint), R.string.im_hint_summary),
                 // Freq and Fast alike order by use (TableConf)
-                Toggle("OrderPolicy", text(R.string.im_order_by_use), read = { it != "No" }, write = { if (it) "Freq" else "No" }),
+                Toggle(TableSettings.ORDER_POLICY, text(R.string.im_order_by_use), read = { it != "No" }, write = { if (it) "Freq" else "No" }),
             )
         ),
         Section(
             R.string.im_section_phrases, listOf(
                 Choice(
-                    "AutoPhraseLength", R.string.im_auto_phrase_length, PHRASE_LENGTHS, R.string.im_auto_phrase_summary,
+                    TableSettings.AUTO_PHRASE_LENGTH, R.string.im_auto_phrase_length, PHRASE_LENGTHS, R.string.im_auto_phrase_summary,
                     label = { ctx, v ->
                         when (v) {
                             "0" -> ctx.getString(R.string.im_auto_phrase_off)
@@ -155,10 +167,18 @@ object InputMethodSettings {
                             else -> ctx.getString(R.string.im_auto_phrase_up_to, v.toInt())
                         }
                     },
-                    nearest = { v -> if (v.toIntOrNull()?.let { it < 0 } == true) "-1" else nearestOf(PHRASE_LENGTHS.dropLast(1))(v) },
+                    nearest = { v ->
+                        val n = v.toIntOrNull()
+                        when {
+                            // 1 makes no phrase, a phrase being two characters at least (TableSession): off
+                            n == null || n in 0..1 -> "0"
+                            n < 0 -> "-1"
+                            else -> nearestOf(PHRASE_LENGTHS)(v)
+                        }
+                    },
                 ),
                 Choice(
-                    "SaveAutoPhraseAfter", R.string.im_save_phrase_after, SAVE_AFTER,
+                    TableSettings.SAVE_AUTO_PHRASE_AFTER, R.string.im_save_phrase_after, SAVE_AFTER,
                     label = { ctx, v ->
                         val n = v.toInt()
                         if (n <= 0) ctx.getString(R.string.im_save_phrase_picked)
@@ -175,11 +195,14 @@ object InputMethodSettings {
         "Control" to R.string.im_modifier_control, "Super" to R.string.im_modifier_super,
     )
 
+    // androidkeyboard's own (androidkeyboard.h), not the engine's EngineSettings.PAGE_SIZES
+    private val WORD_HINT_SIZES = 3..10
+
     private val english = listOf(
         Section(
             R.string.im_section_typing, listOf(
                 Toggle("EnableWordHint", text(R.string.im_word_hint), R.string.im_word_hint_summary),
-                Choice("PageSize", R.string.im_word_hint_size, PAGE_SIZES, label = { _, v -> v }, nearest = numbers(3..10)),
+                Choice("PageSize", R.string.im_word_hint_size, WORD_HINT_SIZES.map { it.toString() }, label = { _, v -> v }, nearest = numbers(WORD_HINT_SIZES)),
                 Toggle("EditorControlledWordHint", text(R.string.im_word_hint_editor), R.string.im_word_hint_editor_summary),
                 Toggle("InsertSpace", text(R.string.im_insert_space)),
             )
@@ -196,12 +219,15 @@ object InputMethodSettings {
         ),
     )
 
+    /** The app's own input methods, each with a page in [of]. */
+    val BUILT_IN: List<String> = listOf(Engines.PINYIN, Engines.T9, Engines.SHUANGPIN) + Engines.TABLES.keys + InputMethodNames.KEYBOARD
+
     /** The page of [uniqueName], or null for an input method the app does not know. */
     fun of(uniqueName: String): List<Item>? = when (uniqueName) {
-        "engine-pinyin" -> pinyin(shuangpin = false)
-        "engine-t9" -> pinyin(shuangpin = false, nineKeys = true)
-        "engine-shuangpin" -> pinyin(shuangpin = true)
-        "keyboard-us" -> english
+        Engines.PINYIN -> pinyin(shuangpin = false)
+        Engines.T9 -> pinyin(shuangpin = false, nineKeys = true)
+        Engines.SHUANGPIN -> pinyin(shuangpin = true)
+        InputMethodNames.KEYBOARD -> english
         else -> if (uniqueName.startsWith("engine-")) table else null
     }
 
@@ -217,12 +243,14 @@ object InputMethodSettings {
                         setTitle(item.title)
                         isIconSpaceReserved = false
                     }
-                    screen.addPreference(category)
+                    into(category)
                     item.items.forEach { add(it, category::addPreference) }
                 }
                 is Toggle -> {
                     val raw = raw(item.key)
                     into(SwitchPreferenceCompat(context).apply {
+                        // the key a search result names it by (SettingsIndex.Target); still never stored
+                        key = item.key
                         isPersistent = false
                         isIconSpaceReserved = false
                         isSingleLineTitle = false
@@ -262,55 +290,61 @@ object InputMethodSettings {
                         }
                     })
                 }
-                is Flags -> {
-                    val raws = item.flags.map { raw("${item.path}/${it.first}") }
-                    into(object : Preference(context) {
-                        fun refresh() {
-                            val on = item.flags.filterIndexed { i, _ -> raws[i].value == "True" }
-                            summary = if (on.isEmpty()) context.getString(item.none) else on.joinToString("  ") { it.second }
-                        }
-
-                        override fun onClick() {
-                            val checked = BooleanArray(raws.size) { raws[it].value == "True" }
-                            AlertDialog.Builder(context)
-                                .setTitle(title)
-                                .setView(flagList(context, item, checked))
-                                .setNegativeButton(android.R.string.cancel, null)
-                                .setPositiveButton(android.R.string.ok) { _, _ ->
-                                    checked.forEachIndexed { i, on -> raws[i].value = if (on) "True" else "False" }
-                                    refresh()
-                                    save()
-                                }
-                                .show()
-                        }
-                    }.apply {
-                        isPersistent = false
-                        isIconSpaceReserved = false
-                        setTitle(item.title)
-                        refresh()
-                    })
-                }
+                is Flags -> into(flagsPreference(context, item, item.flags.map { raw("${item.path}/${it.first}") }, save))
             }
         }
         items.forEach { add(it, screen::addPreference) }
         return screen
     }
 
-    private fun choiceSummary(context: Context, item: Choice): Preference.SummaryProvider<ListPreference> =
-        if (item.message == 0) {
-            ListPreference.SimpleSummaryProvider.getInstance()
-        } else {
-            val message = context.getString(item.message)
-            Preference.SummaryProvider<ListPreference> { "${it.entry}\n$message" }
+    /** [item] as one preference over [raws], one for each of its flags, picked in a dialog; [save] called after each change. */
+    private fun flagsPreference(context: Context, item: Flags, raws: List<RawConfig>, save: () -> Unit): Preference =
+        object : Preference(context) {
+            fun refresh() {
+                val on = item.flags.filterIndexed { i, _ -> raws[i].value == "True" }
+                summary = if (on.isEmpty()) context.getString(item.none) else on.joinToString("  ") { it.second }
+            }
+
+            override fun onClick() {
+                val checked = BooleanArray(raws.size) { raws[it].value == "True" }
+                AlertDialog.Builder(context)
+                    .setTitle(title)
+                    .setView(flagList(context, item, checked))
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton(android.R.string.ok) { _, _ ->
+                        checked.forEachIndexed { i, on -> raws[i].value = if (on) "True" else "False" }
+                        refresh()
+                        save()
+                    }
+                    .show()
+            }
+        }.apply {
+            key = item.path
+            isPersistent = false
+            isIconSpaceReserved = false
+            setTitle(item.title)
+            refresh()
         }
+
+    private fun choiceSummary(context: Context, item: Choice): Preference.SummaryProvider<ListPreference> {
+        val simple = ListPreference.SimpleSummaryProvider.getInstance()
+        return if (item.summary == 0) {
+            simple
+        } else {
+            val summary = context.getString(item.summary)
+            // the value as the simple provider words it: "Not set", not "null", for one not among the entries
+            Preference.SummaryProvider<ListPreference> { "${simple.provideSummary(it)}\n$summary" }
+        }
+    }
 
     /**
      * [item]'s flags as a list of check boxes over [checked], those it has no use for greyed and
      * marked so: a dialog's own multi-choice list cannot grey one.
      */
     private fun flagList(context: Context, item: Flags, checked: BooleanArray): ListView {
-        val note = context.getString(R.string.im_not_for_t9)
-        val labels = item.flags.map { (key, label) -> if (key in item.unused) "$label（$note）" else label }
+        val note = if (item.unusedNote == 0) null else context.getString(item.unusedNote)
+        // the note under the label: brackets around it would be one language's
+        val labels = item.flags.map { (key, label) -> if (key in item.unused && note != null) "$label\n$note" else label }
         val list = ListView(context)
         list.choiceMode = ListView.CHOICE_MODE_MULTIPLE
         list.adapter = object : ArrayAdapter<String>(context, android.R.layout.simple_list_item_multiple_choice, labels) {

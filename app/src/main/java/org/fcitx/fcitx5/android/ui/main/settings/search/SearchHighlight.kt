@@ -5,45 +5,55 @@
 package org.fcitx.fcitx5.android.ui.main.settings.search
 
 import android.os.SystemClock
+import androidx.fragment.app.Fragment
+import androidx.lifecycle.SavedStateHandle
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.fragment.findNavController
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceGroup
-import java.lang.ref.WeakReference
 
 /**
  * The setting a search result opens its page at: the page's fragment, once its preferences are
- * there (an input method's come after fcitx answers), scrolls to it and flashes it. The result's
- * page is the first to look after the result is picked, for a few seconds at most: a page opened
- * later some other way is not pointed at a setting the result's page did not have.
+ * there (an input method's come after fcitx answers), scrolls to it and flashes it. The setting's
+ * key is kept in the saved state of the result's own entry on the back stack, for a few seconds at
+ * most: no other page is pointed at it, and the result's page is not pointed at it long after.
  */
 object SearchHighlight {
 
-    private var title: String? = null
-    private var at = 0L
-    // weak: the result's page may be gone long before the next result is picked
-    private var page: WeakReference<PreferenceFragmentCompat>? = null
-
-    fun point(title: String?) {
-        this.title = title
-        at = SystemClock.uptimeMillis()
-        page = null
+    /** Has [entry], the page a search result has just opened, point at its preference [key], if any. */
+    fun point(entry: NavBackStackEntry, key: String?) {
+        if (key == null) return
+        entry.savedStateHandle[KEY] = key
+        entry.savedStateHandle[AT] = SystemClock.uptimeMillis()
     }
 
-    /** Whether a setting is waited for that no page has looked for yet. */
-    fun isWaiting(): Boolean = title != null && page == null && SystemClock.uptimeMillis() - at <= WAIT
+    /** Whether [fragment]'s page is still to point at a setting a search result opened it at. */
+    fun isWaiting(fragment: Fragment): Boolean =
+        fragment.findNavController().currentBackStackEntry?.let { isWaiting(it) } == true
 
-    /** Points [fragment] at the setting, if it has it and one is waited for. */
+    internal fun isWaiting(entry: NavBackStackEntry): Boolean {
+        val state = entry.savedStateHandle
+        return state.contains(KEY) && isFresh(state)
+    }
+
+    /** Points [fragment] at the setting its page is to point at, if it has it. */
     fun showIn(fragment: PreferenceFragmentCompat) {
-        val wanted = title ?: return
-        val owner = page
-        if (SystemClock.uptimeMillis() - at > WAIT || (owner != null && owner.get() !== fragment)) {
-            title = null
+        // posted from its view, so it may have left its FragmentManager, and with it the NavController
+        if (!fragment.isAdded) return
+        fragment.findNavController().currentBackStackEntry?.let { showIn(fragment, it) }
+    }
+
+    internal fun showIn(fragment: PreferenceFragmentCompat, entry: NavBackStackEntry) {
+        val state = entry.savedStateHandle
+        val key = state.get<String>(KEY) ?: return
+        if (!isFresh(state)) {
+            forget(state)
             return
         }
-        if (owner == null) page = WeakReference(fragment)
         val screen = fragment.preferenceScreen ?: return
-        val pref = find(screen, wanted) ?: return
-        title = null
+        val pref = screen.findPreference<Preference>(key) ?: return
+        forget(state)
         fragment.scrollToPreference(pref)
         val list = fragment.listView ?: return
         list.postDelayed({
@@ -55,14 +65,17 @@ object SearchHighlight {
         }, SETTLE)
     }
 
-    private fun find(group: PreferenceGroup, title: String): Preference? {
-        for (i in 0 until group.preferenceCount) {
-            val pref = group.getPreference(i)
-            if (pref.title?.toString() == title) return pref
-            if (pref is PreferenceGroup) find(pref, title)?.let { return it }
-        }
-        return null
+    // uptime goes on while the process is gone: a page brought back long after points at nothing
+    private fun isFresh(state: SavedStateHandle) = SystemClock.uptimeMillis() - (state.get<Long>(AT) ?: 0L) <= WAIT
+
+    private fun forget(state: SavedStateHandle) {
+        state.remove<String>(KEY)
+        state.remove<Long>(AT)
     }
+
+    // beside the route's own arguments in the entry's saved state: names no route has
+    private const val KEY = "search_highlight_key"
+    private const val AT = "search_highlight_at"
 
     private const val WAIT = 5000L
     private const val SETTLE = 250L
