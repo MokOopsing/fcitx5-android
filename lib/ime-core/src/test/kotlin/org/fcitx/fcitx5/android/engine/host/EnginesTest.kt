@@ -292,6 +292,32 @@ class EnginesTest : EnginesFixture() {
         assertEquals(listOf("好你"), engines.type("engine-wubi", "vbw").candidates)
     }
 
+    /**
+     * What one pinyin learned reorders another's next input, though that one read the same keys in
+     * the same context before: past the sentences too, where the words the keys start are listed.
+     * Forgotten here, as a pick would rise into the sentences, scored afresh at every key.
+     */
+    @Test
+    fun aPickInOnePinyinReordersTheNextInputOfAnother() {
+        val chars = "你拟泥尼逆腻昵倪妮霓"
+        val data = PinyinDataBuilder().unigram("<unk>", -7f, 0f)
+            .apply { chars.forEachIndexed { i, c -> unigram(c.toString(), -2f - i * 0.4f, 0f).entry(c.toString(), syl("ni")) } }
+            .build().toByteArray()
+        val load = { path: String -> if (path == Engines.PINYIN_DATA) ByteBuffer.wrap(data) else load(path) }
+        Engines(load, null).use { engines ->
+            engines.settings = EngineSettings(sentenceModel = false)
+            engines.onEvent(Engines.PINYIN, EngineEvent.PICK, engines.type(Engines.PINYIN, "ni").candidates.indexOf("昵"))
+            assertEquals(listOf("你", "昵", "拟", "泥", "尼", "逆", "腻"), engines.type(Engines.SHUANGPIN, "n").candidates)
+            engines.onEvent(Engines.SHUANGPIN, EngineEvent.RESET, 0)
+            engines.onEvent(Engines.PINYIN, EngineEvent.FORGET, engines.type(Engines.PINYIN, "ni").candidates.indexOf("昵"))
+            engines.onEvent(Engines.PINYIN, EngineEvent.RESET, 0)
+            val forgotten = listOf("你", "拟", "泥", "尼", "逆", "腻", "昵")
+            assertEquals(forgotten, engines.type(Engines.PINYIN, "n").candidates)
+            // 昵 at its own score again past the sentences too, not at the one the last "n" gave it
+            assertEquals(forgotten, engines.type(Engines.SHUANGPIN, "n").candidates)
+        }
+    }
+
     @Test
     fun aCandidatePinnedFromEitherPinyinIsSavedAndOfferedInBoth() {
         val saved = ArrayList<String>()

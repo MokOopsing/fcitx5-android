@@ -567,6 +567,9 @@ class PinyinSession(
     private fun clear() {
         input.setLength(0)
         lastRead = Read()
+        // the next input decodes afresh: what another input method learned or forgot since, with
+        // the user's words they share, would not reach the scores the decoder keeps from key to key
+        decoder.reset()
         nineKeys?.clear()
         pieces.clear()
         page = 0
