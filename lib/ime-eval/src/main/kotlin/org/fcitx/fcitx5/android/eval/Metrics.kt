@@ -50,17 +50,42 @@ object Metrics {
     const val ALL = "all"
 
     /**
-     * One [Score] per tag, in the order tags first appear in [samples], then [ALL]. Results are
-     * matched to samples by input, in order: the second sample typed `jingli` gets the second
-     * result for `jingli`, as the context set types one input after different contexts.
+     * One [Score] per tag of the samples of [half] (all of them if null), in the order tags first
+     * appear in [samples], then [ALL]. Results are matched to samples by input, in order: the
+     * second sample typed `jingli` gets the second result for `jingli`, as the context set types
+     * one input after different contexts.
      */
-    fun score(samples: List<Sample>, results: List<RunResult>): List<Score> {
-        val matched = samples.zip(match(samples, results))
+    fun score(samples: List<Sample>, results: List<RunResult>, half: String? = null): List<Score> {
+        val matched = matched(samples, results, half)
         val groups = matched.groupBy { it.first.tag }.toList() + (ALL to matched)
         return groups.map { (group, members) -> scoreGroup(group, members) }
     }
 
-    /** Each sample's result, as [score] matches them. */
+    /**
+     * The samples of [half], each with its result. Results of a run over all [samples] are matched
+     * over all of them, then the half taken: matched over the half alone, its first sample typed
+     * `jingli` would get the first result for `jingli`, which may be the other half's. Results of
+     * a run over the half are matched over the half.
+     */
+    private fun matched(samples: List<Sample>, results: List<RunResult>, half: String?): List<Pair<Sample, RunResult?>> {
+        val selected = Halves.select(samples, half)
+        if (half == null || !overAll(samples, selected, results)) return selected.zip(match(selected, results))
+        return samples.zip(match(samples, results)).filter { Halves.of(it.first) == half }
+    }
+
+    /**
+     * Whether [results] are of a run over all [samples] rather than over [half]: for some input,
+     * more results than [half] has samples typing it. Which inputs they cover cannot tell (the
+     * other half may have no input of its own), and an input the samples no longer have (results
+     * older than the set) tells nothing.
+     */
+    private fun overAll(samples: List<Sample>, half: List<Sample>, results: List<RunResult>): Boolean {
+        val inputs = samples.mapTo(HashSet()) { it.input }
+        val inHalf = half.groupingBy { it.input }.eachCount()
+        return results.groupingBy { it.input }.eachCount().any { (input, n) -> input in inputs && n > inHalf.getOrDefault(input, 0) }
+    }
+
+    /** Each sample's result, by input in order. */
     private fun match(samples: List<Sample>, results: List<RunResult>): List<RunResult?> {
         val byInput = results.groupBy { it.input }
         val taken = HashMap<String, Int>()
@@ -75,11 +100,11 @@ object Metrics {
      * groups them: on a few hundred samples a point up or down is as often chance as not, while
      * the samples that changed, and which way, tell (McNemar's test).
      */
-    fun flips(samples: List<Sample>, results: List<RunResult>, baseline: List<RunResult>): List<Flips> {
+    fun flips(samples: List<Sample>, results: List<RunResult>, baseline: List<RunResult>, half: String? = null): List<Flips> {
         fun first(result: RunResult, sample: Sample) = result.candidates.firstOrNull() == sample.expected
         // a sample one run lacks (a set grown since the baseline) is no flip either way: counted
         // as lost before, it would be won now, and could hide a real loss
-        val changed = samples.zip(match(samples, results)).zip(match(samples, baseline)) { (sample, now), before ->
+        val changed = matched(samples, results, half).zip(matched(samples, baseline, half)) { (sample, now), (_, before) ->
             if (now == null || before == null) null else Triple(sample.tag, first(now, sample), first(before, sample))
         }.filterNotNull()
         val groups = changed.groupBy { it.first }.toList() + (ALL to changed)

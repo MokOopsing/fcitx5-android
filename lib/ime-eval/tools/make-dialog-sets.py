@@ -3,7 +3,8 @@
 # SPDX-FileCopyrightText: Copyright 2026 Fcitx5 for Android Contributors
 """
 Makes two sets from LCCC-base's validation split (MIT; research use, so they only measure and help
-choose parameters; nothing the app ships is trained on it), with make-chat-set.py's runs and readings:
+choose parameters; nothing the app ships is trained on it), with make-chat-set.py's runs and readings
+(chat.py):
 
     python3 tools/make-dialog-sets.py lccc_base_valid.jsonl.gz <dict_sc.txt> <lm_sc.arpa> data/pinyin-dialog.tsv data/predict/chat.tsv
 
@@ -15,19 +16,13 @@ predict/chat.tsv (apart: not an input set): what follows after the first word of
 """
 import gzip
 import hashlib
-import importlib.util
 import json
-import os
 import re
 import sys
 
-spec = importlib.util.spec_from_file_location('chat', os.path.join(os.path.dirname(__file__), 'make-chat-set.py'))
-chat = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(chat)
+import chat
 
-KEEP_ONE_IN = 25
 BUCKET = 1  # pinyin-chat.tsv keeps bucket 0
-CONTEXT = 64
 
 DIALOG_HEADER = """# SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: Copyright (c) 2020 lemon234071 (LCCC, https://github.com/thu-coai/CDial-GPT)
@@ -49,7 +44,7 @@ PREDICT_HEADER = """# SPDX-License-Identifier: MIT
 
 
 def kept(part):
-    return int(hashlib.md5(part.encode()).hexdigest(), 16) % KEEP_ONE_IN == BUCKET
+    return int(hashlib.md5(part.encode()).hexdigest(), 16) % chat.KEEP_ONE_IN == BUCKET
 
 
 def turns(path):
@@ -70,14 +65,13 @@ def main(source, dictionary, arpa, dialog_out, predict_out):
             if chat.RUN.match(part) and part not in seen and kept(part):
                 seen.add(part)
                 words = split(part)
-                if words:
-                    if len(words) > 1:
-                        head = words[0]
-                        predict.append(f'{(before + head)[-CONTEXT:]}\t{part[len(head):]}')
-                    syllables = [read(w, ''.join(words[:i])) for i, w in enumerate(words)]
-                    if previous and None not in syllables:
-                        context = (previous + (' ' + before if before else ''))[-CONTEXT:]
-                        dialog.append('\t'.join([''.join(syllables).replace(' ', ''), part, 'dialog', context]))
+                if words and len(words) > 1:
+                    head = words[0]
+                    predict.append(f'{(before + head)[-chat.CONTEXT:]}\t{part[len(head):]}')
+                typed = read(part)
+                if previous and typed:
+                    context = (previous + (' ' + before if before else ''))[-chat.CONTEXT:]
+                    dialog.append('\t'.join([typed, part, 'dialog', context]))
             before += part
     with open(dialog_out, 'w', encoding='utf-8') as f:
         f.write(DIALOG_HEADER + '\n' + '\n'.join(dialog) + '\n')

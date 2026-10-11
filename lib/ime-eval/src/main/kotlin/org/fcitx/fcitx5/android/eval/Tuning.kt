@@ -25,8 +25,14 @@ import org.fcitx.fcitx5.android.engine.pinyin.PinyinSegmenter
  * [Penalties.neighbour] is chosen apart, as slips onto a neighbouring key are rarer than a
  * steady habit: the point that reads most of the [SlipSet.KEY] samples right while losing no
  * more than [MARGIN] of clean input to reading slips at all.
+ *
+ * The points of a grid do not depend on one another: [search] and [searchKeys] measure them on
+ * [threads] threads, each on data [load]ed for it, with the same results on any number.
  */
-class Tuning(private val data: PinyinData, private val clean: List<Sample>, slips: List<Sample>) {
+class Tuning(private val load: () -> PinyinData, private val clean: List<Sample>, slips: List<Sample>, private val threads: Int = 1) {
+
+    /** On [data] alone: one thread, as data is not to be shared between threads. */
+    constructor(data: PinyinData, clean: List<Sample>, slips: List<Sample>) : this({ data }, clean, slips)
 
     /** Per run, [hits] of [sizes] samples; a run with none has no rate and does not count. */
     data class Point(val penalties: Penalties, val hits: List<Int>, val sizes: List<Int>) {
@@ -36,34 +42,44 @@ class Tuning(private val data: PinyinData, private val clean: List<Sample>, slip
 
     private val fuzzy = slips.filter { it.tag.startsWith(SlipSet.FUZZY) }
     private val typos = slips.filter { it.tag.startsWith(SlipSet.TYPO) }
-    private val plain = PinyinSegmenter()
-    private val allFuzzy = PinyinSegmenter(Fuzzy.entries.toSet())
     private val runs = listOf(clean to false, clean to true, fuzzy to true, typos to false)
     private val keys = slips.filter { it.tag == SlipSet.KEY }
-    private val slipping = PinyinSegmenter(neighbours = true)
 
-    fun measure(penalties: Penalties, half: String): Point {
-        val hits = ArrayList<Int>()
-        val sizes = ArrayList<Int>()
-        for ((samples, fuzzyOn) in runs) {
-            val selected = Halves.select(samples, half)
-            val run = PinyinRun(data, if (fuzzyOn) allFuzzy else plain, penalties)
-            hits += selected.count { run.candidates(it.input).firstOrNull() == it.expected }
-            sizes += selected.size
+    /** What one thread measures with: its own data and segmenters. */
+    private inner class Runner(private val data: PinyinData) {
+        private val plain = PinyinSegmenter()
+        private val allFuzzy = PinyinSegmenter(Fuzzy.entries.toSet())
+        private val slipping = PinyinSegmenter(neighbours = true)
+
+        fun point(penalties: Penalties, half: String): Point {
+            val hits = ArrayList<Int>()
+            val sizes = ArrayList<Int>()
+            for ((samples, fuzzyOn) in runs) {
+                val selected = Halves.select(samples, half)
+                val run = PinyinRun(data, if (fuzzyOn) allFuzzy else plain, penalties)
+                hits += selected.count { run.candidates(it.input).firstOrNull() == it.expected }
+                sizes += selected.size
+            }
+            return Point(penalties, hits, sizes)
         }
-        return Point(penalties, hits, sizes)
+
+        fun keyPoint(penalties: Penalties, half: String, read: Boolean): Point {
+            val run = PinyinRun(data, if (read) slipping else plain, penalties)
+            val sets = listOf(clean, keys).map { Halves.select(it, half) }
+            return Point(penalties, sets.map { set -> set.count { run.candidates(it.input).firstOrNull() == it.expected } }, sets.map { it.size })
+        }
     }
+
+    private val runner by lazy { Runner(load()) }
+
+    fun measure(penalties: Penalties, half: String): Point = runner.point(penalties, half)
 
     /** Top1 of clean input and of input with a key slipped ([KEY_COLUMNS]), slips read or not. */
-    fun measureKeys(penalties: Penalties, half: String, read: Boolean): Point {
-        val run = PinyinRun(data, if (read) slipping else plain, penalties)
-        val sets = listOf(clean, keys).map { Halves.select(it, half) }
-        return Point(penalties, sets.map { set -> set.count { run.candidates(it.input).firstOrNull() == it.expected } }, sets.map { it.size })
-    }
+    fun measureKeys(penalties: Penalties, half: String, read: Boolean): Point = runner.keyPoint(penalties, half, read)
 
     /** [Penalties.neighbour] at each point of [grid], slips read, in the grid's order. */
     fun searchKeys(grid: List<Float> = KEY_GRID, half: String = Halves.TUNE): List<Point> =
-        grid.map { measureKeys(Penalties().copy(neighbour = it), half, read = true) }
+        dealt(grid, threads, { Runner(load()) }) { hand -> hand.map { keyPoint(Penalties().copy(neighbour = it), half, read = true) } }
 
     /**
      * Of [points], the one reading most slips right among those that keep clean input within
@@ -84,8 +100,8 @@ class Tuning(private val data: PinyinData, private val clean: List<Sample>, slip
     /** Every point of the grid on [half], best first; ties keep the grid's order. */
     fun search(grid: List<Float> = GRID, half: String = Halves.TUNE): List<Point> {
         val base = Penalties()
-        return grid.flatMap { f -> grid.map { t -> base.copy(fuzzy = f, typo = t) } }
-            .map { measure(it, half) }
+        val penalties = grid.flatMap { f -> grid.map { t -> base.copy(fuzzy = f, typo = t) } }
+        return dealt(penalties, threads, { Runner(load()) }) { hand -> hand.map { point(it, half) } }
             .sortedByDescending { it.mean ?: -1.0 }
     }
 

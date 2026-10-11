@@ -135,14 +135,14 @@ WORDS = [
 # the reading of a word rime_wanxiang lacks, where a character's commonest one is wrong
 READINGS = {
     "长相思": "chang'xiang'si", "长新冠": "chang'xin'guan", "长安的荔枝": "chang'an'de'li'zhi",
-    "打投": "da'tou", "重阳": "chong'yang", "行程码": "xing'cheng'ma", "数字游民": "shu'zi'you'min",
+    "打投": "da'tou", "行程码": "xing'cheng'ma", "数字游民": "shu'zi'you'min",
     "乘风破浪的姐姐": "cheng'feng'po'lang'de'jie'jie", "挖呀挖": "wa'ya'wa", "淡黄的长裙": "dan'huang'de'chang'qun",
     "一起爬山吗": "yi'qi'pa'shan'ma", "尊嘟假嘟": "zun'du'jia'du", "那咋了": "na'za'le", "哈基米们": "ha'ji'mi'men",
     "吗喽": "ma'lou", "包的": "bao'de", "因为他善": "yin'wei'ta'shan", "那我走": "na'wo'zou",
     "泼天的富贵": "po'tian'de'fu'gui", "命运的齿轮": "ming'yun'de'chi'lun", "秋天的第一杯奶茶": "qiu'tian'de'di'yi'bei'nai'cha",
     "小镇做题家": "xiao'zhen'zuo'ti'jia", "特种兵式旅游": "te'zhong'bing'shi'lv'you", "干饭人": "gan'fan'ren",
     "脱下长衫": "tuo'xia'chang'shan", "藏海传": "zang'hai'zhuan", "哪吒二": "ne'zha'er",
-    "鸽了": "ge'le", "麻了": "ma'le", "寄了": "ji'le", "丸辣": "wan'la", "阳了": "yang'le",
+    "鸽了": "ge'le", "麻了": "ma'le", "寄了": "ji'le", "丸辣": "wan'la",
 }
 
 
@@ -159,16 +159,17 @@ def read(paths):
     words = defaultdict(lambda: defaultdict(int))
     for p in paths:
         body = False
-        for line in open(p, encoding="utf-8"):
-            line = line.rstrip("\n")
-            if not body:
-                body = line == "..."
-                continue
-            f = line.split("\t")
-            if len(f) < 2 or not line or line.startswith("#"):
-                continue
-            n = int(f[2]) if len(f) > 2 and f[2].isdigit() else 0
-            words[f[0]]["'".join(toneless(s) for s in f[1].split())] += n
+        with open(p, encoding="utf-8") as lines:
+            for line in lines:
+                line = line.rstrip("\n")
+                if not body:
+                    body = line == "..."
+                    continue
+                f = line.split("\t")
+                if len(f) < 2 or not line or line.startswith("#"):
+                    continue
+                n = int(f[2]) if len(f) > 2 and f[2].isdigit() else 0
+                words[f[0]]["'".join(toneless(s) for s in f[1].split())] += n
     return {w: max(r, key=r.get) for w, r in words.items()}
 
 
@@ -181,6 +182,7 @@ def main(paths):
     print("# common. Made by tools/make-new-words-set.py, which holds the list.")
     seen = set()
     composed = []
+    samples = 0
     for word, year, context in WORDS:
         if word in seen:
             raise SystemExit(f"twice: {word}")
@@ -195,7 +197,8 @@ def main(paths):
             reading = "'".join(readings[c] for c in word)
             composed.append((word, reading))
         print(f"{reading.replace(chr(39), '')}\t{word}\ty{year}\t{context}")
-    print(f"{len(seen)} words, {len(composed)} read character by character:", file=sys.stderr)
+        samples += 1
+    print(f"{samples} words, {len(composed)} read character by character:", file=sys.stderr)
     for word, reading in composed:
         print(f"  {word}\t{reading}", file=sys.stderr)
 

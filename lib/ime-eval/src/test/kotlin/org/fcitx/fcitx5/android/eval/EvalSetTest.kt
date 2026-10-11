@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.eval
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -50,6 +51,13 @@ class EvalSetTest {
         assertEquals(listOf(RunResult("dz", listOf("地址 北京 海淀", "地址"), listOf(1))), RunResultFormat.parse(sequenceOf(line)))
     }
 
+    @Test
+    fun aBadResultLineIsNamedAsTheFileNumbersIt() {
+        // the blank line counted
+        val e = assertThrows(IllegalArgumentException::class.java) { RunResultFormat.parse(sequenceOf("nihao\t1\t你好", "", "no tab")) }
+        assertTrue(e.message, e.message!!.startsWith("line 3:"))
+    }
+
     /** The set is hand-written; keep typos in its structure from reaching a scoring run. */
     @Test
     fun thePinyinSetIsWellFormed() {
@@ -69,6 +77,10 @@ class EvalSetTest {
         val sets = File("data").listFiles { file -> file.name.endsWith(".tsv") }!!
         assertTrue(sets.any { it.name == "pinyin-chat.tsv" })
         for (set in sets) assertTrue(set.name, set.useLines { EvalSet.parse(it) }.isNotEmpty())
+        // 联想's sets are context<TAB>next, apart from the input sets
+        val predictSets = File("data/predict").listFiles { file -> file.name.endsWith(".tsv") }!!
+        assertTrue(predictSets.any { it.name == "chat.tsv" })
+        for (set in predictSets) assertTrue(set.name, set.useLines { PredictRun.parse(it) }.isNotEmpty())
     }
 
     /** The derived sets are made by commands from data/pinyin.tsv; a change to it must remake them. */

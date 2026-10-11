@@ -47,7 +47,7 @@ object SlipSet {
             if (changed.isEmpty()) return@mapNotNull null
             val (i, spelling) = changed[pick(sample.expected + kind, changed.size)]
             val at = reading[i]
-            Sample(sample.input.substring(0, at.at) + spelling + sample.input.substring(at.at + at.length), sample.expected, kind)
+            sample.copy(input = sample.input.substring(0, at.at) + spelling + sample.input.substring(at.at + at.length), tag = kind)
         }
     }
 
@@ -72,7 +72,7 @@ object SlipSet {
         val at = letters[pick(sample.expected + KEY, letters.size)]
         val around = KeyNeighbours.of(input[at])
         val slipped = around[pick(sample.expected + KEY + at, around.length)]
-        return Sample(input.substring(0, at) + slipped + input.substring(at + 1), sample.expected, KEY)
+        return sample.copy(input = input.substring(0, at) + slipped + input.substring(at + 1), tag = KEY)
     }
 
     private fun pick(key: String, size: Int): Int {

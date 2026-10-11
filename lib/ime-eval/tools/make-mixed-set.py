@@ -14,15 +14,11 @@ expected as written.
 """
 import gzip
 import hashlib
-import importlib.util
 import json
-import os
 import re
 import sys
 
-spec = importlib.util.spec_from_file_location('chat', os.path.join(os.path.dirname(__file__), 'make-chat-set.py'))
-chat = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(chat)
+import chat
 
 KEEP_ONE_IN = 3
 RUN = re.compile(r'([一-鿿]{2,8})([A-Za-z][A-Za-z0-9]{1,14})([一-鿿]{1,8})')
@@ -36,13 +32,7 @@ HEADER = """\
 
 
 def main(source, path, dictionary, arpa):
-    words, reading = chat.loaders(dictionary, arpa)
-
-    def read(run, before=''):
-        split = words(run)
-        syllables = split and [reading(word, before + ''.join(split[:i])) for i, word in enumerate(split)]
-        return None if not syllables or None in syllables else ''.join(syllables).replace(' ', '')
-
+    _, read = chat.loaders(dictionary, arpa)
     print(HEADER.format(source))
     seen = set()
     with gzip.open(path, 'rt', encoding='utf-8') as f:

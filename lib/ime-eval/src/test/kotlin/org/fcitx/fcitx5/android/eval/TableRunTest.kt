@@ -62,6 +62,25 @@ class TableRunTest {
         assertEquals(1, o.spared)
         // not after a word that commits itself, nor the last word
         assertEquals(0, run.type("你好工").spared)
+        // what the next key does after a word is found out once too: the same again types nothing
+        val again = run.type("你工")
+        assertEquals(1, again.spared)
+        assertEquals(0, again.actions)
+    }
+
+    @Test
+    fun aWordOutOfReachIsFoundOutOnce() {
+        // 乙 is the twelfth of a's candidates, one to a page: past the pages turned to find it
+        val crowded = "一二三四五六七八九十丁".fold(CodeTable.Builder().header("键码", "a").header("码长", "4")) { b, c -> b.entry("a", c.toString()) }
+            .entry("a", "乙").build().toByteArray().let { CodeTable.load(ByteBuffer.wrap(it)) }
+        val run = TableRun(crowded, TableOptions(pageSize = 1))
+        val once = run.type("乙")
+        assertEquals(1, once.missing)
+        assertTrue(once.actions > 0)
+        // not typed again, at the next cut or in the next text
+        val twice = run.type("乙乙")
+        assertEquals(2, twice.missing)
+        assertEquals(0, twice.actions)
     }
 
     @Test

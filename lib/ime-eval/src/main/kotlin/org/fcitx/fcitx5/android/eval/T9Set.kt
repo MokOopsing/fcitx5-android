@@ -14,8 +14,11 @@ import org.fcitx.fcitx5.android.engine.pinyin.T9Segmenter
  */
 object T9Set {
 
+    /** The scheme whose segmenter reads 简拼: [T9Segmenter]'s `abbreviations`. */
+    const val ABBREVIATING = "t9"
+
     /** The segmenters measured: `t9` reads 简拼 where no longer syllable starts, `t9-strict` only where nothing else is read. */
-    val SCHEMES = setOf("t9", "t9-strict")
+    val SCHEMES = setOf(ABBREVIATING, "t9-strict")
 
     fun convert(samples: List<Sample>): List<Sample> = samples.mapNotNull { sample ->
         val reading = ExactReading.of(sample) { !Syllables.spelling(it)[0].isUpperCase() } ?: return@mapNotNull null

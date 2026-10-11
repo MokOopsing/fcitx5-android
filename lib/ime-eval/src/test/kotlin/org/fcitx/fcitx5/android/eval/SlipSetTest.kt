@@ -65,6 +65,13 @@ class SlipSetTest {
     }
 
     @Test
+    fun theContextIsKept() {
+        val generated = SlipSet.generate(listOf(Sample("zhongguo", "中国", "daily", "我爱")))
+        assertEquals(setOf("fuzzy-z_zh", "typo-gn", "typo-on", SlipSet.KEY), generated.map { it.tag }.toSet())
+        assertTrue(generated.toString(), generated.all { it.context == "我爱" && it.expected == "中国" })
+    }
+
+    @Test
     fun theCommandWritesTheSet() {
         val set = tmp.newFile("set.tsv").apply { writeText("zhongguo\t中国\tdaily\n") }
         val out = tmp.newFile("slips.tsv")

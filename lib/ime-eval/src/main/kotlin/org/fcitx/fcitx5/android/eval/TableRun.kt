@@ -53,15 +53,19 @@ class TableRun(private val table: CodeTable, private val options: TableOptions) 
         val slowestKeyNanos: Long,
     ) {
         operator fun plus(o: Outcome) = Outcome(
-            chars + o.chars, missing + o.missing, words + o.words, keys + o.keys, first + o.first, auto + o.auto,
-            spared + o.spared, keyNanos + o.keyNanos, actions + o.actions, maxOf(slowestKeyNanos, o.slowestKeyNanos),
+            chars = chars + o.chars, missing = missing + o.missing, words = words + o.words, keys = keys + o.keys,
+            first = first + o.first, auto = auto + o.auto, spared = spared + o.spared, keyNanos = keyNanos + o.keyNanos,
+            actions = actions + o.actions, slowestKeyNanos = maxOf(slowestKeyNanos, o.slowestKeyNanos),
         )
 
         companion object {
-            val ZERO = Outcome(0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+            val ZERO = Outcome(
+                chars = 0, missing = 0, words = 0, keys = 0, first = 0, auto = 0, spared = 0, keyNanos = 0, actions = 0, slowestKeyNanos = 0,
+            )
         }
     }
 
+    // what [type] reports of the actions timed: it starts them afresh, [entries] only adds to them
     private var nanos = 0L
     private var actions = 0
     private var slowest = 0L
@@ -103,18 +107,22 @@ class TableRun(private val table: CodeTable, private val options: TableOptions) 
     /** The cheapest code for [word] and how it went, or null if none of its codes reaches it. */
     private fun typeWord(word: String): Pair<String, Typed>? {
         val codes = codes[word] ?: return null
-        return cheapest.getOrPut(word) {
-            codes.mapNotNull { code -> typeCode(code, word)?.let { code to it } }
-                .minWithOrNull(compareBy<Pair<String, Typed>> { it.second.keys }.thenBy { !it.second.first })
-        }
+        // not getOrPut, which takes a stored null (out of reach) for none and types the word again
+        if (word in cheapest) return cheapest[word]
+        return codes.mapNotNull { code -> typeCode(code, word)?.let { code to it } }
+            .minWithOrNull(compareBy<Pair<String, Typed>> { it.second.keys }.thenBy { !it.second.first })
+            .also { cheapest[word] = it }
     }
 
+    // as cheapest: by the code, the word and the key after it
+    private val commits = HashMap<Triple<String, String, Char>, Boolean>()
+
     /** Whether [word], first after [code], is committed by [next] starting the next code. */
-    private fun commitsOnTo(code: String, word: String, next: Char): Boolean {
+    private fun commitsOnTo(code: String, word: String, next: Char): Boolean = commits.getOrPut(Triple(code, word, next)) {
         val session = TableSession(dictionary, options)
         for (c in code) session.timed(Action.Key(c))
-        val s = session.timed(Action.Key(next))
-        return s.commit == word && s.preedit == next.toString()
+        val shown = session.timed(Action.Key(next))
+        shown.commit == word && shown.preedit == next.toString()
     }
 
     /** A cut of some text: the character offsets it is cut at, and each piece's word as typed (null: missing). */
@@ -218,22 +226,22 @@ class TableRun(private val table: CodeTable, private val options: TableOptions) 
             "plain" to TableOptions(),
         )
 
-        fun report(o: Outcome, e: EntryOutcome): String {
+        fun report(text: Outcome, sampled: EntryOutcome): String {
             fun pct(n: Int, of: Int) = if (of == 0) "-" else String.format(Locale.ROOT, "%.1f%%", 100.0 * n / of)
-            val typed = o.chars - o.missing
+            val typed = text.chars - text.missing
             return listOf(
-                "text: ${o.chars} characters, ${o.missing} not in the table, ${o.words} words",
-                "  first      ${pct(o.first, o.words)} of words (committed by itself: ${pct(o.auto, o.words)}, " +
-                    "by the next key: ${pct(o.spared, o.words)})",
-                "  keys/char  ${if (typed == 0) "-" else String.format(Locale.ROOT, "%.3f", o.keys.toDouble() / typed)}",
+                "text: ${text.chars} characters, ${text.missing} not in the table, ${text.words} words",
+                "  first      ${pct(text.first, text.words)} of words (committed by itself: ${pct(text.auto, text.words)}, " +
+                    "by the next key: ${pct(text.spared, text.words)})",
+                "  keys/char  ${if (typed == 0) "-" else String.format(Locale.ROOT, "%.3f", text.keys.toDouble() / typed)}",
                 "  latency    " + String.format(
                     Locale.ROOT,
                     "%.1f µs/action mean, %.2f ms slowest",
-                    o.keyNanos / 1000.0 / maxOf(o.actions, 1),
-                    o.slowestKeyNanos / 1e6,
+                    text.keyNanos / 1000.0 / maxOf(text.actions, 1),
+                    text.slowestKeyNanos / 1e6,
                 ),
-                "entries: ${e.entries} sampled, first ${pct(e.first, e.entries)}, on page one ${pct(e.firstPage, e.entries)}, " +
-                    "unreachable ${pct(e.unreachable, e.entries)}",
+                "entries: ${sampled.entries} sampled, first ${pct(sampled.first, sampled.entries)}, on page one ${pct(sampled.firstPage, sampled.entries)}, " +
+                    "unreachable ${pct(sampled.unreachable, sampled.entries)}",
             ).joinToString("\n")
         }
     }

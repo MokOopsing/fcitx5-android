@@ -71,6 +71,8 @@ class ReportTest {
         val table = Report.flips(listOf(Flips("chat", 1064, 30, 10), Flips(Metrics.ALL, 1064, 30, 10)))
         assertEquals("30", column(table, 1, "won"))
         assertEquals("10", column(table, 1, "lost"))
-        assertEquals("0.0022", column(table, 1, "p"))
+        // in full, not rounded: the release gate compares it with 0.05 / 6
+        assertEquals(Flips("chat", 1064, 30, 10).p, column(table, 1, "p").toDouble(), 0.0)
+        assertTrue(column(table, 1, "p"), column(table, 1, "p").startsWith("0.00222"))
     }
 }

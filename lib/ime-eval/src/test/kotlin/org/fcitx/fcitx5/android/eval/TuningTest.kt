@@ -15,6 +15,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicInteger
 
 class TuningTest {
 
@@ -80,6 +81,19 @@ class TuningTest {
         // a tie goes to the largest penalty: it prunes the most
         val tied = Tuning.Point(Penalties(neighbour = -0.5f), listOf(180, 120), listOf(200, 200))
         assertEquals(strict, tuning.chooseKeys(listOf(tied, strict), off))
+    }
+
+    @Test
+    fun threadsChangeNothingButTheTime() {
+        val half = Halves.of(clean)
+        val one = Tuning(PinyinData.load(ByteBuffer.wrap(bytes)), listOf(clean), slips)
+        val loads = AtomicInteger()
+        val three = Tuning({ loads.incrementAndGet(); PinyinData.load(ByteBuffer.wrap(bytes)) }, listOf(clean), slips, threads = 3)
+        val grid = listOf(-1f, -20f, -3f)
+        assertEquals(one.search(grid, half), three.search(grid, half))
+        // three threads, each on data loaded for it: a load each at least, however many a later search reuses
+        assertTrue("${loads.get()} loads", loads.get() >= 3)
+        assertEquals(one.searchKeys(listOf(-1f, -30f, 0f), half), three.searchKeys(listOf(-1f, -30f, 0f), half))
     }
 
     @Test

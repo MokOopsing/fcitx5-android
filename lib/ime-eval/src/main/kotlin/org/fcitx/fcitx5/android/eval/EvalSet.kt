@@ -46,8 +46,8 @@ object RunResultFormat {
             .joinToString("\t")
 
     fun parse(lines: Sequence<String>): List<RunResult> = lines
-        .filter { it.isNotBlank() }
-        .mapIndexed { index, line ->
+        .mapIndexedNotNull { index, line ->
+            if (line.isBlank()) return@mapIndexedNotNull null
             val fields = line.split('\t')
             require(fields.size >= 2) { "line ${index + 1}: expected input<TAB>latencies[<TAB>candidates], got \"$line\"" }
             val latencies = if (fields[1].isEmpty()) emptyList() else fields[1].split(',').map { it.toLong() }

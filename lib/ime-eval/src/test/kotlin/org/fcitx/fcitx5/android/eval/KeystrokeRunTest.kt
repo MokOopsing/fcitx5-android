@@ -73,6 +73,19 @@ class KeystrokeRunTest {
     }
 
     @Test
+    fun theFirstIsWhatTheRefinerPutsFirstOnceTheUserPauses() {
+        var asked = 0
+        // two slices to decide, then the decoder's last reading over its first, 你好
+        val session = PinyinSession(data, PinyinSegmenter(), refiner = { _, readings, _, _ -> if (++asked < 3) null else readings.lastIndex })
+        val outcome = KeystrokeRun(session).type(Sample("nihao", "你好", "daily"))
+        assertEquals(3, asked)
+        assertFalse(outcome.first)
+        // still on the first page: a pick
+        assertTrue(outcome.reached)
+        assertEquals(6, outcome.keys)
+    }
+
+    @Test
     fun aPieceIsPickedWhenTheWholeIsNotShown() {
         // 拟好 is not among the best readings: 拟 is picked, then 好
         val outcome = run(pageSize = 20).type(Sample("nihao", "拟好", "daily"))
@@ -116,14 +129,14 @@ class KeystrokeRunTest {
         val rows = Learning(data, PinyinSegmenter()).measure(listOf(sample, Sample("nihao", "你好", "daily"))).toMap()
         assertEquals(6, rows.size)
         // picked over 你好, then learned as one word: first the next time
-        assertFalse(rows.getValue("tune, typed once").single().first)
-        assertTrue(rows.getValue("tune, typed again").single().first)
-        assertFalse(rows.getValue("tune, learning nothing").single().first)
+        assertFalse(rows.getValue("tune, typed once")!!.single().first)
+        assertTrue(rows.getValue("tune, typed again")!!.single().first)
+        assertFalse(rows.getValue("tune, learning nothing")!!.single().first)
         // the other sentence is still read right after it
-        assertTrue(rows.getValue("held-out, learning nothing").single().first)
-        assertTrue(rows.getValue("held-out, learning").single().first)
+        assertTrue(rows.getValue("held-out, learning nothing")!!.single().first)
+        assertTrue(rows.getValue("held-out, learning")!!.single().first)
         // after the tune half, nihao is 尼好: the same keys, and the user picked it twice
-        assertFalse(rows.getValue("held-out, tune learned").single().first)
+        assertFalse(rows.getValue("held-out, tune learned")!!.single().first)
     }
 
     @Test

@@ -4,9 +4,15 @@
  */
 package org.fcitx.fcitx5.android.eval
 
+import org.fcitx.fcitx5.android.engine.data.PinyinData
+import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
+import org.fcitx.fcitx5.android.engine.pinyin.Syllables
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.nio.ByteBuffer
+import java.util.Locale
 
 class PredictRunTest {
 
@@ -26,5 +32,46 @@ class PredictRunTest {
         )
         assertThrows(IllegalArgumentException::class.java) { PredictRun.parse(sequenceOf("no tab")) }
         assertThrows(IllegalArgumentException::class.java) { PredictRun.parse(sequenceOf("我\t")) }
+        // the line as the file numbers it, its blank and comment lines counted
+        val e = assertThrows(IllegalArgumentException::class.java) { PredictRun.parse(sequenceOf("# header", "", "no tab")) }
+        assertTrue(e.message, e.message!!.startsWith("line 3:"))
+    }
+
+    @Test
+    fun theModelsFollowersAreOfferedMostProbableFirst() {
+        val data = PinyinData.load(
+            ByteBuffer.wrap(
+                PinyinDataBuilder()
+                    .unigram("<unk>", -7f, 0f)
+                    .unigram("你", -2f, 0f)
+                    .unigram("好", -2.5f, 0f)
+                    .unigram("们", -3f, 0f)
+                    .bigram("你", "好", -0.5f, 0f)
+                    .bigram("你", "们", -1f, 0f)
+                    .entry("你", intArrayOf(Syllables.id("ni")))
+                    .entry("好", intArrayOf(Syllables.id("hao")))
+                    .entry("们", intArrayOf(Syllables.id("men")))
+                    .build().toByteArray(),
+            ),
+        )
+        val run = PredictRun(data)
+        assertEquals(listOf("好", "们"), run.offers("你"))
+        // nothing to go on from: no text, or text ending in what the model has no word for
+        assertEquals(emptyList<String>(), run.offers(""))
+        assertEquals(emptyList<String>(), run.offers("你 "))
+    }
+
+    @Test
+    fun theScoreReadsTheSameWhateverTheLocale() {
+        val format = Locale.getDefault(Locale.Category.FORMAT)
+        try {
+            // a German host wrote 0,75
+            Locale.setDefault(Locale.Category.FORMAT, Locale.GERMANY)
+            assertEquals("samples 4  top1 25.0%  top5 50.0%  chars saved per sample 0.75", PredictRun.Score(4, 1, 2, 3).toString())
+        } finally {
+            Locale.setDefault(Locale.Category.FORMAT, format)
+        }
+        // no samples, no rates: not NaN
+        assertEquals("samples 0  top1 -  top5 -  chars saved per sample -", PredictRun.Score(0, 0, 0, 0).toString())
     }
 }

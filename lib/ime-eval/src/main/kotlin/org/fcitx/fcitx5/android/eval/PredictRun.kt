@@ -4,11 +4,11 @@
  */
 package org.fcitx.fcitx5.android.eval
 
-import org.fcitx.fcitx5.android.engine.data.NgramModel.Companion.NO_WORD
 import org.fcitx.fcitx5.android.engine.data.PinyinData
 import org.fcitx.fcitx5.android.engine.lattice.Predictor
 import org.fcitx.fcitx5.android.engine.lattice.TextWords
 import org.fcitx.fcitx5.android.engine.rerank.SentenceModel
+import java.util.Locale
 import kotlin.math.ln
 
 /** A prediction sample: what was written, and what came next. */
@@ -30,8 +30,7 @@ class PredictRun(data: PinyinData, model: SentenceModel? = null, private val wei
 
     fun offers(context: String): List<String> {
         val words = textWords.lastTwo(context)
-        val prev = words.lastOrNull() ?: NO_WORD
-        val prev2 = if (words.size == 2) words[0] else NO_WORD
+        val (prev2, prev) = TextWords.previous(words)
         val offered = predictor.predict(prev2, prev)
         val scorer = scorer ?: return offered.map { it.text }.distinct()
         if (offered.isEmpty()) return emptyList()
@@ -42,9 +41,13 @@ class PredictRun(data: PinyinData, model: SentenceModel? = null, private val wei
     /** Hits among the first 1 and [SHOWN] offers, and the characters the first hit saves, summed. */
     data class Score(val samples: Int, val top1: Int, val shown: Int, val saved: Int) {
         override fun toString() =
-            "samples $samples  top1 ${percent(top1)}  top$SHOWN ${percent(shown)}  chars saved per sample ${"%.2f".format(saved.toDouble() / samples)}"
+            "samples $samples  top1 ${percent(top1)}  top$SHOWN ${percent(shown)}  chars saved per sample ${perSample("%.2f", saved.toDouble())}"
 
-        private fun percent(n: Int) = "%.1f%%".format(100.0 * n / samples)
+        private fun percent(n: Int) = perSample("%.1f%%", 100.0 * n)
+
+        // `-` for no samples rather than NaN, as the other reports print it
+        private fun perSample(format: String, total: Double) =
+            if (samples == 0) "-" else String.format(Locale.ROOT, format, total / samples)
     }
 
     companion object {
@@ -67,7 +70,8 @@ class PredictRun(data: PinyinData, model: SentenceModel? = null, private val wei
         }
 
         /** `context<TAB>next` a line; `#` starts a comment. */
-        fun parse(lines: Sequence<String>): List<Continuation> = lines.filter { it.isNotBlank() && !it.startsWith("#") }.mapIndexed { i, line ->
+        fun parse(lines: Sequence<String>): List<Continuation> = lines.mapIndexedNotNull { i, line ->
+            if (line.isBlank() || line.startsWith("#")) return@mapIndexedNotNull null
             val f = line.split('\t')
             require(f.size == 2 && f[1].isNotEmpty()) { "line ${i + 1}: expected context<TAB>next, got \"$line\"" }
             Continuation(f[0], f[1])

@@ -29,38 +29,38 @@ object ExactReading {
         return cut(segmenter.segment(sample.input), count, keep)
     }
 
-    private fun cut(g: SyllableGraph, count: Int, keep: (Int) -> Boolean): List<Typed>? {
-        val n = g.end
+    private fun cut(graph: SyllableGraph, count: Int, keep: (Int) -> Boolean): List<Typed>? {
+        val n = graph.end
         // ways[at][k]: cuts of the input from at into k syllables, capped at 2; the last one found is kept
         val ways = Array(n + 1) { IntArray(count + 1) }
         val next = Array(n + 1) { IntArray(count + 1) }
         val syllable = Array(n + 1) { IntArray(count + 1) }
         ways[n][0] = 1
-        for (at in n - 1 downTo g.start) {
-            for ((to, s) in exactFrom(g, at, keep)) {
+        for (at in n - 1 downTo graph.start) {
+            for ((to, id) in exactFrom(graph, at, keep)) {
                 for (k in 1..count) {
                     if (ways[to][k - 1] == 0) continue
                     ways[at][k] = minOf(2, ways[at][k] + ways[to][k - 1])
                     next[at][k] = to
-                    syllable[at][k] = s
+                    syllable[at][k] = id
                 }
             }
         }
-        if (ways[g.start][count] != 1) return null
+        if (ways[graph.start][count] != 1) return null
         val out = ArrayList<Typed>()
-        var at = g.start
+        var at = graph.start
         for (k in count downTo 1) {
             val to = next[at][k]
-            out += Typed(syllable[at][k], at, g.text(at, to).length)
+            out += Typed(syllable[at][k], at, graph.text(at, to).length)
             at = to
         }
         return out
     }
 
     /** Where each syllable spelt exactly from [at] leads, with the syllable, for those [keep] allows. */
-    private fun exactFrom(g: SyllableGraph, at: Int, keep: (Int) -> Boolean): List<Pair<Int, Int>> =
-        g.edges(at).filter { g.kind(it) == Kind.SYLLABLE }.flatMap { e ->
-            val m = g.matches(e)
-            (0 until m.size).filter { m.flags(it) == 0 && keep(m.syllable(it)) }.map { g.to(e) to m.syllable(it) }
+    private fun exactFrom(graph: SyllableGraph, at: Int, keep: (Int) -> Boolean): List<Pair<Int, Int>> =
+        graph.edges(at).filter { graph.kind(it) == Kind.SYLLABLE }.flatMap { edge ->
+            val matches = graph.matches(edge)
+            (0 until matches.size).filter { matches.flags(it) == 0 && keep(matches.syllable(it)) }.map { graph.to(edge) to matches.syllable(it) }
         }
 }

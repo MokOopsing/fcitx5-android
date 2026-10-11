@@ -29,22 +29,28 @@ PER_WORD = 2
 
 
 def curated(path):
+    """the curated words and their readings, and the date of the newest"""
     words = {}
-    for line in open(path, encoding='utf-8'):
-        if line.startswith('#') or not line.strip():
-            continue
-        f = line.rstrip('\n').split('\t')
-        words[f[0]] = f[1]
-    return words
+    newest = ''
+    with open(path, encoding='utf-8') as lines:
+        for line in lines:
+            if line.startswith('#') or not line.strip():
+                continue
+            f = line.rstrip('\n').split('\t')
+            words[f[0]] = f[1]
+            if len(f) > 3:
+                newest = max(newest, f[3])
+    return words, newest
 
 
 def readings(paths):
     by_word = defaultdict(set)
     for path in paths:
-        for line in open(path, encoding='utf-8'):
-            f = line.split()
-            if len(f) >= 2:
-                by_word[f[0]].add(f[1])
+        with open(path, encoding='utf-8') as lines:
+            for line in lines:
+                f = line.split()
+                if len(f) >= 2:
+                    by_word[f[0]].add(f[1])
     return by_word
 
 
@@ -90,8 +96,10 @@ def alone(text, at, length, dicts):
 
 
 def main():
+    if len(sys.argv) < 5 or sys.argv[1] not in ('words', 'set'):
+        sys.exit(f'usage: {sys.argv[0]} words|set <add.tsv> <dict>... <lm.arpa (words) or collide-examples.tsv (set)>')
     mode, add, rest = sys.argv[1], sys.argv[2], sys.argv[3:]
-    new = curated(add)
+    new, newest = curated(add)
     dicts = readings(rest[:-1])
     common = collisions(new, dicts)
     if mode == 'words':
@@ -100,23 +108,26 @@ def main():
             if scores.get(word, -99) >= MIN_UNIGRAM:
                 print(word)
         return
+    # which add.tsv the set was made from: as of its newest word, and whether it has 2-char ones
+    two = ', the 2-char ones too' if any(len(word) == 2 for word in new) else ''
     print('# SPDX-License-Identifier: LGPL-2.1-or-later')
     print('# SPDX-FileCopyrightText: Copyright 2026 Fcitx5 for Android Contributors')
-    print('# made by tools/make-collision-set.py: input, expected, tag, context')
-    for line in open(rest[-1], encoding='utf-8'):
-        f = line.rstrip('\n').split('\t')
-        word, sentences = f[0], f[1:]
-        if word not in common:
-            continue
-        reading = next(iter(dicts[word])).replace("'", '')
-        taken = 0
-        for sentence in sentences:
-            at = next((i for i in occurrences(sentence, word) if alone(sentence, i, len(word), dicts)), -1)
-            if at < 0 or taken == PER_WORD:
+    print(f'# made by tools/make-collision-set.py (the words of add.tsv as of {newest}{two}): input, expected, tag, context')
+    with open(rest[-1], encoding='utf-8') as lines:
+        for line in lines:
+            f = line.rstrip('\n').split('\t')
+            word, sentences = f[0], f[1:]
+            if word not in common:
                 continue
-            taken += 1
-            context = sentence[max(0, at - CONTEXT):at].replace('\t', ' ')
-            print(f'{reading}\t{word}\tcollide\t{context}' if context else f'{reading}\t{word}\tcollide')
+            reading = next(iter(dicts[word])).replace("'", '')
+            taken = 0
+            for sentence in sentences:
+                at = next((i for i in occurrences(sentence, word) if alone(sentence, i, len(word), dicts)), -1)
+                if at < 0 or taken == PER_WORD:
+                    continue
+                taken += 1
+                context = sentence[max(0, at - CONTEXT):at].replace('\t', ' ')
+                print(f'{reading}\t{word}\tcollide\t{context}' if context else f'{reading}\t{word}\tcollide')
 
 
 if __name__ == '__main__':

@@ -4,7 +4,6 @@
  */
 package org.fcitx.fcitx5.android.eval
 
-import org.fcitx.fcitx5.android.engine.data.NgramModel.Companion.NO_WORD
 import org.fcitx.fcitx5.android.engine.data.PinyinData
 import org.fcitx.fcitx5.android.engine.lattice.Predictor
 import org.fcitx.fcitx5.android.engine.lattice.TextWords
@@ -39,8 +38,7 @@ class PredictLearning(private val data: PinyinData, private val weight: Float) {
         val continuations = continuations(samples)
         val offers = continuations.map { c ->
             val words = textWords.lastTwo(c.context)
-            val prev = words.lastOrNull() ?: NO_WORD
-            val prev2 = if (words.size == 2) words[0] else NO_WORD
+            val (prev2, prev) = TextWords.previous(words)
             predictor.predict(prev2, prev).map { it.text }.distinct()
         }
         return PredictRun.score(continuations, offers)

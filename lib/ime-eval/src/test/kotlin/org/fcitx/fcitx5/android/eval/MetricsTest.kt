@@ -26,6 +26,8 @@ class MetricsTest {
 
     private fun scores() = Metrics.score(samples, results).associateBy { it.group }
 
+    private fun result(input: String, first: String) = RunResult(input, listOf(first), emptyList())
+
     @Test
     fun groupsFollowTheOrderTagsFirstAppearThenAll() {
         assertEquals(
@@ -73,6 +75,39 @@ class MetricsTest {
         val s = listOf(Sample("a", "啊", "t"))
         val r = listOf(RunResult("a", listOf("阿姨你好吗"), emptyList()))
         assertEquals(0.0, Metrics.score(s, r).first().charAccuracy, 0.0)
+    }
+
+    @Test
+    fun aHalfIsMatchedToItsOwnResultsWhicheverRunTheyCameFrom() {
+        // 经历 and 尼好 are in the tune half, 经理 and 先 in the held-out one
+        val s = listOf(Sample("jingli", "经历", "pair"), Sample("jingli", "经理", "pair"), Sample("xian", "先", "t"), Sample("nihao", "尼好", "t"))
+        val whole = listOf(result("jingli", "经历"), result("jingli", "经理"), result("xian", "先"), result("nihao", "尼好"))
+        val heldOut = listOf(result("jingli", "经理"), result("xian", "先"))
+        // over the whole set, 经理 is the second jingli typed; over its half, the first
+        assertEquals(1.0, Metrics.score(s, whole, Halves.HELD_OUT).last().top1, 0.0)
+        assertEquals(1.0, Metrics.score(s, heldOut, Halves.HELD_OUT).last().top1, 0.0)
+        assertEquals(1.0, Metrics.score(s, whole, Halves.TUNE).last().top1, 0.0)
+        // a run of each against the other: the same samples, the same results
+        assertEquals(Flips(Metrics.ALL, 2, 0, 0), Metrics.flips(s, whole, heldOut, Halves.HELD_OUT).last())
+    }
+
+    @Test
+    fun aHalfRunOlderThanAChangeToItsSetIsStillMatchedOverTheHalf() {
+        // 经理 and 先 are the held-out half; shan was in it when it ran, and is in the set no more
+        val s = listOf(Sample("jingli", "经历", "pair"), Sample("jingli", "经理", "pair"), Sample("xian", "先", "t"))
+        val heldOut = listOf(result("jingli", "经理"), result("xian", "先"), result("shan", "删"))
+        // matched over the whole set, 经理's result would go to 经历, and 经理 would have none
+        assertEquals(1.0, Metrics.score(s, heldOut, Halves.HELD_OUT).last().top1, 0.0)
+    }
+
+    @Test
+    fun aWholeRunIsKnownByItsCountsWhenTheOtherHalfHasNoInputOfItsOwn() {
+        // the tune half is 经历 alone, and jingli is typed in the held-out half too
+        val s = listOf(Sample("jingli", "经历", "pair"), Sample("jingli", "经理", "pair"), Sample("xian", "先", "t"))
+        val whole = listOf(result("jingli", "经历"), result("jingli", "经理"), result("xian", "先"))
+        // two results for jingli, which the held-out half types once
+        assertEquals(1.0, Metrics.score(s, whole, Halves.HELD_OUT).last().top1, 0.0)
+        assertEquals(1.0, Metrics.score(s, whole, Halves.TUNE).last().top1, 0.0)
     }
 
     @Test

@@ -22,13 +22,14 @@ class ParallelTest {
 
     @Test
     fun eachThreadHasItsOwnWorker() {
-        val workers = Collections.synchronizedList(ArrayList<StringBuilder>())
-        val hands = dealt((0 until 7).toList(), 3, { StringBuilder().also { workers += it } }) { hand ->
-            hand.map { append(it); toString() }
+        val workers = Collections.synchronizedList(ArrayList<MutableList<Int>>())
+        val seen = dealt((0 until 7).toList(), 3, { ArrayList<Int>().also { workers += it } }) { hand ->
+            hand.map { add(it); toList() }
         }
         assertEquals(3, workers.size)
-        // dealt a card at a time: the first thread has 0, 3 and 6
-        assertEquals(listOf("0", "1", "2", "03", "14", "25", "036"), hands)
+        // each item reached one worker only, whichever, and that worker had seen no other's
+        assertEquals((0 until 7).toList(), workers.flatten().sorted())
+        seen.forEachIndexed { item, upTo -> assertEquals(upTo, workers.single { item in it }.take(upTo.size)) }
     }
 
     @Test
