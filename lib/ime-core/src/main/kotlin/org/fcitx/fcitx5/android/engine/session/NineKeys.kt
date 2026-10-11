@@ -17,8 +17,8 @@ import org.fcitx.fcitx5.android.engine.pinyin.T9Segmenter
  */
 internal class NineKeys(private val data: PinyinData) {
 
-    /** A syllable taken at [at], [length] letters, a separator [added] after it; [then] the input's length after. */
-    private class Taken(val at: Int, val length: Int, val added: Boolean, val then: Int)
+    /** A syllable taken at [at] for the keys [was], a separator [added] after it; [then] the input after. */
+    private class Taken(val at: Int, val was: String, val added: Boolean, val then: String)
 
     private val taken = ArrayList<Taken>() // the last last
 
@@ -66,7 +66,7 @@ internal class NineKeys(private val data: PinyinData) {
      * is taken.
      */
     fun offer(input: CharSequence, from: Int, graph: SyllableGraph) {
-        val at = (from until input.length).firstOrNull { input[it] in '2'..'9' }
+        val at = (from until input.length).firstOrNull { T9Segmenter.isKey(input[it]) }
         if (at == null) {
             show(emptyList(), -1)
             return
@@ -83,7 +83,9 @@ internal class NineKeys(private val data: PinyinData) {
         val order = found.keys.sortedWith(
             compareByDescending<Int> { it == first }.thenByDescending { found.getValue(it) }.thenByDescending { weights[it] },
         )
-        val letters = T9Segmenter.letters(input[at]).filter { it in INITIAL_LETTERS }.map { it.toString() }
+        // a letter typed as itself offers itself alone
+        val keys = if (input[at] in T9Segmenter.FIXED) input[at].lowercase() else T9Segmenter.letters(input[at])
+        val letters = keys.filter { it in INITIAL_LETTERS }.map { it.toString() }
         show((order.map { Syllables.spelling(it) } + letters).take(Action.Syllable.MAX), at)
     }
 
@@ -96,23 +98,44 @@ internal class NineKeys(private val data: PinyinData) {
         val spelling = offered.getOrNull(index) ?: return false
         val at = offeredAt
         val end = at + spelling.length
+        val was = input.substring(at, end)
         input.replace(at, end, spelling)
         val added = end == input.length || input[end] != SyllableGraph.SEPARATOR
         if (added) input.insert(end, SyllableGraph.SEPARATOR)
-        taken += Taken(at, spelling.length, added, input.length)
+        taken += Taken(at, was, added, input.toString())
         return true
     }
 
     /**
-     * Gives the syllable taken last back to [input] as its digits, if nothing was typed since:
+     * Puts [c] into [input] as a letter typed as itself ([Action.Letter]), upper case: in place
+     * of the last key if [again] and it is the same key (a digit or such a letter) after
+     * [picked], what is picked already; else after it. Again with no such key (a candidate
+     * picked in between, which the keyboard did not see) it is its key, any of its letters, as a
+     * press after a pause. False for what is no letter.
+     */
+    fun letter(input: StringBuilder, c: Char, again: Boolean, picked: Int): Boolean {
+        if (c !in 'a'..'z') return false
+        val last = input.length - 1
+        val same = last >= picked && T9Segmenter.isKey(input[last]) && T9Segmenter.digit(input[last].lowercaseChar()) == T9Segmenter.digit(c)
+        when {
+            again && same -> input.setCharAt(last, c.uppercaseChar())
+            again -> input.append(T9Segmenter.digit(c))
+            else -> input.append(c.uppercaseChar())
+        }
+        return true
+    }
+
+    /**
+     * Gives the syllable taken last back to [input] as the keys it was, if nothing was typed since:
      * where it starts; else -1, and backspace deletes as it would.
      */
     fun giveBack(input: StringBuilder): Int {
         val last = taken.lastOrNull()
-        if (last == null || last.then != input.length) return -1
+        // the input itself, not its length: a letter typed as itself replaces the last key in place
+        if (last == null || last.then != input.toString()) return -1
         taken.removeAt(taken.size - 1)
-        val end = last.at + last.length
-        input.replace(last.at, end, T9Segmenter.digits(input.substring(last.at, end)))
+        val end = last.at + last.was.length
+        input.replace(last.at, end, last.was)
         if (last.added) input.deleteCharAt(end)
         return last.at
     }

@@ -170,6 +170,7 @@ class PinyinSession(
     private fun act(action: Action): Snapshot = when (action) {
         Action.Refine -> refine()
         is Action.Key -> type(action.char)
+        is Action.Letter -> letter(action.letter, action.again)
         Action.Backspace -> backspace()
         // nothing to pick past the page: the key (space, a digit) is the app's
         is Action.Select -> if (action.index in 0 until pageSize) pick(page * pageSize + action.index) else snapshot(handled = candidates.isNotEmpty())
@@ -244,6 +245,9 @@ class PinyinSession(
         return snapshot()
     }
 
+    /** See [Action.Letter]: on the nine keys alone, the others type letters as they are. */
+    private fun letter(c: Char, again: Boolean): Snapshot = edited(nineKeys?.letter(input, c, again, readFrom()) == true)
+
     private fun backspace(): Snapshot {
         if (input.isEmpty()) {
             // the app deletes; a prediction shown goes away
@@ -263,8 +267,11 @@ class PinyinSession(
     }
 
     /** Takes the syllable at [index] of those offered: see the class. */
-    private fun takeSyllable(index: Int, of: Int): Snapshot {
-        if (!predicting && nineKeys?.take(input, index, of) == true) read()
+    private fun takeSyllable(index: Int, of: Int): Snapshot = edited(!predicting && nineKeys?.take(input, index, of) == true)
+
+    // the input read again if [changed] it
+    private fun edited(changed: Boolean): Snapshot {
+        if (changed) read()
         return snapshot()
     }
 
@@ -370,10 +377,11 @@ class PinyinSession(
      * Whether [c] may be pinned as a phrase of what is left of the input: only one reading all
      * of it, as fcitx5-chinese-addons has it, or typing that again would drop the rest of the
      * keys; only to a key the file can keep; and not where nothing is to be kept, as the key
-     * would be what was typed there (a password).
+     * would be what was typed there (a password); nor a key with a letter typed as itself (九键,
+     * upper case), which no other input method types.
      */
     private fun pinnable(c: Candidate) =
-        learning && c.end == input.length - readFrom() && CustomPhrases.isKey(input.substring(readFrom()))
+        learning && c.end == input.length - readFrom() && input.substring(readFrom()).let { CustomPhrases.isKey(it) && it.none(Char::isUpperCase) }
 
     /**
      * Makes the candidate at [index] the first phrase of what is left of the input, as
@@ -547,7 +555,8 @@ class PinyinSession(
         // digits say nothing: the pinyin shown for them, as 搜狗 commits it
         // digits no reading took stay as typed
         val shown = lastRead.restShown.filter { it != ' ' && it != SyllableGraph.SEPARATOR }
-        val rest = if (nineKeys == null || shown.isEmpty()) input.substring(readFrom()) else shown
+        // a letter typed as itself (九键) is upper case in the input; no other input has one
+        val rest = if (nineKeys == null || shown.isEmpty()) input.substring(readFrom()).lowercase() else shown
         val text = pieces.joinToString("") { it.text } + rest
         // text as typed is no words: nothing to go on from
         dropContext()
@@ -779,10 +788,11 @@ class PinyinSession(
                 nineKeys?.note((listOf(from) + reading.ends.dropLast(1)).map { readFrom() + it }, reading.syllables)
                 raw = false
             } else if (raw) {
-                parts[parts.size - 1] = parts.last() + graph.text(from, to)
+                parts[parts.size - 1] = parts.last() + graph.text(from, to).lowercase()
                 ends[ends.size - 1] = to
             } else {
-                parts += graph.text(from, to)
+                // as rest in commitRaw
+                parts += graph.text(from, to).lowercase()
                 ends += to
                 raw = true
             }

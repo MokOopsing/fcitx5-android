@@ -457,6 +457,12 @@
     <string name="im_page_size">Candidates per page</string>
     <string name="im_prediction">Suggest the next word</string>
     <string name="im_prediction_summary">After a word is typed, offer the words likely to follow it</string>
+    <string name="t9_multi_tap">Multi-tap letters</string>
+    <string name="t9_multi_tap_summary">A key pressed again quickly is its next letter; after a pause, a key of its own</string>
+    <string name="t9_multi_tap_off">Off</string>
+    <string name="t9_multi_tap_fast">Fast (0.4 s)</string>
+    <string name="t9_multi_tap_medium">Medium (0.6 s)</string>
+    <string name="t9_multi_tap_slow">Slow (0.9 s)</string>
     <string name="im_model_level">Performance level</string>
     <string name="im_model_level_summary">Higher picks better and uses more battery</string>
     <string name="im_model_level_low">Low: by how common words and pairs are, least battery</string>

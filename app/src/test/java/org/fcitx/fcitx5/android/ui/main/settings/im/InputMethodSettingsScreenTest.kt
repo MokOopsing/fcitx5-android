@@ -10,12 +10,15 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceManager
 import androidx.preference.PreferenceScreen
+import org.fcitx.fcitx5.android.FcitxApplication
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.RawConfig
+import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.engine.host.EngineSettings
 import org.fcitx.fcitx5.android.engine.host.Engines
 import org.fcitx.fcitx5.android.engine.host.TableSettings
 import org.fcitx.fcitx5.android.engine.pinyin.Fuzzy
+import org.fcitx.fcitx5.android.input.keyboard.T9MultiTap
 import org.fcitx.fcitx5.android.ui.main.modified.hasDefault
 import org.fcitx.fcitx5.android.ui.main.settings.PlaceholderStrings
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodSettings.Choice
@@ -33,9 +36,12 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 
 /** The pages as the preferences [InputMethodSettings.create] makes of them, over fcitx's config. */
 @RunWith(RobolectricTestRunner::class)
+// the real application, which initialises the AppPrefs the nine keys' page reads
+@Config(application = FcitxApplication::class)
 class InputMethodSettingsScreenTest {
 
     private fun create(items: List<Item>, cfg: RawConfig = RawConfig(), save: () -> Unit = {}): PreferenceScreen {
@@ -67,12 +73,29 @@ class InputMethodSettingsScreenTest {
         appInputMethods.forEach { page ->
             val screen = screen(page)
             val lists = screen.lists()
-            assertEquals(page, InputMethodSettings.of(page)!!.flat().count { it is Choice }, lists.size)
+            assertEquals(page, InputMethodSettings.of(page)!!.flat().count { it is Choice || it is InputMethodSettings.AppChoice<*> }, lists.size)
             lists.forEach {
                 assertNotNull(page, it.key)
                 assertSame("$page ${it.key}", it, screen.findPreference<ListPreference>(it.key))
             }
         }
+    }
+
+    // the keyboard's own: in the app's preferences, nothing of it in fcitx's config
+    @Test
+    fun multiTapOnTheNineKeysPageIsTheAppsPreference() {
+        val pref = AppPrefs.getInstance().keyboard.t9MultiTap
+        pref.setValue(T9MultiTap.Medium)
+        val cfg = RawConfig()
+        var saved = 0
+        val list = screen(Engines.T9, cfg) { saved++ }.findPreference<ListPreference>(T9MultiTap.KEY)!!
+        assertEquals(T9MultiTap.Medium.name, list.value)
+        assertTrue(list.callChangeListener(T9MultiTap.Off.name))
+        assertEquals(T9MultiTap.Off, pref.getValue())
+        assertEquals(0, saved)
+        assertTrue(T9MultiTap.KEY !in cfg.flattened())
+        assertNull(screen(Engines.PINYIN).findPreference<ListPreference>(T9MultiTap.KEY))
+        pref.setValue(T9MultiTap.Medium)
     }
 
     // a dialog message would leave the list's dialog with no choices in it

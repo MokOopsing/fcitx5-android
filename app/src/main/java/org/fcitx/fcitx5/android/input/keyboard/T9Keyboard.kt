@@ -9,6 +9,7 @@ import android.content.Context
 import android.graphics.Rect
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.StateListDrawable
+import android.os.SystemClock
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -35,8 +36,10 @@ import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
 import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.data.theme.ThemeManager
 import org.fcitx.fcitx5.android.engine.host.Keyboard
+import org.fcitx.fcitx5.android.engine.pinyin.T9Segmenter
 import org.fcitx.fcitx5.android.input.broadcast.ReturnKeyAppearance
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
+import org.fcitx.fcitx5.android.input.popup.PopupAction
 import splitties.dimensions.dp
 import splitties.views.dsl.constraintlayout.lParams
 import splitties.views.dsl.constraintlayout.leftOfParent
@@ -52,6 +55,11 @@ import splitties.views.existingOrNewId
  *
  * A syllable is sent to the engine as a character of [Keyboard.SYLLABLES], saying which of
  * which list it is ([Keyboard.syllableKey]).
+ *
+ * A digit key pressed again soon is its next letter ([MultiTap], as [AppPrefs.Keyboard.t9MultiTap]
+ * sets), sent as a character of [Keyboard.LETTERS] in place of the last ([Keyboard.letterKey]);
+ * its preview shows the letter. Its long press offers the digit and its letters, a letter chosen
+ * typed as itself after what is typed.
  */
 @SuppressLint("ViewConstructor")
 class T9Keyboard(
@@ -95,8 +103,34 @@ class T9Keyboard(
                 KeyDef.Behavior.Press(KeyAction.FcitxKeyAction(digit.toString())),
                 KeyDef.Behavior.Swipe(KeyAction.CommitAction(digit.toString())),
             ),
-            arrayOf(KeyDef.Popup.AltPreview(letters, digit.toString())),
+            arrayOf(
+                KeyDef.Popup.AltPreview(letters, digit.toString()),
+                KeyDef.Popup.Keyboard.Explicit(arrayOf(digit.toString()) + letters.lowercase().map { it.toString() }),
+            ),
         )
+
+        /**
+         * What [action] from [source] types: a digit key's press [MultiTap] reads at [time], a
+         * letter or digit of its long press; anything else resets [tap] and types as it is.
+         */
+        internal fun typed(action: KeyAction, source: KeyActionListener.Source, tap: MultiTap, time: Long): KeyAction {
+            val key = (action as? KeyAction.FcitxKeyAction)?.act?.singleOrNull()
+            if (key == null || key !in '2'..'9' && key !in 'a'..'z') {
+                tap.reset()
+                return action
+            }
+            if (source == KeyActionListener.Source.Popup) {
+                tap.reset()
+                // the digit itself, as the swipe types it, not a key
+                return if (key in '2'..'9') KeyAction.CommitAction(key.toString()) else letter(key, again = false)
+            }
+            if (key !in '2'..'9') return action
+            val letter = tap.press(key, T9Segmenter.letters(key), time) ?: return action
+            return letter(letter, again = true)
+        }
+
+        private fun letter(c: Char, again: Boolean) =
+            KeyAction.SymAction(KeySym(UNICODE + Keyboard.letterKey(c, again)), KeyStates.Virtual)
 
         // the column is drawn over these placeholders, so they are never touched
         private fun spacer() = KeyDef(
@@ -154,6 +188,14 @@ class T9Keyboard(
 
     private val showLangSwitchKey = AppPrefs.getInstance().keyboard.showLangSwitchKey
 
+    private val multiTapPref = AppPrefs.getInstance().keyboard.t9MultiTap
+    private var multiTap = MultiTap(multiTapPref.getValue().timeout)
+
+    @Keep
+    private val multiTapListener = ManagedPreference.OnChangeListener<T9MultiTap> { _, v ->
+        multiTap = MultiTap(v.timeout)
+    }
+
     @Keep
     private val showLangSwitchKeyListener = ManagedPreference.OnChangeListener<Boolean> { _, v ->
         lang.isVisible = v
@@ -202,6 +244,7 @@ class T9Keyboard(
         }
         lang.isVisible = showLangSwitchKey.getValue()
         showLangSwitchKey.registerOnChangeListener(showLangSwitchKeyListener)
+        multiTapPref.registerOnChangeListener(multiTapListener)
         show(EngineBridge.T9State())
     }
 
@@ -239,6 +282,9 @@ class T9Keyboard(
         // and so is a click released but not run yet (View posts it on ACTION_UP), as a removed item's was
         items.cancelPendingInputEvents()
         columnState = state
+        // nothing typed (a candidate picked on the bar, which is not this keyboard's): the next
+        // press is a key of its own
+        if (!state.composing) multiTap.reset()
         val labels = labels(state)
         while (items.childCount < labels.size) items.addView(item(items.childCount))
         for (i in 0 until items.childCount) {
@@ -261,6 +307,39 @@ class T9Keyboard(
             InputFeedbacks.soundEffect(InputFeedbacks.SoundEffect.Standard)
             onAction(pick(columnState, i))
         }
+    }
+
+    override fun onAction(action: KeyAction, source: KeyActionListener.Source) {
+        // a digit key's press as its preview counted it, when it went down
+        val key = (action as? KeyAction.FcitxKeyAction)?.act?.singleOrNull()
+        val time = pressed?.takeIf { it.first == key }?.second ?: SystemClock.uptimeMillis()
+        pressed = null
+        super.onAction(typed(action, source, multiTap, time), source)
+    }
+
+    // the letters a digit key's preview shows in place of its own (GHI), while it is held
+    private var previewing: Pair<String, String>? = null
+
+    // the digit key gone down last, and when: the press counts from then, as its preview did
+    private var pressed: Pair<Char, Long>? = null
+
+    // a digit key's preview shows the letter pressing it again now types
+    override fun onPopupAction(action: PopupAction) {
+        val shown = when (action) {
+            is PopupAction.PreviewAction -> {
+                // a digit key's preview is its letters, upper case
+                val digit = ('2'..'9').firstOrNull { T9Segmenter.letters(it).uppercase() == action.content }
+                val now = SystemClock.uptimeMillis()
+                pressed = digit?.let { it to now }
+                val letter = digit?.let { multiTap.peek(it, T9Segmenter.letters(it), now) }
+                previewing = letter?.let { action.content to it.uppercase() }
+                previewing?.let { action.copy(content = it.second) }
+            }
+            // back from the digit a swipe shows
+            is PopupAction.PreviewUpdateAction -> previewing?.takeIf { it.first == action.content }?.let { action.copy(content = it.second) }
+            else -> null
+        }
+        super.onPopupAction(shown ?: action)
     }
 
     private fun pressHighlight() = StateListDrawable().apply {

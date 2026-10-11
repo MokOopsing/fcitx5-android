@@ -50,6 +50,36 @@ class T9KeyboardTest {
     }
 
     @Test
+    fun aDigitPressedAgainSoonIsItsNextLetterInPlaceOfTheLast() {
+        val tap = MultiTap(600)
+        val keys = KeyActionListener.Source.Keyboard
+        val four = KeyAction.FcitxKeyAction("4")
+        assertEquals(four, T9Keyboard.typed(four, keys, tap, 0))
+        assertEquals(letter('h', again = true), T9Keyboard.typed(four, keys, tap, 100))
+        // something else between: a key of its own again
+        val back = KeyAction.SymAction(KeySym(0xff08))
+        assertEquals(back, T9Keyboard.typed(back, keys, tap, 150))
+        assertEquals(four, T9Keyboard.typed(four, keys, tap, 200))
+        // off: every press a key
+        val off = MultiTap(0)
+        assertEquals(four, T9Keyboard.typed(four, keys, off, 0))
+        assertEquals(four, T9Keyboard.typed(four, keys, off, 1))
+    }
+
+    @Test
+    fun theLongPressTypesALetterAsItselfAfterTheLastOrCommitsTheDigit() {
+        val tap = MultiTap(600)
+        val popup = KeyActionListener.Source.Popup
+        assertEquals(letter('g', again = false), T9Keyboard.typed(KeyAction.FcitxKeyAction("g"), popup, tap, 0))
+        assertEquals(KeyAction.CommitAction("4"), T9Keyboard.typed(KeyAction.FcitxKeyAction("4"), popup, tap, 10))
+        // and the next press is a key of its own
+        assertEquals(KeyAction.FcitxKeyAction("4"), T9Keyboard.typed(KeyAction.FcitxKeyAction("4"), KeyActionListener.Source.Keyboard, tap, 20))
+    }
+
+    private fun letter(c: Char, again: Boolean) =
+        KeyAction.SymAction(KeySym(0x01000000 + Keyboard.letterKey(c, again)), KeyStates.Virtual)
+
+    @Test
     fun withNothingToOfferTheColumnCommitsPunctuation() {
         listOf(EngineBridge.T9State(), EngineBridge.T9State(composing = true)).forEach { state ->
             assertEquals("，", T9Keyboard.labels(state).first())

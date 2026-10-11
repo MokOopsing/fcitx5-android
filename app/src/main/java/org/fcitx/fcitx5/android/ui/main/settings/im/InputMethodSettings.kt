@@ -20,12 +20,16 @@ import androidx.preference.SwitchPreferenceCompat
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.InputMethodNames
 import org.fcitx.fcitx5.android.core.RawConfig
+import org.fcitx.fcitx5.android.data.prefs.AppPrefs
+import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
+import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceEnum
 import org.fcitx.fcitx5.android.engine.host.EngineSettings
 import org.fcitx.fcitx5.android.engine.host.Engines
 import org.fcitx.fcitx5.android.engine.host.ModelLevel
 import org.fcitx.fcitx5.android.engine.host.TableSettings
 import org.fcitx.fcitx5.android.engine.pinyin.Fuzzy
 import org.fcitx.fcitx5.android.engine.pinyin.ShuangpinScheme
+import org.fcitx.fcitx5.android.input.keyboard.T9MultiTap
 import kotlin.math.abs
 
 /**
@@ -75,6 +79,18 @@ object InputMethodSettings {
         val unused: Set<String> = emptySet(),
         @StringRes val unusedNote: Int = 0,
     ) : Item
+
+    /**
+     * One of [values], kept by the app (the keyboard reads it), not by fcitx: the preference
+     * [key], [pref] asked for only when the page is made.
+     */
+    class AppChoice<T>(
+        val key: String,
+        @StringRes val title: Int,
+        @StringRes val summary: Int,
+        val values: List<T>,
+        val pref: () -> ManagedPreference.PStringLike<T>,
+    ) : Item where T : Enum<T>, T : ManagedPreferenceEnum
 
     class Section(@StringRes val title: Int, val items: List<Item>) : Item
 
@@ -135,6 +151,10 @@ object InputMethodSettings {
         add(
             Section(
                 R.string.im_section_typing, listOfNotNull(
+                    // the keyboard's: how it sends a key pressed again
+                    AppChoice(T9MultiTap.KEY, R.string.t9_multi_tap, R.string.t9_multi_tap_summary, T9MultiTap.entries) {
+                        AppPrefs.getInstance().keyboard.t9MultiTap
+                    }.takeIf { nineKeys },
                     Choice(EngineSettings.PAGE_SIZE, R.string.im_page_size, PAGE_SIZES, label = { _, v -> v }, nearest = numbers(EngineSettings.PAGE_SIZES)),
                     Toggle(EngineSettings.PREDICTION, text(R.string.im_prediction), R.string.im_prediction_summary),
                     Choice(
@@ -303,6 +323,7 @@ object InputMethodSettings {
                     })
                 }
                 is Flags -> into(flagsPreference(context, item, item.flags.map { raw("${item.path}/${it.first}") }, save))
+                is AppChoice<*> -> into(appChoice(context, item))
             }
         }
         items.forEach { add(it, screen::addPreference) }
@@ -336,6 +357,27 @@ object InputMethodSettings {
             isIconSpaceReserved = false
             setTitle(item.title)
             refresh()
+        }
+
+    private fun <T> appChoice(context: Context, item: AppChoice<T>) where T : Enum<T>, T : ManagedPreferenceEnum =
+        ListPreference(context).apply {
+            val pref = item.pref()
+            key = item.key
+            // the app's preference set by hand: this screen's store is fcitx's config
+            isPersistent = false
+            isIconSpaceReserved = false
+            isSingleLineTitle = false
+            setTitle(item.title)
+            dialogTitle = title
+            entries = item.values.map { context.getString(it.stringRes) }.toTypedArray()
+            entryValues = item.values.map { it.name }.toTypedArray()
+            value = pref.getValue().name
+            val summary = context.getString(item.summary)
+            summaryProvider = Preference.SummaryProvider<ListPreference> { "${it.entry}\n$summary" }
+            setOnPreferenceChangeListener { _, value ->
+                pref.setValue(item.values.first { it.name == value })
+                true
+            }
         }
 
     private fun choiceSummary(context: Context, item: Choice): Preference.SummaryProvider<ListPreference> {

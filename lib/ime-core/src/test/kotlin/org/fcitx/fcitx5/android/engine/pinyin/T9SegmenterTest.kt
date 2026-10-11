@@ -103,6 +103,29 @@ class T9SegmenterTest {
     }
 
     @Test
+    fun aLetterTypedAsItselfKeepsTheSyllablesWithItThere() {
+        // 7 then 4 4 fast: s, p, q or r, then h
+        val sh = segmenter.segment("7H")
+        assertTrue(sh.read(0, 2).isEmpty())
+        val starts = sh.read(0, 2, Kind.EXTENDED) + sh.read(0, 2, Kind.PARTIAL)
+        assertTrue(setOf("shi", "sha", "shang").all { it in starts })
+        assertTrue(starts.none { it[1] != 'h' })
+        // the digit before it still any of its letters, the one after too
+        assertEquals(setOf("ni", "ng"), segmenter.segment("N4").read(0, 2))
+        assertEquals(setOf("ni", "mi"), segmenter.segment("6I").read(0, 2))
+        assertTrue("hao" in segmenter.segment("6IH26").read(2, 5))
+        assertTrue(segmenter.segment("6IG26").read(2, 5).none { it == "hao" })
+        // at the end with no syllable whole left, the starts are only on their way (PARTIAL)
+        assertTrue(sh.read(0, 2, Kind.EXTENDED).isEmpty())
+        // üe typed lue as well as lve: 略
+        assertTrue("lve" in segmenter.segment("5U3").read(0, 3))
+        assertTrue("lve" in segmenter.segment("5V3").read(0, 3))
+        // a letter no syllable has there leaves nothing to read
+        assertTrue(segmenter.segment("6K").read(0, 2).isEmpty())
+        assertTrue(T9Segmenter.isKey('H') && T9Segmenter.isKey('2') && !T9Segmenter.isKey('h') && !T9Segmenter.isKey('1'))
+    }
+
+    @Test
     fun aSyllableTakenIsReadAsItselfAlone() {
         val g = segmenter.segment("ni'426")
         assertEquals(setOf("ni"), g.read(0, 3))

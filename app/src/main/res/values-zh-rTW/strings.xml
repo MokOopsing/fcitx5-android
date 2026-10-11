@@ -444,6 +444,12 @@
     <string name="im_page_size">每頁候選數</string>
     <string name="im_prediction">聯想下一個詞</string>
     <string name="im_prediction_summary">打完一個詞，接著給出可能要打的下一個詞</string>
+    <string name="t9_multi_tap">連按選字母</string>
+    <string name="t9_multi_tap_summary">快速連按同一個鍵依次選出它的字母，停頓後再按算新的一鍵</string>
+    <string name="t9_multi_tap_off">關</string>
+    <string name="t9_multi_tap_fast">快（0.4 秒）</string>
+    <string name="t9_multi_tap_medium">中（0.6 秒）</string>
+    <string name="t9_multi_tap_slow">慢（0.9 秒）</string>
     <string name="im_model_level">效能檔位</string>
     <string name="im_model_level_summary">檔位越高越準，也越耗電</string>
     <string name="im_model_level_low">低檔：只按詞頻和搭配，最省電</string>

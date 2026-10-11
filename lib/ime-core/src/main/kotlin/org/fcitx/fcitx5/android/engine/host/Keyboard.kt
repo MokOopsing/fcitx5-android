@@ -113,6 +113,10 @@ class Keyboard(private val session: Session, private val nineKeys: Boolean) {
     }
 
     private fun char(codePoint: Int): Snapshot {
+        if (codePoint in LETTERS && nineKeys) {
+            val n = codePoint - LETTERS.first
+            return session.apply(Action.Letter('a' + n % ALPHABET, again = n >= ALPHABET))
+        }
         // past the BMP (an emoji key): no session reads one, but it still ends the input
         val c = if (codePoint in 0..Char.MAX_VALUE.code) codePoint.toChar() else REPLACEMENT
         if (c in SYLLABLES && nineKeys) {
@@ -142,6 +146,7 @@ class Keyboard(private val session: Session, private val nineKeys: Boolean) {
 
     companion object {
         private const val DIGITS = 10
+        private const val ALPHABET = 26
         private const val REPLACEMENT = '\uFFFD'
 
         /**
@@ -155,6 +160,19 @@ class Keyboard(private val session: Session, private val nineKeys: Boolean) {
         fun syllableKey(index: Int, id: Int): Char {
             require(index in 0 until Action.Syllable.MAX && id in 0 until Action.Syllable.IDS) { "syllable $index of $id" }
             return SYLLABLES.first + id * Action.Syllable.MAX + index
+        }
+
+        /**
+         * Characters of the supplementary private use area the nine-key keyboard sends for a
+         * letter typed as itself ([Action.Letter]): [letterKey]. Past the BMP, which [SYLLABLES]
+         * fill.
+         */
+        val LETTERS = 0xF0000 until 0xF0000 + 2 * ALPHABET
+
+        /** The character for [letter] typed as itself, [again] in place of the last key: see [Action.Letter]. */
+        fun letterKey(letter: Char, again: Boolean): Int {
+            require(letter in 'a'..'z') { "letter $letter" }
+            return LETTERS.first + (if (again) ALPHABET else 0) + (letter - 'a')
         }
 
         private val IDLE = Snapshot(

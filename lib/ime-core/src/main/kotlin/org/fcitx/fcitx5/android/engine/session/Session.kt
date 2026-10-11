@@ -96,6 +96,13 @@ sealed class Action {
         }
     }
 
+    /**
+     * Types [letter] as itself, not as any letter of its key: on the nine keys, a key pressed
+     * again soon (连按) or a letter chosen from its long press. [again]: in place of the last
+     * key, if that was the same key and is not yet picked; else after it.
+     */
+    data class Letter(val letter: Char, val again: Boolean = false) : Action()
+
     /** Commits what was typed, as typed (enter). */
     object CommitRaw : Action()
 

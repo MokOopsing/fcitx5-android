@@ -8,6 +8,8 @@ import org.fcitx.fcitx5.android.engine.data.PinyinData
 import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
 import org.fcitx.fcitx5.android.engine.host.EngineEvent
 import org.fcitx.fcitx5.android.engine.host.Keyboard
+import org.fcitx.fcitx5.android.engine.phrase.CustomPhrases
+import org.fcitx.fcitx5.android.engine.phrase.PhraseBook
 import org.fcitx.fcitx5.android.engine.pinyin.Fuzzy
 import org.fcitx.fcitx5.android.engine.pinyin.PinyinSegmenter
 import org.fcitx.fcitx5.android.engine.pinyin.T9Segmenter
@@ -16,6 +18,7 @@ import org.fcitx.fcitx5.android.engine.session.Action.Backspace
 import org.fcitx.fcitx5.android.engine.session.Action.Key
 import org.fcitx.fcitx5.android.engine.user.UserModel
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.ByteBuffer
@@ -92,6 +95,97 @@ class PinyinSessionT9Test {
         val back = session.apply(Backspace)
         assertEquals("ni'hao", back.preedit)
         assertTrue("hao" in back.syllables)
+    }
+
+    @Test
+    fun aKeyPressedAgainIsTheLetterItTypesThere() {
+        val session = session()
+        session.type("6")
+        // 6 four times fast: m, in place of the 6
+        val m = session.apply(Action.Letter('m', again = true))
+        assertEquals(listOf("m"), m.syllables.filter { it.length == 1 })
+        val s = session.type("4426")
+        assertEquals("米糕", s.candidates[0])
+        assertEquals("mi gao", s.preedit)
+        assertTrue(s.syllables.none { it == "ni" })
+    }
+
+    @Test
+    fun aLetterChosenGoesAfterTheLastAndAgainAfterAnotherKeyIsTheKey() {
+        val session = session()
+        session.type("6")
+        // 4 pressed again after 6, which the keyboard does not send: the key 4, any of g h i
+        val again = session.apply(Action.Letter('h', again = true))
+        assertEquals(session().type("64").preedit, again.preedit)
+        session.apply(Backspace)
+        // a letter chosen from the long press, after the last key though of the same
+        val h = session.apply(Action.Letter('h'))
+        assertTrue(h.preedit.endsWith("h"))
+        assertEquals(h.preedit.lowercase(), h.preedit)
+        session.apply(Action.Letter('i'))
+        assertEquals(h.preedit, session.apply(Backspace).preedit)
+    }
+
+    @Test
+    fun aKeyPressedAgainWithNoKeyBeforeItIsTheKeyAnyOfItsLetters() {
+        // a candidate picked between the presses, on the bar: nothing typed is left
+        val again = session().apply(Action.Letter('h', again = true))
+        val four = session().type("4")
+        assertEquals(four.preedit, again.preedit)
+        assertEquals(four.syllables, again.syllables)
+    }
+
+    @Test
+    fun aLetterTypedAsItselfShowsAsTheLetterInTheCandidatesToo() {
+        val session = session()
+        session.type("8")
+        val u = session.apply(Action.Letter('u', again = true))
+        assertTrue(u.candidates.none { it.any(Char::isUpperCase) })
+        assertTrue(u.preedit.none(Char::isUpperCase))
+    }
+
+    @Test
+    fun noPhraseIsPinnedToAKeyWithALetterTypedAsItself() {
+        val book = PhraseBook(CustomPhrases.parse("")) {}
+        // m i, each typed as itself: letters, as a phrase key is, but no other input method's
+        val session = PinyinSession(data, T9Segmenter(abbreviations = false), spell = true, prediction = false, phraseBook = book)
+        session.apply(Action.Letter('m'))
+        val mi = session.apply(Action.Letter('i'))
+        assertEquals("米", mi.candidates[0])
+        assertTrue(Offer.PIN !in session.offers(0))
+        // full pinyin's mi may be
+        val pinyin = PinyinSession(data, PinyinSegmenter(), prediction = false, phraseBook = book)
+        pinyin.apply(Key('m'))
+        pinyin.apply(Key('i'))
+        assertTrue(Offer.PIN in pinyin.offers(0))
+    }
+
+    @Test
+    fun aSyllableTakenOverALetterTypedAsItselfGivesItBack() {
+        val session = session()
+        session.type("6")
+        session.apply(Action.Letter('m', again = true))
+        session.type("4")
+        val taken = session.apply(Action.Syllable(0))
+        assertEquals("mi", taken.preedit)
+        assertTrue(taken.syllables.isEmpty())
+        // given back as typed: still m, not any of 6
+        val back = session.apply(Backspace)
+        assertEquals("mi", back.syllables.first())
+        assertTrue("ni" !in back.syllables)
+    }
+
+    @Test
+    fun theKeyboardSendsALetterTypedAsItselfPastThePlane() {
+        val keyboard = Keyboard(session(), nineKeys = true)
+        keyboard.onEvent(EngineEvent.CHAR, '6'.code)
+        val m = keyboard.onEvent(EngineEvent.CHAR, Keyboard.letterKey('m', again = true))
+        assertTrue(m.handled)
+        assertTrue(m.syllables.none { it == "n" })
+        assertTrue(Keyboard.letterKey('z', again = true) in Keyboard.LETTERS && Keyboard.letterKey('a', again = false) == Keyboard.LETTERS.first)
+        // a keyboard of letters has no use for them
+        val letters = Keyboard(session(), nineKeys = false)
+        assertFalse(letters.onEvent(EngineEvent.CHAR, Keyboard.letterKey('m', again = false)).handled)
     }
 
     @Test

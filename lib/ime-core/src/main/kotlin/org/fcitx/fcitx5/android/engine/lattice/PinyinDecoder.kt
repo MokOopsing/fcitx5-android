@@ -388,7 +388,8 @@ class PinyinDecoder(
 
     private fun textOf(graph: SyllableGraph, state: Int): String {
         val word = stateWord[state]
-        return if (word == NO_WORD) graph.text(stateBack[state] / beam, state / beam) else text(word)
+        // as typed, a letter typed as itself on the nine keys (upper case in the input) as the letter
+        return if (word == NO_WORD) graph.text(stateBack[state] / beam, state / beam).lowercase() else text(word)
     }
 
     private fun text(word: Int) = if (word < vocabulary.size || user == null) vocabulary.word(word) else user.text(word)

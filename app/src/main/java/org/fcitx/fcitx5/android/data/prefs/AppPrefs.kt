@@ -21,6 +21,7 @@ import org.fcitx.fcitx5.android.input.keyboard.KeyboardHeightPercentBase
 import org.fcitx.fcitx5.android.input.keyboard.LangSwitchBehavior
 import org.fcitx.fcitx5.android.input.keyboard.SpaceLongPressBehavior
 import org.fcitx.fcitx5.android.input.keyboard.SwipeSymbolDirection
+import org.fcitx.fcitx5.android.input.keyboard.T9MultiTap
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.fcitx.fcitx5.android.input.popup.EmojiModifier
 import org.fcitx.fcitx5.android.input.voice.VoiceFeature
@@ -129,6 +130,14 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val spaceSwipeMoveCursor =
             switch(R.string.space_swipe_move_cursor, "space_swipe_move_cursor", true)
         val autoPairs = switch(R.string.auto_pairs, "auto_pairs", true)
+
+        /** Shown on the 九键 page (InputMethodSettings), not here: one input method's alone. */
+        val t9MultiTap = ManagedPreference.PStringLike(
+            sharedPreferences, T9MultiTap.KEY, T9MultiTap.Medium,
+            object : ManagedPreference.StringLikeCodec<T9MultiTap> {
+                override fun decode(raw: String) = T9MultiTap.entries.firstOrNull { it.name == raw }
+            },
+        ).apply { register() }
         val showLangSwitchKey =
             switch(R.string.show_lang_switch_key, "show_lang_switch_key", true)
         val langSwitchKeyBehavior = hidden {

@@ -118,6 +118,7 @@ object SettingsIndex {
             is InputMethodSettings.Toggle -> visit(item.title(context), text(item.summary), item.key, path)
             is InputMethodSettings.Choice -> visit(text(item.title), text(item.summary), item.key, path)
             is InputMethodSettings.Flags -> visit(text(item.title), item.flags.joinToString(" ") { it.second }, item.path, path)
+            is InputMethodSettings.AppChoice<*> -> visit(text(item.title), text(item.summary), item.key, path)
             is InputMethodSettings.Section -> items(context, item.items, path + text(item.title), visit)
         }
     }

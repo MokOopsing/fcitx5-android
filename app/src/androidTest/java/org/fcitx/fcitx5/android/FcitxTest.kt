@@ -29,6 +29,7 @@ import org.fcitx.fcitx5.android.data.punctuation.PunctuationManager
 import org.fcitx.fcitx5.android.data.punctuation.PunctuationMapEntry
 import org.fcitx.fcitx5.android.engine.host.EngineSettings
 import org.fcitx.fcitx5.android.engine.host.Engines
+import org.fcitx.fcitx5.android.engine.host.Keyboard
 import org.fcitx.fcitx5.android.engine.table.TableConf
 import org.junit.After
 import org.junit.AfterClass
@@ -344,6 +345,25 @@ class FcitxTest {
         val commitString = receiveFirstCommitString()?.data?.text
         Timber.i("commitString is $commitString")
         Assert.assertEquals(expected, commitString)
+        fcitx.reset()
+    }
+
+    /**
+     * 连按 on the nine keys: the keyboard sends a key pressed again as a character past the BMP
+     * (Keyboard.letterKey), which fcitx must hand the engine whole. 6 then m in its place is mi
+     * alone, never ni.
+     */
+    @Test
+    fun aLetterTypedAsItselfOnTheNineKeysReachesTheEngine(): Unit = runBlocking {
+        fcitx.setEnabledIme(arrayOf(Engines.T9))
+        sendString("6")
+        fcitx.sendKey(0x01000000 + Keyboard.letterKey('m', again = true))
+        sendString("4")
+        awaitQuiet()
+        val candidates = fcitx.getCandidates(0, 32).map { it.text }
+        Timber.i("candidates for 6, m, 4 are $candidates")
+        Assert.assertTrue("米 among $candidates", "米" in candidates)
+        Assert.assertFalse("no 你 among $candidates", "你" in candidates)
         fcitx.reset()
     }
 

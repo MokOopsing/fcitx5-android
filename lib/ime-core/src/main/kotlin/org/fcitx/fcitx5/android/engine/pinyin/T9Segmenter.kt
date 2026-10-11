@@ -26,6 +26,11 @@ import java.util.TreeMap
  *   without only where nothing else is read but a syllable of one letter (`25` is 北京 too, not
  *   only 啊 then j …).
  *
+ * A letter typed as itself ([Action.Letter][org.fcitx.fcitx5.android.engine.session.Action.Letter],
+ * 连按) is in the input upper case, in place of its digit: read as the digit, keeping only the
+ * syllables with that letter there (`7H`, 7 then 4 4 fast, is on the way to shi or sha, not si
+ * or pian; fuzzy partners of another spelling go too).
+ *
  * A syllable the user chose for the first digits not yet chosen
  * ([Action.Syllable][org.fcitx.fcitx5.android.engine.session.Action.Syllable]) is in the input as
  * its letters and a separator: read as that syllable alone, or as an initial for a letter (`h`).
@@ -106,30 +111,62 @@ class T9Segmenter(fuzzy: Set<Fuzzy> = emptySet(), private val abbreviations: Boo
         var longest = 0
         var length = 0
         val initialEdges = ArrayList<Pair<Int, SyllableMatches>>()
-        while (at + length < input.length && input[at + length] in '2'..'9' && length < MAX_SYLLABLE) {
+        while (at + length < input.length && isKey(input[at + length]) && length < MAX_SYLLABLE) {
             length++
-            val keys = input.substring(at, at + length)
-            val full = whole[keys]
+            val typed = input.substring(at, at + length)
+            val keys = digits(typed.lowercase())
+            val full = whole[keys]?.let { fitting(it, typed) }
+            val isRegular = isRegular(keys, full)
             if (full != null) {
                 edges.add(at, length, Kind.SYLLABLE, full)
-                if (keys in regular) longest = length
+                if (isRegular) longest = length
             }
-            val next = at + length
-            if (next == input.length || input[next] == SEPARATOR) {
-                starts[keys]?.let { edges.add(at, length, if (keys in regular) Kind.EXTENDED else Kind.PARTIAL, it) }
+            if (endsAt(input, at + length)) {
+                starts[keys]?.let { fitting(it, typed) }?.let { edges.add(at, length, if (isRegular) Kind.EXTENDED else Kind.PARTIAL, it) }
             }
-            initials[keys]?.let { initialEdges += length to it }
+            initials[keys]?.let { fitting(it, typed) }?.let { initialEdges += length to it }
         }
         for ((n, m) in initialEdges) {
-            val last = at + n == input.length || input[at + n] == SEPARATOR
             // at the end the start of a syllable is read already, as PARTIAL
-            if (last) continue
+            if (endsAt(input, at + n)) continue
             if (longest == 0 || abbreviations && longest <= n) edges.add(at, n, Kind.INITIAL, m)
         }
     }
 
+    // [spelling] has [c] at [k]; üe is spelt lve here and typed lue as well (略, 虐)
+    private fun spells(spelling: String, k: Int, c: Char) =
+        spelling.getOrNull(k) == c || c == 'u' && spelling.getOrNull(k) == 'v' && spelling.getOrNull(k + 1) == 'e'
+
+    // the end of the input, or of a syllable the user separated
+    private fun endsAt(input: String, at: Int) = at == input.length || input[at] == SEPARATOR
+
+    // a regular syllable read for [keys] as [full], what a letter typed as itself left of them
+    private fun isRegular(keys: String, full: SyllableMatches?): Boolean = when {
+        keys !in regular || full == null -> false
+        full === whole[keys] -> true
+        // as [regular] has digits: of an initial and a final, or a final alone, of two letters or more
+        else -> (0 until full.size).any { Syllables.spelling(full.syllable(it)).let { s -> s.length > 1 && SpellingIndex.split(s) != null } }
+    }
+
+    /** Those of [matches] spelt with each letter typed as itself in [typed] where it is; null if none. */
+    private fun fitting(matches: SyllableMatches, typed: String): SyllableMatches? {
+        if (typed.none { it in FIXED }) return matches
+        val kept = (0 until matches.size).filter { i ->
+            val spelling = Syllables.spelling(matches.syllable(i))
+            typed.indices.all { k -> typed[k] !in FIXED || spells(spelling, k, typed[k].lowercaseChar()) }
+        }
+        if (kept.isEmpty()) return null
+        return SyllableMatches(IntArray(kept.size) { matches.syllable(kept[it]) }, IntArray(kept.size) { matches.flags(kept[it]) })
+    }
+
     companion object {
         private const val MAX_SYLLABLE = 6
+
+        /** A letter typed as itself, as it stands in the input: see the class. */
+        val FIXED = 'A'..'Z'
+
+        /** Whether [c] is a key typed: a digit, or a letter typed as itself. */
+        fun isKey(c: Char): Boolean = c in '2'..'9' || c in FIXED
 
         /** The key typing [c] on the nine keys: '2' for a, b, c; ü is v, on '8'. */
         fun digit(c: Char): Char = if (c in 'a'..'z') DIGITS[c - 'a'] else c
