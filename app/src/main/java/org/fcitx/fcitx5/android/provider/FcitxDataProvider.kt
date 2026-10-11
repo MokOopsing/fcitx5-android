@@ -9,13 +9,18 @@ import android.database.MatrixCursor
 import android.graphics.Point
 import android.os.Build
 import android.os.CancellationSignal
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract.Document
 import android.provider.DocumentsContract.Root
 import android.provider.DocumentsProvider
 import android.webkit.MimeTypeMap
 import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.core.SubtypeManager
+import org.fcitx.fcitx5.android.daemon.FcitxDaemon
 import org.fcitx.fcitx5.android.utils.isPlainFileName
+import timber.log.Timber
 import java.io.File
 import java.io.FileNotFoundException
 import java.io.IOException
@@ -74,15 +79,22 @@ class FcitxDataProvider : DocumentsProvider() {
     private lateinit var textFilePaths: Array<String>
 
     // lazy: canonicalFile can throw, and onCreate runs at app start
-    private val canonicalBaseDir by lazy { baseDir.canonicalFile }
+    private val canonicalBaseDir by lazy { baseDir.canonical() }
 
     private val File.docId
         get() = absolutePath.removePrefix(docIdPrefix)
 
     // ids come from other apps: one like "files/../.." would reach the IME's internal storage with its permissions
     private fun fileFromDocId(docId: String) =
-        File(docIdPrefix, docId).normalizedWithin(canonicalBaseDir)
-            ?: throw FileNotFoundException("document id=$docId is outside ${baseDir.docId}")
+        File(docIdPrefix, docId).normalizedWithin(canonicalBaseDir) ?: throw outsideTheRoot(docId)
+
+    // fileFromDocId's check, keeping what it resolved: isChildDocument runs on every tree-URI operation
+    private fun canonicalFromDocId(docId: String) =
+        File(docIdPrefix, docId).normalize().canonical().takeIf { it.startsWith(canonicalBaseDir) }
+            ?: throw outsideTheRoot(docId)
+
+    private fun outsideTheRoot(docId: String) =
+        FileNotFoundException("document id=$docId is outside ${baseDir.docId}")
 
     override fun onCreate(): Boolean {
         baseDir = context!!.getExternalFilesDir(null) ?: return false
@@ -126,10 +138,47 @@ class FcitxDataProvider : DocumentsProvider() {
         mode: String,
         signal: CancellationSignal?
     ): ParcelFileDescriptor {
-        return ParcelFileDescriptor.open(
-            fileFromDocId(documentId),
-            ParcelFileDescriptor.parseMode(mode)
-        )
+        val file = fileFromDocId(documentId)
+        val accessMode = ParcelFileDescriptor.parseMode(mode)
+        if ((accessMode and ParcelFileDescriptor.MODE_WRITE_ONLY) == 0 || !file.isReadOnReload(baseDir)) {
+            return ParcelFileDescriptor.open(file, accessMode)
+        }
+        // fcitx holds these in memory and saves its own back over them: an edit applies only once it reloads
+        return try {
+            ParcelFileDescriptor.open(file, accessMode, Handler(Looper.getMainLooper())) { error ->
+                // a writer that failed or died left part of a file: fcitx's own copy is better
+                if (error == null) {
+                    reload(file)
+                } else {
+                    Timber.w(error, "Not reloading fcitx: the write to %s did not finish", file.name)
+                }
+            }
+        } catch (e: IOException) {
+            // making the pipe that reports the close can fail too: a client is told only FileNotFoundException
+            throw FileNotFoundException("openDocument id=$documentId failed: ${e.message}").apply { initCause(e) }
+        }
+    }
+
+    // a test counts the calls instead: reloading needs fcitx running
+    internal var reload: (File) -> Unit = { reloadFcitx(it) }
+
+    // fcitx that is not running reads the files when it starts
+    private fun reloadFcitx(written: File) {
+        val fcitx = FcitxDaemon.getFirstConnectionOrNull()
+        if (fcitx == null) {
+            Timber.d("Not reloading fcitx for %s: it is not running", written.name)
+            return
+        }
+        // runIfReady drops it without a word while fcitx is still starting
+        Timber.d("Reloading fcitx for %s, if it is ready", written.name)
+        fcitx.runIfReady {
+            reloadConfig()
+            // what the removed status-area entry did: config/profile holds the enabled input methods
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                SubtypeManager.syncWith(enabledIme())
+            }
+            Timber.d("Reloaded fcitx for %s", written.name)
+        }
     }
 
     @Throws(FileNotFoundException::class)
@@ -185,7 +234,7 @@ class FcitxDataProvider : DocumentsProvider() {
 
     override fun isChildDocument(parentDocumentId: String, documentId: String): Boolean {
         return try {
-            fileFromDocId(documentId).normalizedWithin(fileFromDocId(parentDocumentId).canonicalFile) != null
+            canonicalFromDocId(documentId).startsWith(canonicalFromDocId(parentDocumentId))
         } catch (_: IOException) {
             false
         }
@@ -212,19 +261,19 @@ class FcitxDataProvider : DocumentsProvider() {
         return newFile.docId
     }
 
+    // a throw for each way it fails, each saying which
+    @Suppress("ThrowsCount")
     @Throws(FileNotFoundException::class)
     override fun renameDocument(documentId: String, displayName: String): String {
         val oldFile = fileFromDocId(documentId)
         requirePlainDisplayName(displayName)
+        val failed = "renameDocument id=$documentId to $displayName failed"
         // a sibling of the root itself is outside it
         val newFile = oldFile.resolveSibling(displayName).normalizedWithin(canonicalBaseDir)
-        val reason = when {
-            newFile == null -> ": outside the root"
-            newFile.exists() -> ": target exists"
-            oldFile.renameTo(newFile) -> return newFile.docId
-            else -> ""
-        }
-        throw FileNotFoundException("renameDocument id=$documentId to $displayName failed$reason")
+            ?: throw FileNotFoundException("$failed: outside the root")
+        if (newFile.exists()) throw FileNotFoundException("$failed: target exists")
+        if (!oldFile.renameTo(newFile)) throw FileNotFoundException("$failed: rename failed")
+        return newFile.docId
     }
 
     @Throws(FileNotFoundException::class)
@@ -321,4 +370,15 @@ class FcitxDataProvider : DocumentsProvider() {
 
 /** This file normalized, or null if it resolves, symlinks followed, outside [canonicalRoot]. */
 internal fun File.normalizedWithin(canonicalRoot: File): File? =
-    normalize().takeIf { it.canonicalFile.startsWith(canonicalRoot) }
+    normalize().takeIf { it.canonical().startsWith(canonicalRoot) }
+
+// DocumentsProvider passes a FileNotFoundException on to the client as such, a plain IOException as a crash
+private fun File.canonical(): File = try {
+    canonicalFile
+} catch (e: IOException) {
+    throw FileNotFoundException("cannot resolve $path: ${e.message}").apply { initCause(e) }
+}
+
+/** Whether fcitx reads [this] again on reload: its own and its addons' config, and the punctuation tables. */
+internal fun File.isReadOnReload(root: File): Boolean =
+    startsWith(root.resolve("config")) || startsWith(root.resolve("data/punctuation"))

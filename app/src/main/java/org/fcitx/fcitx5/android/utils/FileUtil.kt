@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.utils
 
+import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
 import java.io.File
@@ -13,13 +14,21 @@ object FileUtil {
 
     private fun File.isSymlink(): Boolean = OsConstants.S_ISLNK(Os.lstat(path).st_mode)
 
+    // exists() follows a symlink, so a dangling one was kept and symlink() over it failed
+    private fun File.existsNoFollow(): Boolean =
+        exists() || try {
+            isSymlink()
+        } catch (_: ErrnoException) {
+            false
+        }
+
     /**
      * Delete a [File].
      * If it's a directory, delete its contents first.
      * If it's a symlink, don't follow.
      */
     fun removeFile(file: File) = runCatching {
-        if (!file.exists())
+        if (!file.existsNoFollow())
             return@runCatching
         val result = if (file.isSymlink()) {
             file.delete()
@@ -35,7 +44,8 @@ object FileUtil {
                     }
                 }
                 .fold(true) { acc, it ->
-                    if (!it.exists()) acc else it.delete()
+                    // delete first: a failure is kept, and the files after it are still deleted
+                    if (!it.existsNoFollow()) acc else it.delete() && acc
                 }
         } else {
             file.delete()

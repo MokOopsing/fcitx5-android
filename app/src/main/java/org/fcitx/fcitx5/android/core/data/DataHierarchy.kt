@@ -34,11 +34,15 @@ object DataHierarchy {
             when {
                 // directories (empty sha256) are created along with the files in them
                 sha256.isBlank() -> null
-                path !in old.files -> FileAction.CreateFile(path)
+                // none there, or a directory, deleted below
+                old.files[path].isNullOrBlank() -> FileAction.CreateFile(path)
                 old.files[path] != sha256 -> FileAction.UpdateFile(path)
                 else -> null
             }
-        } + old.files.filterKeys { it !in shipped.files }.map { (path, sha256) ->
+        } + old.files.filter { (path, sha256) ->
+            // gone, or turned from a file into a directory or back: the new one cannot be made over it
+            shipped.files[path]?.isBlank() != sha256.isBlank()
+        }.map { (path, sha256) ->
             if (sha256.isNotBlank()) FileAction.DeleteFile(path) else FileAction.DeleteDir(path)
         }
         val diffLinks = shipped.symlinks.mapNotNull { (target, source) ->

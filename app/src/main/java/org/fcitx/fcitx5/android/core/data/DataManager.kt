@@ -66,7 +66,7 @@ object DataManager {
         val shipped = appContext.assets.getDataDescriptor()
 
         // Run actions to migrate to the new hierarchy
-        DataHierarchy.diff(oldDescriptor, shipped).sortedByDescending { it.ordinal }.forEach {
+        DataHierarchy.plan(oldDescriptor, shipped).forEach {
             Timber.d("Action: $it")
             when (it) {
                 is FileAction.CreateFile, is FileAction.UpdateFile -> {

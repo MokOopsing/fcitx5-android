@@ -6,6 +6,7 @@ package org.fcitx.fcitx5.android.core.data
 
 import android.util.Base64
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -72,5 +73,33 @@ class DataHierarchyTest {
             ),
             DataHierarchy.diff(old, shipped).toSet()
         )
+    }
+
+    @Test
+    fun aPathTurnedFromADirectoryIntoAFileOrBackIsDeletedAndMadeAnew() {
+        val old = DataDescriptor(
+            sha256 = "assets-v1",
+            files = mapOf("usr" to "", "usr/dict" to "", "usr/dict/a" to "aaa", "usr/conf" to "ccc"),
+            symlinks = emptyMap()
+        )
+        val now = DataDescriptor(
+            sha256 = "assets-v2",
+            files = mapOf("usr" to "", "usr/dict" to "ddd", "usr/conf" to "", "usr/conf/b" to "bbb"),
+            symlinks = emptyMap()
+        )
+        assertEquals(
+            setOf(
+                FileAction.DeleteDir("usr/dict"),
+                FileAction.DeleteFile("usr/dict/a"),
+                FileAction.CreateFile("usr/dict"),
+                FileAction.DeleteFile("usr/conf"),
+                FileAction.CreateFile("usr/conf/b")
+            ),
+            DataHierarchy.diff(old, now).toSet()
+        )
+        // in the order DataManager.sync runs them: what was there goes before what replaces it
+        val run = DataHierarchy.plan(old, now)
+        assertTrue(run.indexOf(FileAction.DeleteDir("usr/dict")) < run.indexOf(FileAction.CreateFile("usr/dict")))
+        assertTrue(run.indexOf(FileAction.DeleteFile("usr/conf")) < run.indexOf(FileAction.CreateFile("usr/conf/b")))
     }
 }

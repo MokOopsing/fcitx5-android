@@ -6,6 +6,8 @@ package org.fcitx.fcitx5.android.provider
 
 import android.Manifest
 import android.content.pm.ProviderInfo
+import android.os.Looper
+import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract.Document
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -18,6 +20,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import java.io.File
 import java.io.FileNotFoundException
 import java.nio.file.Files
@@ -84,6 +87,22 @@ class FcitxDataProviderTest {
     }
 
     @Test
+    fun aDocumentIsOpenedToReadAndWriteOnlyInsideTheRoot() {
+        File(root, "a.txt").writeText("abc")
+        provider.openDocument("$rootId/a.txt", "r", null).use { assertEquals(3L, it.statSize) }
+        ParcelFileDescriptor.AutoCloseOutputStream(provider.openDocument("$rootId/a.txt", "wt", null)).use {
+            it.write("xy".toByteArray())
+        }
+        assertEquals("xy", File(root, "a.txt").readText())
+        // "wt" truncates: had the check let it through, the secret would be empty
+        secret.writeText("kept")
+        for (mode in listOf("r", "wt")) {
+            assertThrows(mode, FileNotFoundException::class.java) { provider.openDocument("$rootId/../databases/clipboard.db", mode, null) }
+        }
+        assertEquals("kept", secret.readText())
+    }
+
+    @Test
     fun aSiblingSharingTheRootsNamePrefixIsOutside() {
         File(pkg, "${rootId}2").mkdirs()
         assertNull(served("${rootId}2"))
@@ -94,6 +113,7 @@ class FcitxDataProviderTest {
         val link = File(root, "link")
         assumeTrue(runCatching { Files.createSymbolicLink(link.toPath(), secret.parentFile!!.toPath()) }.isSuccess)
         assertNull(served("$rootId/link/clipboard.db"))
+        assertThrows(FileNotFoundException::class.java) { provider.openDocument("$rootId/link/clipboard.db", "r", null) }
         assertThrows(FileNotFoundException::class.java) { provider.deleteDocument("$rootId/link/clipboard.db") }
         assertTrue(secret.exists())
     }
@@ -138,5 +158,72 @@ class FcitxDataProviderTest {
         assertThrows(FileNotFoundException::class.java) { provider.moveDocument("$rootId/gone.txt", rootId, "$rootId/dir") }
         assertFalse(File(root, "b.txt").exists())
         assertFalse(File(root, "dir/gone.txt").exists())
+    }
+
+    @Test
+    fun aRenameThatFailsSaysWhy() {
+        File(root, "a.txt").writeText("a")
+        File(root, "b.txt").writeText("b")
+        fun reason(id: String, name: String) =
+            assertThrows(FileNotFoundException::class.java) { provider.renameDocument(id, name) }
+                .message!!.substringAfter("failed: ")
+        assertEquals("outside the root", reason(rootId, "x"))
+        assertEquals("target exists", reason("$rootId/a.txt", "b.txt"))
+        assertEquals("rename failed", reason("$rootId/gone.txt", "c.txt"))
+        assertEquals("a", File(root, "a.txt").readText())
+        assertEquals("b", File(root, "b.txt").readText())
+    }
+
+    @Test
+    fun aChildIsWhereItsSymlinksLead() {
+        File(root, "data").mkdirs()
+        File(root, "other").mkdirs()
+        val alias = File(root, "data/alias")
+        assumeTrue(runCatching { Files.createSymbolicLink(alias.toPath(), File(root, "other").toPath()) }.isSuccess)
+        assertTrue(provider.isChildDocument("$rootId/other", "$rootId/data/alias/x"))
+        assertFalse(provider.isChildDocument("$rootId/data", "$rootId/data/alias/x"))
+    }
+
+    /** A client is promised FileNotFoundException; any other IOException reaches it as a crash. */
+    @Test
+    fun anIdThatCannotBeResolvedIsNotFound() {
+        // the JVM resolves no path with a NUL in it
+        val id = "$rootId/a\u0000b"
+        assertNull(served(id))
+        assertThrows(FileNotFoundException::class.java) { provider.deleteDocument(id) }
+        assertThrows(FileNotFoundException::class.java) { provider.renameDocument(id, "b.txt") }
+        assertFalse(provider.isChildDocument(rootId, id))
+    }
+
+    /** What a write through the provider reloads fcitx for: it would otherwise save its own copy back over it. */
+    @Test
+    fun fcitxReadsItsConfigAndPunctuationAgainOnReload() {
+        assertTrue(File(root, "config/config").isReadOnReload(root))
+        assertTrue(File(root, "config/profile").isReadOnReload(root))
+        assertTrue(File(root, "config/conf/punctuation.conf").isReadOnReload(root))
+        assertTrue(File(root, "data/punctuation/punc.mb.zh_CN").isReadOnReload(root))
+        assertFalse(File(root, "data/table/wbx.main.dict").isReadOnReload(root))
+        assertFalse(File(root, "configs/x").isReadOnReload(root))
+        assertFalse(File(root, "notes.txt").isReadOnReload(root))
+    }
+
+    /** A write of a file fcitx reads on reload reloads it once closed; a read, or a write of another file, does not. */
+    @Test
+    fun aFinishedWriteOfAFileFcitxReadsOnReloadReloadsIt() {
+        val reloaded = mutableListOf<String>()
+        provider.reload = { reloaded += it.name }
+        File(root, "config").mkdirs()
+        File(root, "config/x").writeText("a")
+        File(root, "notes.txt").writeText("a")
+        fun write(id: String, text: String) =
+            ParcelFileDescriptor.AutoCloseOutputStream(provider.openDocument(id, "wt", null)).use { it.write(text.toByteArray()) }
+        provider.openDocument("$rootId/config/x", "r", null).close()
+        write("$rootId/notes.txt", "b")
+        write("$rootId/config/x", "b")
+        // the close is reported on the main looper
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals("b", File(root, "config/x").readText())
+        assertEquals("b", File(root, "notes.txt").readText())
+        assertEquals(listOf("x"), reloaded)
     }
 }

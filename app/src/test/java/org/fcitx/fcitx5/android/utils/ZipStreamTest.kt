@@ -78,4 +78,11 @@ class ZipStreamTest {
         assertFalse(File(folder.root, "outside").exists())
         assertFalse(File(folder.root, "destx").exists())
     }
+
+    @Test
+    fun aDirectoryEntryForTheDestinationItselfIsAllowed() {
+        val top = zip("./" to null, "a" to "x").use { it.extract(dest) }
+        assertEquals(listOf("a"), top.map { it.name })
+        assertEquals("x", File(dest, "a").readText())
+    }
 }
