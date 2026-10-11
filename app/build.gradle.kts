@@ -17,7 +17,7 @@ android {
 
     defaultConfig {
         applicationId = "io.github.sraw.youmo"
-        // UserDataOrigin: what this id was before, for importing backups made under it
+        // the id without the build type's suffix (.debug): UserDataOrigin's root, for importing backups
         buildConfigField("String", "APPLICATION_ID_ROOT", "\"$applicationId\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -59,17 +59,17 @@ android {
     }
 
     // Everything runs on the phone, with no network permission at all. Two builds, text or voice:
-    // voice adds RECORD_AUDIO and the speech recognizer with its ~240 MB of models
+    // voice adds RECORD_AUDIO and the speech recognizer with its ~180 MB of models
     // (VoiceDataPlugin), for those who want them; text, the default, has neither.
-    flavorDimensions += listOf("speech")
+    flavorDimensions += listOf(VoiceDataPlugin.DIMENSION)
     productFlavors {
         create("text") {
-            dimension = "speech"
+            dimension = VoiceDataPlugin.DIMENSION
             isDefault = true
             buildConfigField("boolean", "VOICE", "false")
         }
-        create("voice") {
-            dimension = "speech"
+        create(VoiceDataPlugin.FLAVOR) {
+            dimension = VoiceDataPlugin.DIMENSION
             versionNameSuffix = "-voice"
             buildConfigField("boolean", "VOICE", "true")
         }

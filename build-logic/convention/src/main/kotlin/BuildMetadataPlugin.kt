@@ -10,10 +10,13 @@ import org.gradle.api.DefaultTask
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.provider.Property
+import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
 import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.register
+import org.gradle.work.DisableCachingByDefault
 
 /**
  * Add task `generateBuildMetadata${Variant}`
@@ -22,13 +25,17 @@ import org.gradle.kotlin.dsl.register
 class BuildMetadataPlugin : Plugin<Project> {
 
     override fun apply(target: Project) {
+        // read once: BuildConfig and build-metadata.json name the same build
+        val version = target.buildVersionName
+        val commit = target.buildCommitHash
+        val time = target.buildTimestamp
         target.extensions.configure<ApplicationExtension> {
             buildFeatures {
                 buildConfig = true
             }
             defaultConfig {
-                buildConfigField("String", "BUILD_GIT_HASH", "\"${target.buildCommitHash}\"")
-                buildConfigField("long", "BUILD_TIME", target.buildTimestamp)
+                buildConfigField("String", "BUILD_GIT_HASH", "\"$commit\"")
+                buildConfigField("long", "BUILD_TIME", time)
                 buildConfigField("String", "DATA_DESCRIPTOR_NAME", "\"${DataDescriptorPlugin.FILE_NAME}\"")
             }
         }
@@ -42,6 +49,9 @@ class BuildMetadataPlugin : Plugin<Project> {
                         // create metadata file after package, because it's outputDirectory would
                         // be cleared at some time before package
                         mustRunAfter(packageTask)
+                        versionName.set(version)
+                        commitHash.set(commit)
+                        timestamp.set(time)
                         outputFile.set(packageTask.outputDirectory.file("build-metadata.json"))
                     }.also {
                         target.tasks.getByName("assemble${variantName}").dependsOn(it)
@@ -51,6 +61,7 @@ class BuildMetadataPlugin : Plugin<Project> {
         }
     }
 
+    @DisableCachingByDefault(because = "writing three strings is quicker than the cache would be")
     abstract class BuildMetadataTask : DefaultTask() {
         @Serializable
         data class BuildMetadata(
@@ -59,15 +70,22 @@ class BuildMetadataPlugin : Plugin<Project> {
             val timestamp: String
         )
 
+        @get:Input
+        abstract val versionName: Property<String>
+
+        @get:Input
+        abstract val commitHash: Property<String>
+
+        @get:Input
+        abstract val timestamp: Property<String>
+
         @get:OutputFile
         abstract val outputFile: RegularFileProperty
 
         @TaskAction
         fun execute() {
-            with(project) {
-                val metadata = BuildMetadata(buildVersionName, buildCommitHash, buildTimestamp)
-                outputFile.get().asFile.writeText(json.encodeToString(metadata))
-            }
+            val metadata = BuildMetadata(versionName.get(), commitHash.get(), timestamp.get())
+            outputFile.get().asFile.writeText(json.encodeToString(metadata))
         }
     }
 }

@@ -38,8 +38,10 @@ object AppLanguage {
         locale.language == "en" -> "en"
         // one the phone's settings picked: read as "", it showed as the phone's, and choosing that did nothing
         locale.language != "zh" -> locale.toLanguageTag()
-        // Hant, or a region that writes it
-        locale.script == "Hant" || locale.country in setOf("TW", "HK", "MO") -> "zh-TW"
+        // a script named outweighs the region, as Android matches resources by it: zh-Hans-TW reads as zh-CN
+        locale.script.isNotEmpty() -> if (locale.script == "Hant") "zh-TW" else "zh-CN"
+        // else a region that writes Hant
+        locale.country in setOf("TW", "HK", "MO") -> "zh-TW"
         else -> "zh-CN"
     }
 
@@ -57,15 +59,18 @@ object AppLanguage {
         return locale.getDisplayName(locale).replaceFirstChar { it.titlecase(locale) }
     }
 
-    /** Asks for a language and switches to it: the activities are made again in it. */
-    fun choose(context: Context) {
+    /** Asks for a language and switches to it: the activities are made again in it; [onChosen] is told its tag. */
+    fun choose(context: Context, onChosen: (String) -> Unit) {
         // -1, none ticked, for a language not in the list: then any choice switches
         val current = tags.indexOf(current())
         AlertDialog.Builder(context)
             .setTitle(R.string.app_language)
             .setSingleChoiceItems(tags.map { name(context, it) }.toTypedArray(), current) { dialog, which ->
                 dialog.dismiss()
-                if (which != current) set(tags[which])
+                if (which != current) {
+                    set(tags[which])
+                    onChosen(tags[which])
+                }
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()

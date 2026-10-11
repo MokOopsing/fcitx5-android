@@ -1,5 +1,5 @@
 {
-  description = "Dev shell flake for fcitx5-android";
+  description = "Dev shell flake for youmo-ime";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   inputs.flake-compat = {

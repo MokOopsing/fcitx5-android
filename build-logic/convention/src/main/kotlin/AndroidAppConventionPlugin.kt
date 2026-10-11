@@ -119,6 +119,8 @@ class AndroidAppConventionPlugin : AndroidBaseConventionPlugin() {
         }
 
         // remove assets/dexopt/baseline.prof{,m} (baseline profile)
+        // not kept for an APK installed from a file: profileinstaller would only hand it to ART's
+        // next background dexopt, which compiles the methods the JIT found hot anyway
         target.tasks.withType<MergeArtProfileTask> { enabled = false }
         target.tasks.withType<ExpandArtProfileWildcardsTask> { enabled = false }
         target.tasks.withType<CompileArtProfileTask> { enabled = false }

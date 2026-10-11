@@ -57,10 +57,10 @@ captures/
 # IntelliJ
 #*.iml
 
-# Keystore files
-# Uncomment the following lines if you do not want to check your keystore files in.
-#*.jks
-#*.keystore
+# Keystore files, such as the release.p12 README signs release builds with
+*.jks
+*.keystore
+*.p12
 
 # External native build folder generated in Android Studio 2.2 and later
 .externalNativeBuild

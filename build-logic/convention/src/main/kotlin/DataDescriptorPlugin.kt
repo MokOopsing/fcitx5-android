@@ -23,8 +23,6 @@ import org.gradle.kotlin.dsl.register
 import org.gradle.work.ChangeType
 import org.gradle.work.Incremental
 import org.gradle.work.InputChanges
-import org.jetbrains.kotlin.com.google.common.hash.Hashing
-import org.jetbrains.kotlin.com.google.common.io.ByteSource
 import java.io.File
 import java.nio.charset.Charset
 
@@ -97,11 +95,7 @@ class DataDescriptorPlugin : Plugin<Project> {
             if (symlinks.keys.intersect(files.keys).isNotEmpty())
                 throw IllegalArgumentException("Symlink target cannot be path in files")
             val descriptor = DataDescriptor(
-                Hashing.sha256()
-                    .hashString(
-                        (files + symlinks).entries.joinToString { it.key + it.value },
-                        Charset.defaultCharset()
-                    ).toString(),
+                sha256Of((files + symlinks).entries.joinToString { it.key + it.value }.toByteArray(Charset.defaultCharset())),
                 files,
                 symlinks
             )
@@ -110,11 +104,6 @@ class DataDescriptorPlugin : Plugin<Project> {
 
         private fun deserialize(): Map<String, String> =
             json.decodeFromString<DataDescriptor>(file.readText()).files
-
-        companion object {
-            fun sha256(file: File): String =
-                ByteSource.wrap(file.readBytes()).hash(Hashing.sha256()).toString()
-        }
 
         @TaskAction
         fun execute(inputChanges: InputChanges) {
@@ -144,7 +133,7 @@ class DataDescriptorPlugin : Plugin<Project> {
                 if (change.changeType == ChangeType.REMOVED || key in excludes.get()) {
                     map.remove(key)
                 } else {
-                    map[key] = sha256(change.file)
+                    map[key] = sha256Of(change.file)
                 }
             }
             // calculate dirs

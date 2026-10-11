@@ -26,9 +26,24 @@ class AppLanguageTest {
     }
 
     @Test
+    fun aScriptNamedOutweighsTheRegion() {
+        assertEquals("zh-TW", tagOf("zh-Hant"))
+        assertEquals("zh-TW", tagOf("zh-Hant-SG"))
+        assertEquals("zh-CN", tagOf("zh-Hans-TW"))
+        assertEquals("zh-TW", tagOf("zh-MO"))
+    }
+
+    @Test
+    fun everyLanguageTheDialogOffersIsTickedWhenPicked() {
+        // a tag read back as another would tick the wrong entry
+        AppLanguage.tags.forEach { assertEquals(it, tagOf(it)) }
+    }
+
+    @Test
     fun anotherLanguageKeepsItsOwnTag() {
         // not "": that would show as the phone's, its entry ticked and a pick of it ignored
         assertEquals("de", tagOf("de"))
+        assertEquals("ja", tagOf("ja"))
         assertEquals("ja-JP", tagOf("ja-JP"))
         assertEquals(-1, AppLanguage.tags.indexOf(tagOf("de")))
     }

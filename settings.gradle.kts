@@ -16,7 +16,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "fcitx5-android"
+rootProject.name = "youmo-ime"
 
 include(":lib:ime-core")
 include(":lib:ime-eval")

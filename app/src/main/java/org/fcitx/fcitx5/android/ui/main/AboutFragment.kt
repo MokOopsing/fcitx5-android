@@ -38,15 +38,29 @@ class AboutFragment : PaddingPreferenceFragment() {
             addCategory(R.string.version) {
                 isIconSpaceReserved = false
                 addPreference(R.string.current_version, Const.versionName)
-                addPreference(R.string.build_git_hash, BuildConfig.BUILD_GIT_HASH) {
-                    val commit = BuildConfig.BUILD_GIT_HASH.substringBefore('-')
-                    requireContext().openUrl("${Const.githubRepo}/commit/${commit}")
-                }
+                val commitPage = commitUrl(Const.githubRepo, BuildConfig.BUILD_GIT_HASH)
+                addPreference(
+                    R.string.build_git_hash, BuildConfig.BUILD_GIT_HASH,
+                    onClick = commitPage?.let { url -> { requireContext().openUrl(url) } }
+                )
                 addPreference(R.string.build_time, formatDateTime(BuildConfig.BUILD_TIME))
-                addPreference(R.string.engine_data, BuildConfig.ENGINE_DATA) {
+                addPreference(
+                    R.string.engine_data,
+                    "${BuildConfig.ENGINE_DATA}, ${BuildConfig.ENGINE_WORDS}, ${BuildConfig.SENTENCE_MODELS}"
+                ) {
                     requireContext().openUrl("${Const.releasesUrl}/tag/${BuildConfig.ENGINE_DATA}")
                 }
             }
         }
     }
+}
+
+/**
+ * The page in [repo] of the commit [hash] names (anything after a '-' is not the commit's), or
+ * null when it names none: a build made without git has "N/A" for its hash.
+ */
+internal fun commitUrl(repo: String, hash: String): String? {
+    val commit = hash.substringBefore('-')
+    val isHash = commit.isNotEmpty() && commit.all { it in '0'..'9' || it.lowercaseChar() in 'a'..'f' }
+    return if (isHash) "$repo/commit/$commit" else null
 }

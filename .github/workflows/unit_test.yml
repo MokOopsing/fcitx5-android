@@ -1,12 +1,14 @@
 name: Unit Tests
 
-# JVM unit tests only. Deliberately separate from the build workflow:
+# JVM unit tests, the lexicon tools' Python tests, and the C++ tests of our sherpa-onnx changes and
+# of native-lib's helpers, built with the host's compiler (the host-test.sh scripts).
+# Deliberately separate from the build workflow:
 #   - no submodules (verified: `:app:testTextDebugUnitTest` configures and runs on a submodule-free checkout)
 #   - no NDK, no CMake (the task graph for `:app:testTextDebugUnitTest` contains no native tasks)
 #   - single OS
 # so it takes a few minutes rather than the build jobs' half hour, and can gate every push.
 #
-# Java 17, like the jobs that build APKs here (pull_request, publish) and the nix shell: tests
+# Java 17, like the jobs that build APKs here (pull_request, emulator_test) and the nix shell: tests
 # run on the JDK the release is built with. Bytecode target is Java 11 either way
 # (build-logic/convention/src/main/kotlin/Versions.kt).
 
@@ -39,7 +41,8 @@ jobs:
   unit_test:
     name: JVM unit tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # was 20 before the voice flavour's compile (a second one of the app) and the host tests
+    timeout-minutes: 30
     steps:
       - name: Fetch source code
         uses: actions/checkout@v7
@@ -55,10 +58,10 @@ jobs:
           java-version: "17"
 
       - name: Setup Android environment
-        uses: android-actions/setup-android@v4
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6
+        uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       # Robolectric fetches its android-all jars (hundreds of MB, one per SDK the tests run at)
       # into the Maven local repository, which the Gradle cache does not cover
@@ -75,20 +78,54 @@ jobs:
       # (animal-sniffer, which Android lint cannot provide for a JVM module) and the coverage
       # floors (Kover). :lib:ime-dict-tool, the host tool that builds the engine's data, is
       # plain JVM too; its tests are what covers the mix and the crawl, whose output builds download.
+      # Its coverage is reported, with no floor.
+      # :lib:ime-eval, the evaluation harness, is a third: its tests drive ime-core's engine API and
+      # fail while the sets made from data/pinyin.tsv have not been remade after it changed.
+      # :build-logic:convention's tests are the build plugins' own (the data's fingerprints and
+      # hashes, detekt's sources).
       # --continue: the coverage report is wanted most when a check has failed
-      - name: Run core logic and dict tool tests, API level check and coverage floors
-        run: ./gradlew --continue :lib:ime-core:check :lib:ime-core:koverHtmlReport :lib:ime-dict-tool:test
+      - name: Run core logic, dict tool and evaluation tests, API level check and coverage floors
+        run: ./gradlew --build-cache --continue :lib:ime-core:check :lib:ime-core:koverHtmlReport :lib:ime-dict-tool:test :lib:ime-dict-tool:koverHtmlReport :lib:ime-eval:test :build-logic:convention:test
 
       # text debug only: the voice flavour's own code is tested by the voice tests in ime-core
       - name: Run app unit tests
-        run: ./gradlew :app:testTextDebugUnitTest :app:koverLogTextDebug
+        if: success() || failure()
+        run: ./gradlew --build-cache :app:testTextDebugUnitTest :app:koverLogTextDebug
+
+      # no other job sees the voice flavour on a push: its own code (src/voice), whose VoiceFeature
+      # the text stub has to match, and the unit tests' sources against it
+      - name: Compile the voice flavour
+        if: success() || failure()
+        run: ./gradlew --build-cache :app:compileVoiceDebugUnitTestKotlin
+
+      # the C++ tests of our sherpa-onnx changes (context graph, hotword and blocked-phrase encoding):
+      # the runner's g++, with googletest and simple-sentencepiece downloaded SHA-256 checked; no NDK,
+      # no CMake
+      - name: Run sherpa-onnx host tests
+        if: success() || failure()
+        run: lib/sherpa-onnx/host-test.sh
+
+      # native-lib's helpers that need neither JNI nor fcitx (UTF-16 to UTF-8), the same way
+      - name: Run native-lib host tests
+        if: success() || failure()
+        run: app/src/test/cpp/host-test.sh
+
+      # the lexicon tools' tests: apply.py is the only check that a curator's readings did not slip a line
+      - name: Run lexicon tool tests
+        if: success() || failure()
+        run: python3 -m unittest discover -s lexicon/tools
+
+      # chat.py's readings of the words a chat line means otherwise, which the chat, dialog and mixed sets are typed by
+      - name: Run eval tool tests
+        if: success() || failure()
+        run: python3 -m unittest discover -s lib/ime-eval/tools
 
       # After the tests, so a lint finding does not hide their results. Findings already present
       # are frozen in config/detekt/baseline-*.xml; this fails on new ones only.
       # Syntax rules only: type resolution does not work on this toolchain (see detekt.yml).
       - name: Static analysis (detekt)
         if: success() || failure()
-        run: ./gradlew detekt
+        run: ./gradlew --build-cache detekt
 
       # a failed test shows up on the run page and the checks tab, not only inside the report
       # (without a file and line GitHub cannot place it in the diff; it shows the first 10)
@@ -120,12 +157,20 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: unit-test-report
+          # detekt checks every Kotlin module (DetektConventionPlugin), so its reports are globbed
           path: |
             lib/ime-core/build/reports/tests/
             lib/ime-core/build/reports/animalsniffer/
             lib/ime-core/build/reports/kover/
             lib/ime-core/build/test-results/
+            lib/ime-dict-tool/build/reports/tests/
+            lib/ime-dict-tool/build/reports/kover/
+            lib/ime-dict-tool/build/test-results/
+            lib/ime-eval/build/reports/tests/
+            lib/ime-eval/build/test-results/
+            build-logic/convention/build/reports/tests/
+            build-logic/convention/build/test-results/
             app/build/reports/tests/
-            app/build/reports/detekt/
             app/build/test-results/
+            **/build/reports/detekt/
           retention-days: 14

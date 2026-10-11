@@ -280,15 +280,15 @@ internal class GenScancodeMappingProcessor(private val environment: SymbolProces
 
             "KEY_VIDEO_NEXT" to 241 to "",     /* drive next video source */
             "KEY_VIDEO_PREV" to 242 to "",     /* drive previous video source */
-            "KEY_BRIGHTNESS_CYCLE" to 243 to "",     /* brightness up to "", after max is min */
+            "KEY_BRIGHTNESS_CYCLE" to 243 to "",     /* brightness up, after max is min */
             "KEY_BRIGHTNESS_AUTO" to 244 to "",
             /* Set Auto Brightness: manual
-                                                 brightness control is off to "",
+                                                 brightness control is off,
                                                  rely on ambient */
             "KEY_BRIGHTNESS_ZERO" to 244 to "", /* KEY_BRIGHTNESS_ZERO to KEY_BRIGHTNESS_AUTO */
             "KEY_DISPLAY_OFF" to 245 to "",     /* display device to off state */
 
-            "KEY_WWAN" to 246 to "",     /* Wireless WAN (LTE to "", UMTS to "", GSM to "", etc.) */
+            "KEY_WWAN" to 246 to "",     /* Wireless WAN (LTE, UMTS, GSM, etc.) */
             "KEY_WIMAX" to 246 to "", /* KEY_WIMAX to KEY_WWAN */
             "KEY_RFKILL" to 247 to "",     /* Key that controls all radios */
 
@@ -390,7 +390,7 @@ internal class GenScancodeMappingProcessor(private val environment: SymbolProces
         val tyScancodeMapping = TypeSpec
             .objectBuilder("ScancodeMapping")
             .apply {
-                SCANCODE_MAP.forEach { (scancode, androidKey) ->
+                SCANCODE_MAP.forEach { (scancode, _) ->
                     addProperty(
                         PropertySpec
                             .builder(scancode.name, Int::class, KModifier.CONST)

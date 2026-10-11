@@ -211,7 +211,7 @@ internal class GenKeyMappingProcessor(private val environment: SymbolProcessorEn
 
         val keyCodeToSym = FunSpec
             .builder("keyCodeToSym")
-            .addKdoc("Duplicate labels are expected, as the mapping is not one-to-one")
+            .addKdoc("A letter key gives its lowercase KeySym, as a KeyCode has no case")
             .addParameter("code", Int::class)
             .returns(Int::class.asTypeName().copy(nullable = true))
             .addCode(

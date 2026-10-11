@@ -5,6 +5,7 @@
 import dev.detekt.gradle.extensions.DetektExtension
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import java.io.File
 
 /**
  * Applied once, to the root project. Every subproject that turns into an Android or JVM Kotlin
@@ -39,8 +40,9 @@ class DetektConventionPlugin : Plugin<Project> {
             config.setFrom(rootProject.file("config/detekt/detekt.yml"))
             baseline.set(rootProject.file("config/detekt/baseline-${path.removePrefix(":").replace(':', '-')}.xml"))
             parallel.set(true)
-            // the app's flavors keep code of their own (src/voice: voice input), checked as main's
-            source.from(listOf("src/text/java", "src/voice/java").map(::file).filter { it.exists() })
+            // every source set's code, not only detekt's defaults (main and test): flavors, debug,
+            // androidTest, testFixtures, whichever a module has
+            source.setFrom(kotlinSourceDirs(projectDir))
         }
     }
 
@@ -57,3 +59,9 @@ class DetektConventionPlugin : Plugin<Project> {
         )
     }
 }
+
+/** `src/<source set>/java` and `src/<source set>/kotlin` under [projectDir], those there are. */
+internal fun kotlinSourceDirs(projectDir: File): List<File> =
+    projectDir.resolve("src").listFiles().orEmpty().filter { it.isDirectory }.sortedBy { it.name }
+        .flatMap { set -> listOf(set.resolve("java"), set.resolve("kotlin")) }
+        .filter { it.isDirectory }

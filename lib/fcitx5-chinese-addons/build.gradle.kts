@@ -51,5 +51,4 @@ android {
 
 dependencies {
     implementation(project(":lib:fcitx5"))
-    implementation(project(":lib:fcitx5-lua"))
 }

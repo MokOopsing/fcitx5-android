@@ -8,11 +8,15 @@ import com.android.build.api.variant.ApplicationAndroidComponentsExtension
 import org.gradle.api.DefaultTask
 import org.gradle.api.Plugin
 import org.gradle.api.Project
+import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.InputFile
 import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.Internal
 import org.gradle.api.tasks.OutputDirectory
+import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
@@ -20,11 +24,17 @@ import org.gradle.kotlin.dsl.configure
 import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.named
 import org.gradle.kotlin.dsl.register
+import org.gradle.work.DisableCachingByDefault
+import org.gradle.workers.WorkerExecutor
+import java.io.File
+import java.io.IOException
+import java.nio.file.Files
+import javax.inject.Inject
 
 /**
  * What the voice builds (the `voice` flavor of the `speech` dimension) add to the text ones: the
  * speech recognizer and its models, none of them in a text build, which asks for no microphone
- * either (dev/TRAINING-PLAN.md 14).
+ * either.
  *
  * - sherpa-onnx (k2-fsa, Apache-2.0), the recognizer: the :lib:sherpa-onnx module, built from
  *   source, ours to change.
@@ -35,22 +45,24 @@ import org.gradle.kotlin.dsl.register
  *   it takes hotwords. Numbers it writes in characters: VoiceText puts them in digits.
  * - silero VAD (MIT): where a stretch of speech ends.
  * - Hotwords: the new-word pack (EngineDataPlugin's `downloadEngineWords`), each word's characters
- *   apart by spaces as VoiceHotwords.spelled has them, and the model's BPE vocabulary, which
- *   sherpa-onnx encodes them with, read out of its SentencePiece model.
+ *   apart by spaces as the dict tool's `hotwords` writes them (HotwordSpelling.spelled), and the
+ *   model's BPE vocabulary, which sherpa-onnx encodes them with, read out of its SentencePiece model.
  *
- * Downloaded once, SHA-256 checked (EngineDataPlugin.DownloadTask), into the voice variants'
+ * Downloaded once, SHA-256 checked (DownloadTask), into the voice variants'
  * assets under `voice/`, uncompressed: read whole into memory as the recognizer loads them.
  */
 class VoiceDataPlugin : Plugin<Project> {
 
     companion object {
+        /** the app's flavor dimension, text or voice, and the flavor of the voice builds */
+        const val DIMENSION = "speech"
         const val FLAVOR = "voice"
-        private const val MODEL_NAME = "sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03"
+        internal const val MODEL_NAME = "sherpa-onnx-x-asr-zipformer-transducer-zh-en-punct-int8-2026-06-03"
         private const val MODEL_URL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/$MODEL_NAME.tar.bz2"
         private const val MODEL_SHA256 = "5d02c36d7b44e886b7c8f0d8e051f8713acab96c264bb6ef9e718be39a6a2224"
 
         /** the archive's files and the names they are given in the assets */
-        private val MODEL_FILES = mapOf(
+        internal val MODEL_FILES = mapOf(
             "encoder-epoch-99-avg-1.int8.onnx" to "encoder.onnx",
             "decoder-epoch-99-avg-1.onnx" to "decoder.onnx",
             "joiner-epoch-99-avg-1.int8.onnx" to "joiner.onnx",
@@ -61,30 +73,37 @@ class VoiceDataPlugin : Plugin<Project> {
     }
 
     override fun apply(target: Project) {
+        // its downloadEngineWords and its tool make the hotwords, whichever plugin the build script names first
+        target.pluginManager.apply(EngineDataPlugin::class.java)
         val downloadsDir = target.rootProject.layout.projectDirectory.dir(".gradle/engine-downloads/voice")
         val components = target.extensions.getByType<ApplicationAndroidComponentsExtension>()
-        val cmakeVersion = target.cmakeVersion
 
-        val modelArchive = target.tasks.register<EngineDataPlugin.DownloadTask>("downloadVoiceModel") {
+        val modelArchive = target.tasks.register<DownloadTask>("downloadVoiceModel") {
             url.set(MODEL_URL)
             sha256.set(MODEL_SHA256)
             outputFile.set(downloadsDir.file("$MODEL_NAME.tar.bz2"))
         }
-        val modelDir = target.tasks.register<EngineDataPlugin.ExtractTask>("extractVoiceModel") {
+        val modelDir = target.tasks.register<ExtractTask>("extractVoiceModel") {
             archive.set(modelArchive.flatMap { it.outputFile })
-            cmake.set(components.sdkComponents.sdkDirectory.map { it.file("cmake/$cmakeVersion/bin/cmake") })
+            cmake.set(target.sdkCmake)
             outputDir.set(target.layout.buildDirectory.dir("voice-sources"))
         }
-        val vad = target.tasks.register<EngineDataPlugin.DownloadTask>("downloadVoiceVad") {
+        val vad = target.tasks.register<DownloadTask>("downloadVoiceVad") {
             url.set(VAD_URL)
             sha256.set(VAD_SHA256)
             outputFile.set(downloadsDir.file("silero_vad.onnx"))
         }
-        val words = target.tasks.named<EngineDataPlugin.DownloadTask>("downloadEngineWords")
+        val words = target.tasks.named<DownloadTask>(EngineDataPlugin.WORDS_TASK)
+        val hotwords = target.tasks.register<CompileHotwords>("compileVoiceHotwords") {
+            classpath.from(target.configurations.named(EngineDataPlugin.TOOL_CONFIGURATION))
+            toolCode.set(target.tasks.named<EngineDataPlugin.FingerprintTool>(EngineDataPlugin.FINGERPRINT_TASK).flatMap { it.outputFile })
+            this.words.set(words.flatMap { it.outputFile })
+            outputFile.set(target.layout.buildDirectory.file("generated/voice-hotwords/hotwords.txt"))
+        }
         val assets = target.tasks.register<CopyVoiceModels>("copyVoiceModels") {
             model.set(modelDir.flatMap { it.outputDir })
             this.vad.set(vad.flatMap { it.outputFile })
-            this.words.set(words.flatMap { it.outputFile })
+            this.hotwords.set(hotwords.flatMap { it.outputFile })
             outputDir.set(target.layout.buildDirectory.dir("generated/voice-assets"))
         }
 
@@ -95,12 +114,45 @@ class VoiceDataPlugin : Plugin<Project> {
         target.extensions.configure<ApplicationExtension> {
             androidResources.noCompress += ".onnx"
         }
-        components.onVariants(components.selector().withFlavor("speech" to FLAVOR)) { variant ->
+        components.onVariants(components.selector().withFlavor(DIMENSION to FLAVOR)) { variant ->
             variant.sources.assets?.addGeneratedSourceDirectory(assets, CopyVoiceModels::outputDir)
         }
     }
 
+    /** The pack's words as the recognizer's hotwords, a line each: the dict tool's `hotwords`, so the app's rule spells them. */
+    @CacheableTask
+    abstract class CompileHotwords @Inject constructor(private val workers: WorkerExecutor) : DefaultTask() {
+        // built before this runs, but keyed on by toolCode only
+        @get:Internal
+        abstract val classpath: ConfigurableFileCollection
+
+        @get:InputFile
+        @get:PathSensitive(PathSensitivity.NONE)
+        abstract val toolCode: RegularFileProperty
+
+        init {
+            dependsOn(classpath)
+        }
+
+        @get:InputFile
+        @get:PathSensitive(PathSensitivity.NAME_ONLY)
+        abstract val words: RegularFileProperty
+
+        @get:OutputFile
+        abstract val outputFile: RegularFileProperty
+
+        @TaskAction
+        fun compile() {
+            workers.noIsolation().submit(EngineDataPlugin.RunTool::class.java) {
+                classpath.from(this@CompileHotwords.classpath)
+                heap.set("256m")
+                args.set(listOf("hotwords", "-o", outputFile.get().asFile.path, words.get().asFile.path))
+            }
+        }
+    }
+
     /** The model and its tokens, the VAD and the hotwords, as `voice/` in the assets. */
+    @DisableCachingByDefault(because = "linking is quicker than the cache would be")
     abstract class CopyVoiceModels : DefaultTask() {
         @get:InputDirectory
         @get:PathSensitive(PathSensitivity.RELATIVE)
@@ -112,7 +164,7 @@ class VoiceDataPlugin : Plugin<Project> {
 
         @get:InputFile
         @get:PathSensitive(PathSensitivity.NAME_ONLY)
-        abstract val words: RegularFileProperty
+        abstract val hotwords: RegularFileProperty
 
         @get:OutputDirectory
         abstract val outputDir: DirectoryProperty
@@ -123,19 +175,22 @@ class VoiceDataPlugin : Plugin<Project> {
             out.deleteRecursively()
             out.mkdirs()
             val dir = model.get().asFile.resolve(MODEL_NAME)
-            for ((name, asset) in MODEL_FILES) dir.resolve(name).copyTo(out.resolve(asset))
+            for ((name, asset) in MODEL_FILES) link(dir.resolve(name), out.resolve(asset))
             vad.get().asFile.copyTo(out.resolve("silero_vad.onnx"))
             out.resolve("bpe.vocab").writeText(vocabulary(dir.resolve("bpe.model").readBytes()))
-            out.resolve("hotwords.txt").writeText(hotwords(words.get().asFile.readLines()))
+            hotwords.get().asFile.copyTo(out.resolve("hotwords.txt"))
         }
 
-        // as VoiceHotwords.spelled: all Chinese, two to twelve characters, a token each
-        private fun hotwords(lines: List<String>) = lines.asSequence()
-            .filterNot { it.startsWith("#") }
-            .map { it.substringBefore('\t') }
-            .filter { w -> w.length in 2..12 && w.all { !it.isSurrogate() && Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN } }
-            .distinct()
-            .joinToString("") { it.toList().joinToString(" ") + "\n" }
+        // some 175 MB already unpacked in the build directory: a second name for it, not a second copy
+        private fun link(from: File, to: File) {
+            try {
+                Files.createLink(to.toPath(), from.toPath())
+            } catch (e: IOException) {
+                from.copyTo(to)
+            } catch (e: UnsupportedOperationException) {
+                from.copyTo(to)
+            }
+        }
 
         /**
          * A SentencePiece model's pieces and their scores, `piece<TAB>score` a line, as

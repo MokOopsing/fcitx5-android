@@ -15,6 +15,7 @@ import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.TaskAction
+import org.gradle.api.tasks.UntrackedTask
 import org.gradle.kotlin.dsl.property
 import org.gradle.kotlin.dsl.withType
 import org.gradle.process.ExecSpec
@@ -47,6 +48,7 @@ fun Project.getCxxAbiModelProperty(): Property<CxxAbiModel> {
     return abiModel
 }
 
+@UntrackedTask(because = "Incrementality is left to ninja and cmake --install, as in AGP's native build tasks")
 abstract class CMakeBuildInstallTask : DefaultTask() {
     @get:Input
     @get:Optional

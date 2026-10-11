@@ -13,6 +13,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.core.view.MenuProvider
 import androidx.lifecycle.Lifecycle
+import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import org.fcitx.fcitx5.android.BuildConfig
 import org.fcitx.fcitx5.android.R
@@ -25,7 +26,12 @@ import org.fcitx.fcitx5.android.utils.addPreference
 import org.fcitx.fcitx5.android.utils.item
 import org.fcitx.fcitx5.android.utils.navigateWithAnim
 import org.fcitx.fcitx5.android.utils.openUrl
+import org.fcitx.fcitx5.android.utils.setup
 import org.fcitx.fcitx5.android.utils.styledColor
+import java.text.ParsePosition
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 
 class MainFragment : PaddingPreferenceFragment() {
 
@@ -72,11 +78,12 @@ class MainFragment : PaddingPreferenceFragment() {
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         // grouped by what the user wants to adjust, not by which layer (fcitx or Android) owns the
-        // setting; what a phone's user seldom needs (a physical keyboard's candidate window, fcitx's
-        // global options) is under Advanced
+        // setting; what a phone's user seldom needs (a physical keyboard's candidate window) is
+        // under Advanced, and fcitx's global options are not shown at all
         preferenceScreen = preferenceManager.createPreferenceScreen(requireContext()).apply {
             // the offline build fetches nothing itself: new words come with a new version or a pack
-            if (DataAge.isStale(BuildConfig.BUILD_TIME, System.currentTimeMillis())) {
+            val dataMade = dataDay(BuildConfig.ENGINE_DATA, BuildConfig.ENGINE_WORDS) ?: BuildConfig.BUILD_TIME
+            if (DataAge.isStale(dataMade, System.currentTimeMillis())) {
                 addPreference(R.string.data_outdated, R.string.data_outdated_summary) {
                     requireContext().openUrl(Const.releasesUrl)
                 }
@@ -127,11 +134,16 @@ class MainFragment : PaddingPreferenceFragment() {
                 )
             }
             addCategory(R.string.home_section_other) {
-                addPreference(
-                    R.string.app_language,
-                    AppLanguage.name(requireContext(), AppLanguage.current()),
-                    R.drawable.ic_baseline_language_24
-                ) { AppLanguage.choose(requireContext()) }
+                addPreference(Preference(context).apply {
+                    setup(
+                        getString(R.string.app_language),
+                        AppLanguage.name(context, AppLanguage.current()),
+                        R.drawable.ic_baseline_language_24
+                    ) {
+                        // set here: a pick that leaves the configuration as it was makes no page anew
+                        AppLanguage.choose(context) { summary = AppLanguage.name(context, it) }
+                    }
+                })
                 addDestinationPreference(
                     R.string.advanced,
                     R.drawable.ic_baseline_more_horiz_24,
@@ -140,4 +152,23 @@ class MainFragment : PaddingPreferenceFragment() {
             }
         }
     }
+}
+
+// the day in a release's tag, engine-data-20261005-3, or its month, words-202610
+private val RELEASE_DAY = Regex("""-(\d{8}|\d{6})(?:-|$)""")
+
+/**
+ * The day the newest of the data of [releases] (their tags) was made, in epoch milliseconds; null
+ * if no tag has a day. Its age, not the build's: an old tree built today has old data all the
+ * same. Each part counts (the model, the word pack), as each is released apart from the others.
+ */
+internal fun dataDay(vararg releases: String): Long? = releases.mapNotNull(::releaseDay).maxOrNull()
+
+// a month's tag from its first day, the earliest it may have been made
+private fun releaseDay(release: String): Long? {
+    val day = RELEASE_DAY.find(release)?.groupValues?.get(1) ?: return null
+    return SimpleDateFormat(if (day.length == 8) "yyyyMMdd" else "yyyyMM", Locale.ROOT).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+        isLenient = false
+    }.parse(day, ParsePosition(0))?.time
 }

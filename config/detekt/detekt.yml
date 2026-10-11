@@ -5,7 +5,7 @@
 #
 # Syntax-only: `./gradlew detekt` runs without type resolution. The typed tasks
 # (:app:detektDebug, ...) exist but report ~190 analysis errors on this AGP 9 / Kotlin 2.4 setup
-# and did not flag any of the 85 `!!` in :app, so rules that need types (UnsafeCallOnNullableType,
+# and did not flag a single `!!` in :app, so rules that need types (UnsafeCallOnNullableType,
 # RedundantSuspendModifier, SuspendFunSwallowedCancellation, SleepInsteadOfDelay) are not enabled
 # here: they would look active and check nothing. Revisit when detekt 2.0 is stable.
 
@@ -17,7 +17,7 @@ exceptions:
 
 potential-bugs:
   LateinitUsage:
-    active: false   # 76 uses, mostly Android lifecycle fields; too noisy to be a signal
+    active: false   # mostly Android lifecycle fields; too noisy to be a signal
 
 complexity:
   TooManyFunctions:
@@ -41,10 +41,10 @@ style:
     active: true
 
   NewLineAtEndOfFile:
-    active: false   # 135 pre-existing hits and no auto-format to fix them; pure noise
+    active: false   # many pre-existing hits and no auto-format to fix them; pure noise
   ReturnCount:
     active: false   # guard clauses are idiomatic Kotlin
   ForbiddenComment:
-    active: false   # TODO/FIXME are tracked in dev/ISSUES.md, not banned
+    active: false   # a TODO/FIXME marks a known gap where it is; open work goes in GitHub issues
   ExplicitItLambdaMultipleParameters:
     active: false

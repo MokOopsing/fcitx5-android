@@ -15,6 +15,7 @@ dependencies {
     // A workaround to enable version catalog usage in the convention plugin,
     // see https://github.com/gradle/gradle/issues/15383#issuecomment-779893192
     implementation(files(LibrariesForLibs::class.java.protectionDomain.codeSource.location))
+    testImplementation(libs.junit)
 }
 
 gradlePlugin {
