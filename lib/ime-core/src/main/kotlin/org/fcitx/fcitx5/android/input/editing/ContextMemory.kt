@@ -23,8 +23,10 @@ class ContextMemory(
 ) {
     private class Written(val text: StringBuilder, var at: Long)
 
-    // the app last written in last
-    private val written = LinkedHashMap<String, Written>(apps, LOAD, true)
+    // in order of use, the field last written in, read or asked about last; past `apps`, the first goes
+    private val written = object : LinkedHashMap<String, Written>(apps, LOAD, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Written>?) = size > apps
+    }
     private var app: String? = null
 
     /** The field [app] focused; null: one whose text is not to be kept. */
@@ -37,22 +39,23 @@ class ContextMemory(
 
     /**
      * The context for the engine where the editor shows [before] before the cursor at [now]:
-     * itself, or, when the field is [empty], what was written in it last, still fresh. Null: the
-     * editor would not say, so what is kept stays for the next time.
+     * itself, or, when the field is empty, what was written in it last, still fresh. Whether it is
+     * empty [after] tells, what follows the cursor: asked only where nothing is before it and
+     * something fresh is kept, as each ask is a round trip. Null: the editor would not say, so what
+     * is kept stays for the next time.
      */
-    fun context(before: String, empty: Boolean?, now: Long): String {
+    fun context(before: String, now: Long, after: () -> CharSequence?): String {
         val app = app ?: return before
         if (before.isNotEmpty()) {
             remember(app, now).apply { text.setLength(0) }.text.append(before.takeLast(keep))
             return before
         }
-        if (empty == null) return before
-        val last = written[app]
-        if (!empty || last == null || now - last.at > fresh) {
-            written.remove(app)
-            return before
+        if (remembers(now)) {
+            val following = after() ?: return before
+            if (following.isEmpty()) return written.getValue(app).text.toString()
         }
-        return last.text.toString()
+        written.remove(app)
+        return before
     }
 
     /** [text] committed at [now], the cursor left after its first [cursor] units ([text]'s end for -1). */
@@ -85,7 +88,6 @@ class ContextMemory(
     private fun remember(app: String, now: Long): Written {
         val last = written.getOrPut(app) { Written(StringBuilder(), now) }
         last.at = now
-        if (written.size > apps) written.remove(written.keys.first())
         return last
     }
 

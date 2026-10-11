@@ -22,18 +22,19 @@ class CursorTracker {
     }
 
     fun predict(new: CursorRange) {
-        if (!latest.rangeEquals(new)) {
-            predictions.add(new)
+        // queued as a copy: the caller's range wraps an array it may still change
+        predict(new.start, new.end)
+    }
+
+    fun predict(start: Int, end: Int = start) {
+        if (!latest.rangeEquals(start, end)) {
+            predictions.add(CursorRange(start, end))
         }
         CoreLog.d { "current: $current; predicted: ${predictions.joinToString()}" }
     }
 
-    fun predict(start: Int, end: Int = start) {
-        predict(CursorRange(start, end))
-    }
-
     fun predictOffset(offsetStart: Int, offsetEnd: Int = offsetStart) {
-        predict(CursorRange(latest.start + offsetStart, latest.end + offsetEnd))
+        predict(latest.start + offsetStart, latest.end + offsetEnd)
     }
 
     fun consume(start: Int, end: Int = start): Boolean {

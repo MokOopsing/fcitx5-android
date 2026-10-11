@@ -23,7 +23,7 @@ import kotlin.math.max
  *
  * **Confined to one thread** (the main thread, in the service): the state is plain mutable
  * fields, and the editor's cursor reports arrive on that thread too. [checkThread] is called on
- * every mutating entry point so a debug build can flag a caller on the wrong thread.
+ * every mutating entry point, [pairs]' too, so a debug build can flag a caller on the wrong thread.
  */
 class EditingSession(
     private val editor: InputEditor,
@@ -37,7 +37,7 @@ class EditingSession(
     val composing = CursorRange()
 
     /** Brackets and quotes typed in pairs, in this editor. */
-    val pairs = AutoPairs(this, editor)
+    val pairs = AutoPairs(this, editor, checkThread)
 
     /** The content of that range, as fcitx formatted it. */
     var composingText: FormattedText = FormattedText.Empty
@@ -90,6 +90,14 @@ class EditingSession(
     }
 
     /**
+     * Whether the last cursor report ([onCursorUpdate]) left a “ that fcitx counts open, with
+     * nothing composed: one put in paired that the cursor left, or one typed to step over a ”.
+     * fcitx's punctuation would make the next quote a lone ”, so the service resets it.
+     */
+    var quoteLeftOpen: Boolean = false
+        private set
+
+    /**
      * Reconciles a cursor report from the editor (`onUpdateSelection`) with the prediction.
      *
      * A report the prediction expected changes nothing -- except that some editors drop the
@@ -108,6 +116,19 @@ class EditingSession(
         ignoreSystemCursor: Boolean,
     ): CursorUpdate {
         checkThread()
+        val quoteOpen = pairs.quoteOpen
+        return reconcile(selStart, selEnd, composingStart, composingEnd, ignoreSystemCursor).also {
+            quoteLeftOpen = quoteOpen && !pairs.quoteOpen && composing.isEmpty()
+        }
+    }
+
+    private fun reconcile(
+        selStart: Int,
+        selEnd: Int,
+        composingStart: Int,
+        composingEnd: Int,
+        ignoreSystemCursor: Boolean,
+    ): CursorUpdate {
         val updateIndex = ++cursorUpdateIndex
         pairs.cursorReported()
         if (selection.consume(selStart, selEnd)) {
@@ -282,7 +303,8 @@ class EditingSession(
      *
      * The end is not clamped at the end of the text, whose length the session does not know;
      * an editor ignores a selection past it, leaving the prediction unconfirmed until the next
-     * report. The one caller, the backspace swipe, only ever moves the start.
+     * report. The backspace swipe moves only the start; [AutoPairs.type] moves both ends by one,
+     * over a closing one it put in.
      */
     fun applySelectionOffset(offsetStart: Int, offsetEnd: Int = 0) {
         checkThread()
@@ -342,6 +364,7 @@ class EditingSession(
     /**
      * How far the composing region sticks out beyond the selection on each side, in units.
      * The editor deletes around the union of the two, never the composing text itself.
+     * Copied by the app's InputEditorContractTest.randomSequences: change the two together.
      */
     private fun composingOverhang(): Pair<Int, Int> {
         if (composing.isEmpty()) return 0 to 0

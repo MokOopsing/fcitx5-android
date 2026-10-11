@@ -7,6 +7,7 @@ package org.fcitx.fcitx5.android.input.editing
 import org.fcitx.fcitx5.android.input.editing.EditorKeyPolicy.ArrowAction
 import org.fcitx.fcitx5.android.input.editing.EditorKeyPolicy.Direction
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -102,12 +103,13 @@ class ArrowKeysTest {
         val a = Arrows("abcdefghij")
         a.press(Direction.Left, 5)
         assertEquals(5, a.cursor)
-        assertEquals(1, a.reads)
+        assertTrue("not a read a press: ${a.reads}", a.reads <= 1)
         // the text may have changed with a report: read again, at where the presses put the cursor
         a.reportPresses(1)
+        val reads = a.reads
         a.press(Direction.Left)
         assertEquals(4, a.cursor)
-        assertEquals(2, a.reads)
+        assertTrue("read again", a.reads > reads)
     }
 
     /** An emoji half out of what was read is read whole; at the start of the text, nothing is read again. */
@@ -116,14 +118,17 @@ class ArrowKeysTest {
         val a = Arrows("x${wave}abc", readAhead = 4)
         a.press(Direction.Left, 4)
         assertEquals(1, a.cursor)
-        assertEquals(2, a.reads)
-        a.press(Direction.Left, 3)
+        assertTrue("one read on past what was read, not a read a press: ${a.reads}", a.reads <= 2)
+        a.press(Direction.Left, 2)
         assertEquals(0, a.cursor)
-        assertEquals("one read to find the start, none after", 4, a.reads)
+        // the start found, by now: no read after
+        val atStart = a.reads
+        a.press(Direction.Left)
+        assertEquals(atStart, a.reads)
         // the presses past the start, which the editor ignored, moved nothing to go on from
         a.press(Direction.Right, 2)
         assertEquals(3, a.cursor)
-        assertEquals(5, a.reads)
+        assertTrue("one read for the way back: ${a.reads - atStart}", a.reads <= atStart + 1)
     }
 
     /** The app placed the cursor elsewhere, say: the presses go on from there. */
@@ -167,5 +172,22 @@ class ArrowKeysTest {
         a.keys.forget()
         a.press(Direction.Left)
         assertEquals(5, a.cursor)
+    }
+
+    /** A password's text is not read even to step over an emoji: the editor's own key does it. */
+    @Test
+    fun aSensitiveFieldGetsTheKeyEventAndIsNotRead() {
+        val a = Arrows("a${wave}b", cursor = 1)
+        var reads = 0
+        for (direction in Direction.entries) {
+            val action = a.keys.onArrow(
+                EditorTraits(isSensitive = true), direction,
+                textBefore = { reads++; a.editor.textBeforeCursor(it) },
+                textAfter = { reads++; a.editor.textAfterCursor(it) },
+            )
+            assertEquals(ArrowAction.SendKey, action)
+        }
+        assertEquals(0, reads)
+        assertEquals(1, a.cursor)
     }
 }

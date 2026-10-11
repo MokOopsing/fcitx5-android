@@ -4,6 +4,8 @@
  */
 package org.fcitx.fcitx5.android.input.editing
 
+import org.fcitx.fcitx5.android.input.UnicodePunctuation
+
 /**
  * Brackets and quotes typed in pairs, as an editor for code does: an opening one typed puts its
  * closing one after it, the cursor between them. Typing the closing one there steps over it
@@ -25,12 +27,16 @@ package org.fcitx.fcitx5.android.input.editing
  * It then counts that “ open, so [quoteOpen] holds till the next cursor report, for the service
  * to reset fcitx there as when a pair is left.
  */
-class AutoPairs internal constructor(private val session: EditingSession, private val editor: InputEditor) {
+class AutoPairs internal constructor(
+    private val session: EditingSession,
+    private val editor: InputEditor,
+    private val checkThread: () -> Unit,
+) {
 
     /** A closing one put in, and where the cursor was right after its opening one. */
-    private class Pair(val closer: Char, val opened: Int)
+    private class OpenPair(val closer: Char, val opened: Int)
 
-    private val pairs = ArrayList<Pair>()
+    private val pairs = ArrayList<OpenPair>()
 
     /** A ” or ’ stepped over with “ or ‘, its cursor report still to come; see [cursorReported]. */
     private var steppedOverWithOpener = false
@@ -46,15 +52,17 @@ class AutoPairs internal constructor(private val session: EditingSession, privat
      * pair or a step over a closing one; false if the caller commits it as usual.
      */
     fun type(text: String): Boolean {
+        checkThread()
         if (text.length != 1 || !plainCursor()) return false
         val c = text[0]
         val top = pairs.lastOrNull()?.closer
         val closer = PAIRS[c]
-        if (top == null && closer == null) return false
+        val closes = top != null && (c == top || QUOTES[c] == top)
+        // neither steps over nor pairs, whatever follows: not worth a round trip to the editor
+        if (!closes && closer == null) return false
         // null: the editor will not say, and what it cannot show could not be stepped over
         val after = (editor.textAfterCursor(1) ?: return false).firstOrNull()
-        val closes = c == top || QUOTES[c] == top
-        if (top != null && after == top && closes) {
+        if (closes && after == top) {
             pairs.removeAt(pairs.lastIndex)
             if (c in QUOTES) steppedOverWithOpener = true
             session.applySelectionOffset(1, 1)
@@ -62,12 +70,11 @@ class AutoPairs internal constructor(private val session: EditingSession, privat
         }
         if (closer == null) return false
         if (after != null && !after.isWhitespace() && !punctuation(after)) return false
-        if (c == closer && editor.textBeforeCursor(1)?.firstOrNull()?.let { it.isLetterOrDigit() || ends(it) } == true) {
-            return false
-        }
+        // two units: a letter beyond the BMP is a surrogate pair
+        if (c == closer && quoteCloses(editor.textBeforeCursor(2))) return false
         val at = session.selection.latest.start
         session.commitText("$c$closer", 1)
-        pairs += Pair(closer, at + 1)
+        pairs += OpenPair(closer, at + 1)
         return true
     }
 
@@ -76,7 +83,8 @@ class AutoPairs internal constructor(private val session: EditingSession, privat
      * itself (its punctuation's 成对输入), remembered as one put in here.
      */
     fun committed(text: String, cursor: Int, start: Int) {
-        if (cursor == 1 && text.length == 2 && PAIRS[text[0]] == text[1]) pairs += Pair(text[1], start + 1)
+        checkThread()
+        if (cursor == 1 && text.length == 2 && PAIRS[text[0]] == text[1]) pairs += OpenPair(text[1], start + 1)
     }
 
     /**
@@ -85,6 +93,7 @@ class AutoPairs internal constructor(private val session: EditingSession, privat
      * The caller then deletes as ever, the opening one, with a key event as Backspace is.
      */
     fun backspace() {
+        checkThread()
         val top = pairs.lastOrNull() ?: return
         // without a round trip, only where the pair can still be empty
         if (!plainCursor() || session.selection.latest.start != top.opened) return
@@ -96,23 +105,31 @@ class AutoPairs internal constructor(private val session: EditingSession, privat
     }
 
     /** The pairs put in are no longer where the cursor is: none steps over or goes with Backspace. */
-    fun forget() = pairs.clear()
+    fun forget() {
+        checkThread()
+        pairs.clear()
+    }
 
     /**
      * A cursor report reached [EditingSession.onCursorUpdate]. A step over with “ no longer
      * counts as [quoteOpen] after it: the service, seeing that fall, resets fcitx's count.
      */
     internal fun cursorReported() {
+        checkThread()
         steppedOverWithOpener = false
     }
 
     // nothing composing (a preedit is fcitx's to commit) and no selection (typing replaces it)
     private fun plainCursor() = editor.isAvailable && session.composing.isEmpty() && session.selection.latest.isEmpty()
 
-    private fun punctuation(c: Char) = Character.getType(c).toByte() in PUNCTUATION
+    private fun punctuation(c: Char) = c in UnicodePunctuation
 
-    // what a quote after it closes: `"Stop."`
-    private fun ends(c: Char) = Character.getType(c).toByte() in ENDING
+    // what a quote after it closes: a word (`say "hi"`), or what ends one (`"Stop."`)
+    private fun quoteCloses(before: CharSequence?): Boolean {
+        if (before.isNullOrEmpty()) return false
+        val last = Character.codePointBefore(before, before.length)
+        return Character.isLetterOrDigit(last) || Character.getType(last).toByte() in ENDING
+    }
 
     companion object {
         /** Opening ones to their closing ones. */
@@ -128,11 +145,6 @@ class AutoPairs internal constructor(private val session: EditingSession, privat
         // what fcitx may make of the one quote key, either way: to the closing one
         private val QUOTES = mapOf('“' to '”', '‘' to '’')
 
-        private val PUNCTUATION = setOf(
-            Character.CONNECTOR_PUNCTUATION, Character.DASH_PUNCTUATION, Character.START_PUNCTUATION,
-            Character.END_PUNCTUATION, Character.INITIAL_QUOTE_PUNCTUATION, Character.FINAL_QUOTE_PUNCTUATION,
-            Character.OTHER_PUNCTUATION,
-        )
         private val ENDING = setOf(Character.END_PUNCTUATION, Character.FINAL_QUOTE_PUNCTUATION, Character.OTHER_PUNCTUATION)
     }
 }

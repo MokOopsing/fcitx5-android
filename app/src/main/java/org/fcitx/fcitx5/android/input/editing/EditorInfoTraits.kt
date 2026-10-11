@@ -6,12 +6,15 @@ package org.fcitx.fcitx5.android.input.editing
 
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
+import org.fcitx.fcitx5.android.core.CapabilityFlag
+import org.fcitx.fcitx5.android.core.CapabilityFlags
 
 /**
- * `EditorInfo.privateImeOptions` value by which an editor opts in to having Backspace sent as
- * `deleteSurroundingText` instead of a key event. Only the app's own key preference UI sets it.
+ * Option in `EditorInfo.privateImeOptions` (a comma-separated list) by which an editor opts in to
+ * having Backspace sent as `deleteSurroundingText` instead of a key event. Only the app's own key
+ * preference UI sets it.
  */
-@Suppress("ConstPropertyName")
+@Suppress("ConstPropertyName", "TopLevelPropertyNaming")
 const val DeleteSurroundingFlag = "org.fcitx.fcitx5.android.DELETE_SURROUNDING"
 
 /** Decodes the bits of [EditorInfo] that [EditorKeyPolicy] and [EditingSession] act on. */
@@ -22,7 +25,9 @@ fun EditorInfo.toEditorTraits(): EditorTraits {
     return EditorTraits(
         isRawKeyInput = type == InputType.TYPE_NULL,
         isUri = type == InputType.TYPE_CLASS_TEXT && variation == InputType.TYPE_TEXT_VARIATION_URI,
-        acceptsDeleteSurrounding = privateImeOptions == DeleteSurroundingFlag,
+        isSensitive = CapabilityFlags.fromEditorInfo(this).hasAny(CapabilityFlag.PasswordOrSensitive),
+        acceptsDeleteSurrounding =
+            privateImeOptions?.split(',')?.any { it.trim() == DeleteSurroundingFlag } == true,
         noEnterAction = (imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION) != 0,
         customActionId = actionId.takeIf {
             actionLabel?.isNotEmpty() == true && it != EditorInfo.IME_ACTION_UNSPECIFIED

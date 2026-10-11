@@ -56,7 +56,7 @@ class StickyMetaState {
 
     /** @return the meta bits to clear in the editor */
     fun onModifierUp(metaState: Int): Int {
-        val released = last xor metaState
+        val released = last and metaState.inv()
         last = metaState
         return released
     }

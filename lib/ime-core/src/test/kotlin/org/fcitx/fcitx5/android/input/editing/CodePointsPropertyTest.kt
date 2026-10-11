@@ -28,6 +28,13 @@ class CodePointsPropertyTest {
         }
     }
 
+    /** Letters and surrogate pairs in any mix, anywhere in the text, and no lone surrogate. */
+    private fun Random.wellFormed(maxLength: Int): String = buildString {
+        repeat(nextInt(maxLength + 1)) {
+            if (nextBoolean()) append(high).append(low) else append('a' + nextInt(26))
+        }
+    }
+
     /** Walks [count] code points back from the end; null on meeting an unpaired surrogate. */
     private fun oracleLast(text: String, count: Int): Int? {
         var i = text.length
@@ -76,8 +83,7 @@ class CodePointsPropertyTest {
     fun wellFormedTextIsMeasuredWholeFromEitherEnd() {
         val random = Random(20260925)
         repeat(5_000) {
-            val text = random.utf16(12).let { s -> if (s.any(Char::isSurrogate)) s.filterNot(Char::isSurrogate) else s }
-                .let { s -> s + "👋".repeat(random.nextInt(3)) }
+            val text = random.wellFormed(12)
             val n = text.codePointCount(0, text.length)
             assertEquals(text.length, CodePoints.lengthOfLast(text, n))
             assertEquals(text.length, CodePoints.lengthOfFirst(text, n))

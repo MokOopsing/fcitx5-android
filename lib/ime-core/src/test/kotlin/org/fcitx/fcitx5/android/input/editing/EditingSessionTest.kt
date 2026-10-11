@@ -449,6 +449,21 @@ class EditingSessionTest {
         assertTrue(s.selection.consume(e.selectionStart, e.selectionEnd))
     }
 
+    /** A deletion before the composition moves the composition too. */
+    @Test
+    fun deletingBeforeACompositionMovesIt() {
+        val (s, e) = session("abcd", cursor = 4)
+        e.setComposingText("ni")
+        s.compose("ni", start = 4)
+        s.selection.resetTo(6)
+
+        s.deleteSurrounding(before = 2, after = 0, inCodePoints = false)
+
+        assertEquals("abni", e.text)
+        assertTrue(s.composing.rangeEquals(2, 4))
+        assertTrue(s.composing.rangeEquals(e.composingStart, e.composingEnd))
+    }
+
     /** Text either side goes; a selection in the middle survives, shifted left. */
     @Test
     fun deletingAroundASelectionShiftsIt() {
@@ -544,21 +559,6 @@ class EditingSessionTest {
         assertFalse(e.calls.any { it.startsWith("delete") })
     }
 
-    /** A deletion before the composition moves the composition too. */
-    @Test
-    fun deletingBeforeACompositionMovesIt() {
-        val (s, e) = session("abcd", cursor = 4)
-        e.setComposingText("ni")
-        s.compose("ni", start = 4)
-        s.selection.resetTo(6)
-
-        s.deleteSurrounding(before = 2, after = 0, inCodePoints = false)
-
-        assertEquals("abni", e.text)
-        assertTrue(s.composing.rangeEquals(2, 4))
-        assertTrue(s.composing.rangeEquals(e.composingStart, e.composingEnd))
-    }
-
     /** A TYPE_NULL editor takes raw keys only, whatever it asked for. */
     @Test
     fun aRawKeyEditorGetsAKeyEventEvenIfOptedIn() {
@@ -626,37 +626,60 @@ class EditingSessionTest {
         assertTrue(e.calls.isEmpty())
     }
 
-    /** Every mutating entry point reports in, so a debug build can catch a wrong-thread caller. */
+    /**
+     * Every mutating entry point reports in, so a debug build can catch a wrong-thread caller:
+     * the session's own, and those of its [EditingSession.pairs].
+     */
     @Test
     fun everyMutatingEntryPointChecksTheThread() {
         var checks = 0
         val s = EditingSession(FakeEditor("abcdef", 3)) { checks++ }
         s.selection.resetTo(3)
-        val calls = listOf<EditingSession.() -> Unit>(
-            { setComposingText(FormattedText.Empty) },
-            { resetComposingState() },
-            { finishComposition() },
-            { commitText("x") },
-            { deleteSelection() },
-            { applySelectionOffset(0) },
-            { cancelSelection() },
-            { deleteSurrounding(1, 0, inCodePoints = false) },
-            { backspace(EditorTraits()) },
-            { onCursorUpdate(3, 3, -1, -1, ignoreSystemCursor = false) },
-            { updateComposingText(formatted("ni")) },
-        )
-        // a new public method must be added above; this catches one that was not
-        val mutators = EditingSession::class.java.declaredMethods.filter {
-            java.lang.reflect.Modifier.isPublic(it.modifiers) && !it.name.startsWith("get") &&
-                !it.isSynthetic && !it.name.contains('$')
+        val calls = buildMap<String, EditingSession.() -> Unit> {
+            put("setComposingText") { setComposingText(FormattedText.Empty) }
+            put("resetComposingState") { resetComposingState() }
+            put("finishComposition") { finishComposition() }
+            put("commitText") { commitText("x") }
+            put("deleteSelection") { deleteSelection() }
+            put("applySelectionOffset") { applySelectionOffset(0) }
+            put("cancelSelection") { cancelSelection() }
+            put("deleteSurrounding") { deleteSurrounding(1, 0, inCodePoints = false) }
+            put("backspace") { backspace(EditorTraits()) }
+            put("onCursorUpdate") { onCursorUpdate(3, 3, -1, -1, ignoreSystemCursor = false) }
+            put("updateComposingText") { updateComposingText(formatted("ni")) }
         }
-        assertEquals("public methods: ${mutators.map { it.name }}", calls.size, mutators.size)
-        calls.forEachIndexed { i, call ->
+        val pairCalls = buildMap<String, AutoPairs.() -> Unit> {
+            put("type") { type("(") }
+            put("committed") { committed("()", cursor = 1, start = 3) }
+            put("backspace") { backspace() }
+            put("forget") { forget() }
+            put("cursorReported") { cursorReported() }
+        }
+        // a new public method must be added above, with a call, or to queries if it changes nothing; this names one in neither
+        val queries = emptySet<String>()
+        val pairQueries = emptySet<String>()
+        assertEquals("EditingSession methods not listed", emptyList<String>(), unlisted(EditingSession::class.java, calls.keys + queries))
+        assertEquals("AutoPairs methods not listed", emptyList<String>(), unlisted(AutoPairs::class.java, pairCalls.keys + pairQueries))
+        for ((name, call) in calls) {
             val before = checks
             s.call()
-            assertTrue("call #$i did not check the thread", checks > before)
+            assertTrue("$name did not check the thread", checks > before)
+        }
+        for ((name, call) in pairCalls) {
+            val before = checks
+            s.pairs.call()
+            assertTrue("pairs.$name did not check the thread", checks > before)
         }
     }
+
+    /** The public methods of [type], a property's getters (`getX`, `isX`) aside, that are not in [listed]. */
+    private fun unlisted(type: Class<*>, listed: Set<String>): List<String> = type.declaredMethods
+        .filter { java.lang.reflect.Modifier.isPublic(it.modifiers) && !it.isSynthetic }
+        // an internal method's name has its module after a '$'
+        .map { it.name.substringBefore('$') }
+        .filter { !getter.matches(it) && it !in listed }
+
+    private val getter = Regex("(get|is)\\p{Lu}.*")
 
     @Test
     fun resettingClearsBothTheRangeAndTheText() {
@@ -816,6 +839,38 @@ class EditingSessionTest {
         s.report(3)
         s.report(1)
         assertEquals(before + 2, s.cursorUpdateIndex)
+    }
+
+    /** What the service resets fcitx's count of open quotes for: else the next quote is a lone ”. */
+    @Test
+    fun aReportSaysWhenItLeftAQuoteFcitxCountsOpenWithNothingComposed() {
+        val (s, _) = session()
+        assertTrue(s.pairs.type("“"))
+        // the pair's own report: the cursor still between them
+        s.report(1)
+        assertFalse(s.quoteLeftOpen)
+        // the user taps before it: left open
+        s.report(0)
+        assertTrue(s.quoteLeftOpen)
+        // said of that report alone
+        s.report(0)
+        assertFalse(s.quoteLeftOpen)
+        // a ” stepped over with “, reported with nothing composed: fcitx still counts that “ open
+        val (o, _) = session()
+        o.pairs.type("“")
+        o.report(1)
+        assertTrue(o.pairs.type("“"))
+        o.report(2)
+        assertTrue(o.quoteLeftOpen)
+        // a ” stepped over with “, the report coming once something is composed: a reset would drop it
+        val (c, _) = session()
+        c.pairs.type("“")
+        c.report(1)
+        assertTrue(c.pairs.type("“"))
+        c.compose("n", start = 2)
+        c.report(2, composing = 2 to 3)
+        assertFalse(c.pairs.quoteOpen)
+        assertFalse(c.quoteLeftOpen)
     }
 
     // endregion

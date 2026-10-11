@@ -65,14 +65,15 @@ object EditorInfoParser {
     private fun parseInputType(inputType: Int): String {
         val `class` = inputType and InputType.TYPE_MASK_CLASS
         val classString = TYPE_CLASS.find { it.getInt(null) == `class` }?.name ?: "$`class`"
+        // flags and variations share bits across classes, so only this class's names are listed
+        val classPrefix = classString.replace("_CLASS", "")
         val flags = inputType and InputType.TYPE_MASK_FLAGS
         val flagsString = TYPE_FLAGS
-            .filter { flags.hasFlag(it.getInt(null)) }
+            .filter { flags.hasFlag(it.getInt(null)) && it.name.startsWith(classPrefix) }
             .joinToString("\n  ") { it.name }
         val variation = inputType and InputType.TYPE_MASK_VARIATION
-        val variationPrefix = classString.replace("_CLASS", "")
         val variationString = TYPE_VARIATION
-            .filter { variation == it.getInt(null) && it.name.startsWith(variationPrefix) }
+            .filter { variation == it.getInt(null) && it.name.startsWith(classPrefix) }
             .joinToString("\n  ") { it.name }
         return "class=$classString\nflags=$flagsString\nvariation=$variationString"
     }

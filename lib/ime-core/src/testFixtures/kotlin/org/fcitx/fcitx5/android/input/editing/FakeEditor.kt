@@ -29,7 +29,11 @@ class FakeEditor(
     private val reselectsZeroAfterInsert: Boolean = true,
 ) : InputEditor {
 
-    /** Set to false to model the gap between input sessions, when there is no connection. */
+    /**
+     * Set to false to model the gap between input sessions, when there is no connection: as
+     * `InputConnectionEditor` does then, every call is dropped, a read giving null. It is still
+     * recorded in [calls], so a test can tell what was attempted.
+     */
     override var isAvailable: Boolean = true
 
     /**
@@ -111,12 +115,14 @@ class FakeEditor(
 
     override fun commitText(text: String, newCursorPosition: Int) {
         calls += "commitText($text, $newCursorPosition)"
+        if (!isAvailable) return
         replaceText(text, newCursorPosition, composing = false)
     }
 
     /** Styling spans are not modelled: only the characters of [text] land in the buffer. */
     override fun setComposingText(text: CharSequence, newCursorPosition: Int) {
         calls += "setComposingText($text, $newCursorPosition)"
+        if (!isAvailable) return
         replaceText(text.toString(), newCursorPosition, composing = true)
     }
 
@@ -126,20 +132,23 @@ class FakeEditor(
     /** Out-of-range positions are ignored, not clamped, as `BaseInputConnection` does. */
     override fun setSelection(start: Int, end: Int) {
         calls += "setSelection($start, $end)"
+        if (!isAvailable) return
         val length = buffer.length
-        if (start < 0 || end < 0 || start > length || end > length) return
+        if (start !in 0..length || end !in 0..length) return
         selectionStart = start
         selectionEnd = end
     }
 
     override fun finishComposingText() {
         calls += "finishComposingText()"
+        if (!isAvailable) return
         clearComposing()
     }
 
     /** Clamped into the text and ordered; an empty region means no composing region. */
     override fun setComposingRegion(start: Int, end: Int) {
         calls += "setComposingRegion($start, $end)"
+        if (!isAvailable) return
         val length = buffer.length
         val a = minOf(start, end).coerceIn(0, length)
         val b = maxOf(start, end).coerceIn(0, length)
@@ -152,6 +161,7 @@ class FakeEditor(
 
     override fun textAfterCursor(length: Int): CharSequence? {
         calls += "textAfterCursor($length)"
+        if (!isAvailable) return null
         val limit = revealLimit ?: return null
         val b = maxOf(selectionStart, selectionEnd)
         val n = minOf(length, limit, buffer.length - b)
@@ -160,6 +170,7 @@ class FakeEditor(
 
     override fun textBeforeCursor(length: Int): CharSequence? {
         calls += "textBeforeCursor($length)"
+        if (!isAvailable) return null
         val limit = revealLimit ?: return null
         val a = minOf(selectionStart, selectionEnd)
         if (a <= 0) return ""
@@ -182,6 +193,7 @@ class FakeEditor(
         composingAfter: Int,
     ) {
         calls += "deleteSurroundingText($before, $after, inCodePoints=$inCodePoints)"
+        if (!isAvailable) return
         var a = minOf(selectionStart, selectionEnd)
         var b = maxOf(selectionStart, selectionEnd)
         if (hasComposing) {

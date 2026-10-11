@@ -47,4 +47,27 @@ class CapabilityFlagsTest {
         // the variation's bits mean something else in another class
         assertFalse(CapabilityFlags.isPassword(info(InputType.TYPE_CLASS_NUMBER or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD)))
     }
+
+    @Test
+    fun eachPasswordAndAnIncognitoFieldIsPasswordOrSensitive() {
+        // what the privacy gate asks: nothing around the cursor read, nothing typed kept or learned
+        fun gated(type: Int, options: Int = 0) =
+            CapabilityFlags.fromEditorInfo(EditorInfo().apply { inputType = type; imeOptions = options })
+                .hasAny(CapabilityFlag.PasswordOrSensitive)
+        val text = InputType.TYPE_CLASS_TEXT
+        mapOf(
+            "password" to gated(text or InputType.TYPE_TEXT_VARIATION_PASSWORD),
+            "web password" to gated(text or InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD),
+            "shown password" to gated(text or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD),
+            "PIN" to gated(InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD),
+            "incognito" to gated(text, EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING),
+        ).forEach { (name, isGated) -> assertTrue(name, isGated) }
+        mapOf(
+            "text" to gated(text),
+            "email" to gated(text or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS),
+            "number" to gated(InputType.TYPE_CLASS_NUMBER),
+            // an option that does not turn learning off
+            "no extract UI" to gated(text, EditorInfo.IME_FLAG_NO_EXTRACT_UI),
+        ).forEach { (name, isGated) -> assertFalse(name, isGated) }
+    }
 }

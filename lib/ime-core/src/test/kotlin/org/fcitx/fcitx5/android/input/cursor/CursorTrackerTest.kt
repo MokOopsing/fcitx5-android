@@ -105,6 +105,8 @@ class CursorTrackerTest {
         t.predict(6)
         t.predict(5)
         assertTrue("first 5 matched", t.consume(5))
+        assertTrue("6 is still queued", t.consume(6))
+        // current is 6 now: latest can only be 5 if the later 5 is queued
         assertTrue("the later 5 is still queued behind 6", t.latest.rangeEquals(5, 5))
     }
 
@@ -118,16 +120,17 @@ class CursorTrackerTest {
     }
 
     /**
-     * `predict(CursorRange)` stores the instance it was handed. Because `CursorRange` wraps a
-     * mutable array, mutating that instance afterwards rewrites the queued prediction.
+     * `predict(CursorRange)` queues a copy. Because `CursorRange` wraps a mutable array, the
+     * caller changing its instance afterwards must not rewrite the queued prediction.
      */
     @Test
-    fun predictStoresTheGivenInstanceNotACopy() {
+    fun predictQueuesACopyOfTheGivenRange() {
         val t = tracker(0)
         val range = CursorRange(3, 3)
         t.predict(range)
         range.update(8, 8)
-        assertTrue("the queued prediction changed with the caller's object", t.latest.rangeEquals(8, 8))
+        assertTrue("the queued prediction kept its bounds", t.latest.rangeEquals(3, 3))
+        assertTrue(t.consume(3))
     }
 
     // endregion

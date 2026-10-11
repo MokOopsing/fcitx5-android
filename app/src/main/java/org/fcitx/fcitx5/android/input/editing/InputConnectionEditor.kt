@@ -58,16 +58,12 @@ class InputConnectionEditor(private val connection: () -> InputConnection?) : In
             !inCodePoints -> ic.deleteSurroundingText(before, after)
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.N ->
                 ic.deleteSurroundingTextInCodePoints(before, after)
-            // No code-point variant before API 24: measure the code points and delete that
-            // many units, so a surrogate pair is never split. The editor deletes from the edges
-            // of the composing region where that sticks out past the selection, so measure from
-            // there. Unmeasurable (no text at all) counts as one unit per code point, which is
-            // what the plain variant would have done anyway. A shorter answer than asked for is
-            // taken as the end of the text: the request is a few units, far below any limit an
-            // editor puts on what it reveals. (EditingSession, which knows the cursor, predicts
-            // `count` units for a read that stops short of the text's start; an editor revealing
-            // less than a few units would make the two disagree until the next cursor report.)
-            // Malformed text is refused outright, as the code-point variant refuses it.
+            // No code-point variant before API 24: measure how many units the code points take and
+            // delete that many, so a surrogate pair is never split. Measure from the edges of the
+            // composing region, because the editor deletes from there. When there is no text to
+            // measure, each code point counts as one unit, as the plain call assumes. A read shorter
+            // than asked for is taken as the end of the text, as EditingSession assumes too.
+            // Malformed text is refused, as the code-point variant refuses it.
             else -> {
                 val unitsBefore = measure(before, composingBefore, fromEnd = true) {
                     ic.getTextBeforeCursor(it, 0)
@@ -100,11 +96,6 @@ class InputConnectionEditor(private val connection: () -> InputConnection?) : In
         }
     }
 
-    private companion object {
-        /** Keeps `2 * count` from overflowing; far more text than any deletion touches. */
-        const val MAX_MEASURED = 1 shl 20
-    }
-
     override fun batchEdit(block: () -> Unit) {
         val ic = connection()
         if (ic == null) {
@@ -117,5 +108,10 @@ class InputConnectionEditor(private val connection: () -> InputConnection?) : In
         } finally {
             ic.endBatchEdit()
         }
+    }
+
+    private companion object {
+        /** Keeps `2 * count` from overflowing; far more text than any deletion touches. */
+        const val MAX_MEASURED = 1 shl 20
     }
 }

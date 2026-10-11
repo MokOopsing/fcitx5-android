@@ -6,7 +6,6 @@ package org.fcitx.fcitx5.android.input.cursor
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -48,15 +47,14 @@ class CursorRangeTest {
 
     /**
      * `CursorRange` is a value class around an `IntArray`, so the generated `equals` compares
-     * the array by reference. Two ranges with identical bounds are NOT `==`. Every comparison
-     * must use [CursorRange.rangeEquals]; this test exists so that never silently changes.
+     * the array by reference: two ranges with identical bounds need not be `==`. Every
+     * comparison goes through [CursorRange.rangeEquals], which compares the bounds.
      */
     @Test
-    fun equalsIsReferenceBasedSoRangeEqualsIsMandatory() {
+    fun rangeEqualsComparesTheBoundsOfTwoRanges() {
         val a = CursorRange(1, 2)
-        val b = CursorRange(1, 2)
-        assertNotEquals("== compares the backing array by reference", a, b)
-        assertTrue("rangeEquals compares the bounds", a.rangeEquals(b))
+        assertTrue("rangeEquals compares the bounds", a.rangeEquals(CursorRange(1, 2)))
+        assertFalse(a.rangeEquals(CursorRange(1, 3)))
     }
 
     // endregion

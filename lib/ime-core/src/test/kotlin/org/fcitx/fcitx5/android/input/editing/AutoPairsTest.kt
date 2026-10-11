@@ -28,6 +28,26 @@ class AutoPairsTest {
             assertTrue(session.backspace(EditorTraits(acceptsDeleteSurrounding = true)))
         }
 
+        /** The editor reports where its cursor is, as it does after each change. */
+        fun report() {
+            session.onCursorUpdate(
+                editor.selectionStart, editor.selectionEnd, editor.composingStart, editor.composingEnd,
+                ignoreSystemCursor = false,
+            )
+        }
+
+        /** The user puts the cursor at [p], and the editor reports it. */
+        fun moveTo(p: Int) {
+            editor.setSelection(p, p)
+            report()
+        }
+
+        /** The session expects the cursor where the editor has it. */
+        fun assertInStep() = assertTrue(
+            "predicted ${session.selection.latest}, editor at ${editor.selectionStart}",
+            session.selection.latest.rangeEquals(editor.selectionStart, editor.selectionEnd),
+        )
+
         /** The text with `|` where the cursor is. */
         val shown get() = editor.text.substring(0, editor.selectionStart) + "|" + editor.text.substring(editor.selectionStart)
     }
@@ -39,6 +59,17 @@ class AutoPairsTest {
         assertEquals("（|）", t.shown)
         t.type("好")
         assertEquals("（好|）", t.shown)
+    }
+
+    /** Typing in a pair, what neither closes it nor opens one is committed without asking the editor. */
+    @Test
+    fun aCharacterThatNeitherClosesNorOpensReadsNothing() {
+        val t = Typing("")
+        t.type("（")
+        t.editor.calls.clear()
+        t.type("好")
+        assertEquals("（好|）", t.shown)
+        assertFalse(t.editor.calls.any { it.startsWith("text") })
     }
 
     @Test
@@ -101,22 +132,33 @@ class AutoPairsTest {
         assertEquals("don't|", a.shown)
     }
 
+    /** A letter beyond the basic plane is two units: the quote after it sees the whole letter. */
+    @Test
+    fun anAsciiQuoteAfterALetterBeyondTheBasicPlaneCloses() {
+        val letter = String(Character.toChars(0x20000)) // a CJK Extension B ideograph
+        val t = Typing(letter)
+        t.type("\"")
+        assertEquals("$letter\"|", t.shown)
+    }
+
     @Test
     fun theCursorMovedElsewhereForgetsThePairs() {
-        val t = Typing("")
-        t.type("（")
         // the editor reports the cursor the IME put there, then one the user tapped to, and back
-        t.session.onCursorUpdate(1, 1, -1, -1, ignoreSystemCursor = false)
-        t.editor.setSelection(0, 0)
-        t.session.onCursorUpdate(0, 0, -1, -1, ignoreSystemCursor = false)
-        t.editor.setSelection(1, 1)
-        t.session.onCursorUpdate(1, 1, -1, -1, ignoreSystemCursor = false)
+        fun movedAwayAndBack() = Typing("").apply {
+            type("（")
+            report()
+            moveTo(0)
+            moveTo(1)
+        }
+        val t = movedAwayAndBack()
         t.type("）")
         assertEquals("（）|）", t.shown)
-        t.editor.setSelection(1, 1)
-        t.session.onCursorUpdate(1, 1, -1, -1, ignoreSystemCursor = false)
-        t.backspace()
-        assertEquals("|））", t.shown)
+        t.assertInStep()
+        // nor does Backspace there take the closing one with the opening one
+        val b = movedAwayAndBack()
+        b.backspace()
+        assertEquals("|）", b.shown)
+        b.assertInStep()
     }
 
     /** Nothing composed is the range (0,0), which holds 0: a move there is a move all the same. */

@@ -52,11 +52,33 @@ class EditorInfoTraitsTest {
         )
     }
 
+    /** A password, or a field that asks not to be learned from: what an arrow must not read. */
+    @Test
+    fun aPasswordOrAFieldNotToLearnFromIsSensitive() {
+        assertTrue(info { inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD }.isSensitive)
+        assertTrue(info {
+            inputType = InputType.TYPE_CLASS_TEXT
+            imeOptions = EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
+        }.isSensitive)
+        assertFalse(info { inputType = InputType.TYPE_CLASS_TEXT }.isSensitive)
+    }
+
     @Test
     fun onlyOurOwnPrivateOptionOptsIntoDeleteSurrounding() {
         assertTrue(info { privateImeOptions = DeleteSurroundingFlag }.acceptsDeleteSurrounding)
         assertFalse(info { privateImeOptions = "nm,com.example.other" }.acceptsDeleteSurrounding)
         assertFalse(info { privateImeOptions = null }.acceptsDeleteSurrounding)
+    }
+
+    /** `privateImeOptions` is a comma-separated list, so the option counts among others too. */
+    @Test
+    fun ourOptionAmongOthersStillOptsIn() {
+        assertTrue(info { privateImeOptions = "nm,$DeleteSurroundingFlag" }.acceptsDeleteSurrounding)
+        assertTrue(info { privateImeOptions = "$DeleteSurroundingFlag, nm" }.acceptsDeleteSurrounding)
+        assertFalse(
+            "a longer option that merely starts with ours",
+            info { privateImeOptions = "$DeleteSurroundingFlag.x,nm" }.acceptsDeleteSurrounding,
+        )
     }
 
     @Test

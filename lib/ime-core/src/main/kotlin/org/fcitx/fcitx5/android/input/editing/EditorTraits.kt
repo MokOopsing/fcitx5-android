@@ -19,6 +19,8 @@ data class EditorTraits(
     val isRawKeyInput: Boolean = false,
     /** A URL field. Browsers use the arrow keys there to accept an address-bar suggestion. */
     val isUri: Boolean = false,
+    /** A password, or a field that asks not to be learned from: its text is not read, not even to step over an emoji. */
+    val isSensitive: Boolean = false,
     /**
      * The editor opted in, through `privateImeOptions`, to having Backspace done as an edit
      * rather than a key event. Almost nothing does: our own key-binding preference is the one
@@ -85,6 +87,7 @@ object EditorKeyPolicy {
         textBefore: (length: Int) -> CharSequence? = { null },
         textAfter: (length: Int) -> CharSequence? = { null },
     ): ArrowAction {
+        if (traits.isSensitive) return ArrowAction.SendKey
         if (traits.isRawKeyInput || traits.isUri) return ArrowAction.SendKey
         val offset = if (start == end) codePointUnits(direction, textBefore, textAfter) else 0
         return ArrowAction.MoveCursor(

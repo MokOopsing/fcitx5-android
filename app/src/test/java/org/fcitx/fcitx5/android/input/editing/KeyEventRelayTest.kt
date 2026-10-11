@@ -5,23 +5,41 @@
 package org.fcitx.fcitx5.android.input.editing
 
 import android.view.KeyEvent
+import android.view.View
+import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.InputConnection
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.slot
-import io.mockk.verify
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 
 @RunWith(RobolectricTestRunner::class)
 class KeyEventRelayTest {
 
-    private val ic = mockk<InputConnection>(relaxed = true)
+    /** A real connection that records the keys and meta-state clears reaching the editor. */
+    private class RecordingConnection : BaseInputConnection(View(RuntimeEnvironment.getApplication()), false) {
+        val sent = mutableListOf<KeyEvent>()
+        val cleared = mutableListOf<Int>()
+
+        override fun sendKeyEvent(event: KeyEvent): Boolean {
+            sent += event
+            return true
+        }
+
+        override fun clearMetaKeyStates(states: Int): Boolean {
+            cleared += states
+            return true
+        }
+    }
+
+    private val ic = RecordingConnection()
     private var connection: InputConnection? = ic
     private val relay = KeyEventRelay { connection }
 
@@ -35,7 +53,7 @@ class KeyEventRelayTest {
 
         assertTrue(relay.replay(id))
 
-        verify(exactly = 1) { ic.sendKeyEvent(event) }
+        assertSame(event, ic.sent.single())
     }
 
     @Test
@@ -43,13 +61,13 @@ class KeyEventRelayTest {
         val id = relay.remember(key(KeyEvent.KEYCODE_A))
         assertTrue(relay.replay(id))
         assertFalse(relay.replay(id))
-        verify(exactly = 1) { ic.sendKeyEvent(any()) }
+        assertEquals(1, ic.sent.size)
     }
 
     @Test
     fun anUnknownIdIsNotReplayedSoTheCallerCanMakeUpAnEvent() {
         assertFalse(relay.replay(42))
-        verify(exactly = 0) { ic.sendKeyEvent(any()) }
+        assertTrue(ic.sent.isEmpty())
     }
 
     @Test
@@ -76,6 +94,7 @@ class KeyEventRelayTest {
 
     @Test
     fun aKeyThatWouldOpenTheCharacterPickerIsReplayedWithoutItsCharacter() {
+        // mocked: no real KeyEvent maps to PICKER_DIALOG_INPUT in Robolectric's key character map
         val event = mockk<KeyEvent>(relaxed = true) {
             every { unicodeChar } returns ForwardedKeys.PICKER_DIALOG_INPUT
             every { keyCode } returns KeyEvent.KEYCODE_A
@@ -84,16 +103,16 @@ class KeyEventRelayTest {
             every { eventTime } returns 6L
             every { scanCode } returns 30
         }
-        val sent = slot<KeyEvent>()
-        every { ic.sendKeyEvent(capture(sent)) } returns true
 
         assertTrue(relay.replay(relay.remember(event)))
 
-        assertEquals(KeyEvent.KEYCODE_A, sent.captured.keyCode)
-        assertEquals("rebuilt as a virtual-keyboard key", -1, sent.captured.deviceId)
-        assertEquals(30, sent.captured.scanCode)
-        assertNotEquals(ForwardedKeys.PICKER_DIALOG_INPUT, sent.captured.unicodeChar)
-        verify(exactly = 0) { ic.clearMetaKeyStates(any()) }
+        val sent = ic.sent.single()
+        assertEquals(KeyEvent.KEYCODE_A, sent.keyCode)
+        assertEquals("rebuilt as a virtual-keyboard key", -1, sent.deviceId)
+        assertEquals(30, sent.scanCode)
+        // read through the virtual keyboard's character map, which deviceId -1 picks and which has no picker key
+        assertNotEquals(ForwardedKeys.PICKER_DIALOG_INPUT, sent.unicodeChar)
+        assertTrue(ic.cleared.isEmpty())
     }
 
     @Test
@@ -104,13 +123,13 @@ class KeyEventRelayTest {
         relay.replay(relay.remember(shiftDown))
         relay.replay(relay.remember(shiftUp))
 
-        verify { ic.clearMetaKeyStates(KeyEvent.META_SHIFT_ON) }
+        assertEquals(listOf(KeyEvent.META_SHIFT_ON), ic.cleared)
     }
 
     @Test
     fun aPlainKeyLeavesMetaStateAlone() {
         relay.replay(relay.remember(key(KeyEvent.KEYCODE_A)))
-        verify(exactly = 0) { ic.clearMetaKeyStates(any()) }
+        assertTrue(ic.cleared.isEmpty())
     }
 
     @Test
@@ -121,6 +140,6 @@ class KeyEventRelayTest {
 
         connection = ic
         relay.replay(relay.remember(key(KeyEvent.KEYCODE_SHIFT_LEFT, KeyEvent.ACTION_UP, 0)))
-        verify { ic.clearMetaKeyStates(KeyEvent.META_SHIFT_ON) }
+        assertEquals(listOf(KeyEvent.META_SHIFT_ON), ic.cleared)
     }
 }

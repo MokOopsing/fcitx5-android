@@ -15,6 +15,7 @@ class ForwardedKeysTest {
     private val keycodeA = 29 // KeyEvent.KEYCODE_A
     private val shiftOn = 0x1 or 0x40 // META_SHIFT_ON | META_SHIFT_LEFT_ON
     private val altOn = 0x2 or 0x10 // META_ALT_ON | META_ALT_LEFT_ON
+    private val capsLockOn = 0x100000 // META_CAPS_LOCK_ON
 
     @Test
     fun aKeyWithAKeyCodeIsSentBothWays() {
@@ -66,5 +67,13 @@ class ForwardedKeysTest {
         val meta = StickyMetaState()
         meta.onModifierDown(shiftOn)
         assertEquals(0, meta.onModifierUp(shiftOn))
+    }
+
+    /** A release that turns a bit on (a lock, say) leaves it: only what the release dropped is cleared. */
+    @Test
+    fun aBitTheReleaseTurnedOnIsNotCleared() {
+        val meta = StickyMetaState()
+        meta.onModifierDown(shiftOn)
+        assertEquals(shiftOn, meta.onModifierUp(capsLockOn))
     }
 }

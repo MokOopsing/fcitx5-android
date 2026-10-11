@@ -309,7 +309,8 @@ open class InputEditorContractTest {
                         e.editor.deleteSurroundingText(a, b, inCodePoints = false)
                     }
                     6 -> "deleteSurroundingText($a, $b, code points)" to { e: Subject ->
-                        // the composing overhang, as EditingSession works it out
+                        // the composing overhang: a copy of EditingSession.composingOverhang(),
+                        // which is private to ime-core; change the two together
                         val o = e.outcome(emptyList())
                         val (s0, s1) = o.selection.let { minOf(it.first, it.second) to maxOf(it.first, it.second) }
                         val (c0, c1) = o.composing
