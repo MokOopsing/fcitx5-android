@@ -28,7 +28,9 @@ Left out: `fragment` (a run across a word's edge: 作为一, 外还有, 长效�
 combination nobody types as one, or one so long it is a sentence's part: 获得各种, 无需专业),
 `typo` (a misspelling or misuse: 总得来说), `junk` (spam, adult or gambling ads, SEO stuffing,
 machine text: 日皮视频, 万霖 when only spam pages use it), `obscure` (a name or term so rare that
-lifting it would push out a common word under the same reading).
+lifting it would push out a common word under the same reading; of the Latin words, one nobody
+types inside Chinese: SBS, ZZZ, a person's name, an English word that is no loanword), `case` (a
+Latin word's spelling alone, where another is kept: WIFI beside WiFi and wifi).
 
 ## How a candidate is judged
 

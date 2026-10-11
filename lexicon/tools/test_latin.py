@@ -39,6 +39,13 @@ class LatinTest(unittest.TestCase):
                          '# made by lexicon/tools/latin.py, 2 words, offset -5.00 from 2 words of the model.\n'
                          "QQ\tQ'Q\t-3.0\nUSB\tU'S'B\t-3.0\n", self.make_pack(COUNTS, ARPA))
 
+    def test_a_rejected_word_goes_in_any_spelling_and_a_case_one_alone(self):
+        counts = COUNTS + 'Usb\t500\t40\nSBS\t900\t40\nsbs\t300\t40\n'
+        with open(self.dir / 'reject.tsv', 'a', encoding='utf-8') as f:
+            f.write('sbs\tobscure\t2026-10-11\t\nUsb\tcase\t2026-10-11\t\n')
+        words = [line.split('\t')[0] for line in self.make_pack(counts, ARPA).splitlines() if not line.startswith('#')]
+        self.assertEqual(['QQ', 'USB'], sorted(words))
+
     def test_a_model_without_the_counts_latin_words_is_an_error(self):
         with self.assertRaises(SystemExit) as raised:
             self.make_pack(COUNTS, '\\data\\\nngram 1=1\n\n\\1-grams:\n-1.5\t你好\n\n\\end\\\n')

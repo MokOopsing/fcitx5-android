@@ -5,7 +5,8 @@
 
 From latin_counts.py's counts: a word of letters only (digits and C++ cannot be typed as letter
 syllables), seen MIN_COUNT times or more on MIN_PAGES pages or more; not one lexicon/reject.tsv
-rejects (spam, adult and gambling sites, HTML left in text). One whose letters are all pinyin
+rejects (spam, adult and gambling sites, HTML left in text, what nobody types inside Chinese), in
+any spelling, or but the spelling rejected as `case` (WIFI, where WiFi is kept). One whose letters are all pinyin
 (shi, china, ai; not counting 呣, 嗯 and 儿, so NBA is not n'ba) is scored PINYIN_PENALTY lower:
 the same letters type Chinese, which should come first unless the text around says otherwise.
 Each spelling of a word written in a tenth or more of its uses is a word of its own: app, APP
@@ -52,7 +53,9 @@ def all_pinyin(word, pinyin):
 
 def main(counts_path, arpa_path, out_path):
     pinyin = {s for s in syllables() if s.islower() and s not in ('m', 'n', 'ng', 'r')}
-    rejected = {r[0].lower() for r in rows(LEXICON / 'reject.tsv')}
+    rejects = list(rows(LEXICON / 'reject.tsv'))
+    rejected = {r[0].lower() for r in rejects if r[1:2] != ['case']}
+    cased = {r[0] for r in rejects if r[1:2] == ['case']}
     counted = shards(counts_path)
     spellings = collections.defaultdict(dict)
     pages = collections.Counter()
@@ -83,7 +86,7 @@ def main(counts_path, arpa_path, out_path):
             continue
         penalty = PINYIN_PENALTY if all_pinyin(key, pinyin) else 0.0
         for word, count in forms.items():
-            if count >= MIN_SHARE * total:
+            if count >= MIN_SHARE * total and word not in cased:
                 words.append((word, round(min(-3.0, math.log10(count) + offset + penalty), 2)))
     words.sort(key=lambda w: (-w[1], w[0]))
     named = ', '.join(counted[:-1]) + ' and ' + counted[-1] if len(counted) > 1 else counted[0]
