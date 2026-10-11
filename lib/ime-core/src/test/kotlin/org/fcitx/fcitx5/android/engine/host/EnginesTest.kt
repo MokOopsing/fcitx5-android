@@ -305,7 +305,7 @@ class EnginesTest : EnginesFixture() {
             .build().toByteArray()
         val load = { path: String -> if (path == Engines.PINYIN_DATA) ByteBuffer.wrap(data) else load(path) }
         Engines(load, null).use { engines ->
-            engines.settings = EngineSettings(sentenceModel = false)
+            engines.settings = EngineSettings(modelLevel = ModelLevel.LOW)
             engines.onEvent(Engines.PINYIN, EngineEvent.PICK, engines.type(Engines.PINYIN, "ni").candidates.indexOf("昵"))
             assertEquals(listOf("你", "昵", "拟", "泥", "尼", "逆", "腻"), engines.type(Engines.SHUANGPIN, "n").candidates)
             engines.onEvent(Engines.SHUANGPIN, EngineEvent.RESET, 0)
@@ -535,7 +535,7 @@ class EnginesTest : EnginesFixture() {
             .toByteArray()
         val engines = Engines({ if (it == Engines.PINYIN_DATA) ByteBuffer.wrap(data) else load(it) }, null)
         // the decoder's reading alone
-        engines.settings = EngineSettings(sentenceModel = false)
+        engines.settings = EngineSettings(modelLevel = ModelLevel.LOW)
         engines.onEvent(Engines.PINYIN, EngineEvent.RESET, 0)
         engines.context("你")
         engines.type(Engines.PINYIN, "uz")

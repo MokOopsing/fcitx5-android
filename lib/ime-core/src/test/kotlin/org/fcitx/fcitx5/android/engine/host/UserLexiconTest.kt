@@ -112,7 +112,7 @@ class UserLexiconTest : EnginesFixture() {
     fun withNoLogWhatWasLearnedOfASelfMadeWordTakenOffIsForgotten() {
         Engines(::load, null).use { engines ->
             // the decoder's scores alone: the sentence model would weigh the readings again
-            engines.settings = EngineSettings(sentenceModel = false)
+            engines.settings = EngineSettings(modelLevel = ModelLevel.LOW)
             assertTrue(engines.addWord("妮浩", "nihao"))
             engines.pickUntilFirst("nihao", "妮浩")
             engines.removeWord(Engines.UserWord("妮浩", "ni hao", Engines.UserWord.Kind.ADDED))
@@ -342,7 +342,7 @@ class UserLexiconTest : EnginesFixture() {
             .toByteArray()
         withTable(folder.newFolder("engine"), null, pinyin).use { engines ->
             // the decoder's scores alone: the sentence model would weigh the readings again
-            engines.settings = EngineSettings(sentenceModel = false)
+            engines.settings = EngineSettings(modelLevel = ModelLevel.LOW)
             assertEquals("拟好", engines.firstInPinyin("nihao"))
             engines.seePhrase()
             engines.pickInTable("你好")
@@ -367,7 +367,7 @@ class UserLexiconTest : EnginesFixture() {
             .build()
             .toByteArray()
         withTable(folder.newFolder("engine"), null, pinyin, LIAO_JIE_TABLE).use { engines ->
-            engines.settings = EngineSettings(sentenceModel = false)
+            engines.settings = EngineSettings(modelLevel = ModelLevel.LOW)
             assertEquals("辽姐", engines.firstInPinyin("liaojie"))
             engines.seePhrase()
             engines.pickInTable("了解")
@@ -407,7 +407,7 @@ class UserLexiconTest : EnginesFixture() {
         val errors = ArrayList<IOException>()
         Engines(::load, dir, onError = { errors += it }, additions = { additions }).use { engines ->
             // the decoder's scores alone: the sentence model would weigh the readings again
-            engines.settings = EngineSettings(sentenceModel = false)
+            engines.settings = EngineSettings(modelLevel = ModelLevel.LOW)
             assertTrue(engines.addWord("妮浩", "nihao"))
             engines.pickUntilFirst("nihao", "妮浩")
             readable = false
@@ -425,7 +425,7 @@ class UserLexiconTest : EnginesFixture() {
         val additions = Engines.Additions("", "d") { sequenceOf("妮浩 ni'hao 0") }
         Engines(::load, dir, additions = { additions }).use { engines ->
             // the decoder's scores alone: the sentence model would weigh the readings again
-            engines.settings = EngineSettings(sentenceModel = false)
+            engines.settings = EngineSettings(modelLevel = ModelLevel.LOW)
             assertTrue(engines.addWord("妮浩", "nihao"))
             engines.pickUntilFirst("nihao", "妮浩")
         }
@@ -436,7 +436,7 @@ class UserLexiconTest : EnginesFixture() {
             assertTrue(errors.any { it.message == "unreadable" })
         }
         Engines(::load, dir, additions = { additions }).use { engines ->
-            engines.settings = EngineSettings(sentenceModel = false)
+            engines.settings = EngineSettings(modelLevel = ModelLevel.LOW)
             // the dictionary's word, its picks not forgotten as the user's own
             assertEquals("妮浩", engines.type(Engines.PINYIN, "nihao").candidates.first())
         }

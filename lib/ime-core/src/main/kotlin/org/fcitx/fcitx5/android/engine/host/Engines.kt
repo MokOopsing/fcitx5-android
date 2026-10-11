@@ -197,10 +197,9 @@ class Engines(
             if (value == field) return
             field = value
             dropSessions()
-            if (!value.sentenceModel) {
-                assets.sentenceModel.drop()
-                assets.refiningModel.drop()
-            }
+            // what a lower level no longer runs leaves memory, read again if the level goes up
+            if (value.modelLevel < ModelLevel.MEDIUM) assets.sentenceModel.drop()
+            if (value.modelLevel < ModelLevel.HIGH) assets.refiningModel.drop()
         }
 
     /** [event] of [im]'s keyboard; nothing picked is learned unless [learning], nor by a table that does not learn. */
@@ -271,10 +270,10 @@ class Engines(
      * The one reranker over the model, for every session: they all run on the fcitx thread, one
      * input typed at a time, and what it ran for one input is started over for another's.
      */
-    private fun reranker(): Reranker? = if (settings.sentenceModel) assets.sentenceModel.reranker(Reranker.LIMIT) else null
+    private fun reranker(): Reranker? = if (settings.modelLevel >= ModelLevel.MEDIUM) assets.sentenceModel.reranker(Reranker.LIMIT) else null
 
     /** As [reranker], over the larger model, which weighs the readings again while the user pauses. */
-    private fun refiner(): SentenceRefiner? = if (settings.sentenceModel) assets.lateRefiner else null
+    private fun refiner(): SentenceRefiner? = if (settings.modelLevel == ModelLevel.HIGH) assets.lateRefiner else null
 
     /**
      * Reads [additions] again, for the user changed them: the sessions are made anew, what was

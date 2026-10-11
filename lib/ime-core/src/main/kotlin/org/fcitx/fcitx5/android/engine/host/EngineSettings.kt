@@ -21,8 +21,8 @@ data class EngineSettings(
     /** Whether words that may follow are offered after a commit. */
     val prediction: Boolean = true,
     val pageSize: Int = DEFAULT_PAGE_SIZE,
-    /** Whether pinyin's readings are weighed again as whole sentences, by the sentence model. */
-    val sentenceModel: Boolean = true,
+    /** How much the sentence models weigh pinyin's readings again: the 性能档位. */
+    val modelLevel: ModelLevel = ModelLevel.HIGH,
     /** Whether full pinyin reads the Latin words typed in it (iphone for iPhone). */
     val latinWords: Boolean = true,
     /** What the user set for each table input method, by its group in the config (`Wubi`). */
@@ -35,7 +35,7 @@ data class EngineSettings(
         const val PAGE_SIZE = "PageSize"
         const val PREDICTION = "Prediction"
         const val FUZZY = "Fuzzy"
-        const val SENTENCE_MODEL = "SentenceModel"
+        const val MODEL_LEVEL = "ModelLevel"
         const val LATIN_WORDS = "LatinWords"
 
         /** libime's key for its common misspellings (gn for ng); here it turns slips on too. */
@@ -96,12 +96,27 @@ data class EngineSettings(
                 typos = flag("$FUZZY/$TYPOS") ?: default.typos,
                 prediction = flag(PREDICTION) ?: default.prediction,
                 pageSize = values[PAGE_SIZE]?.toIntOrNull()?.takeIf { it in PAGE_SIZES } ?: default.pageSize,
-                sentenceModel = flag(SENTENCE_MODEL) ?: default.sentenceModel,
+                modelLevel = ModelLevel.entries.firstOrNull { it.key == values[MODEL_LEVEL] } ?: default.modelLevel,
                 latinWords = flag(LATIN_WORDS) ?: default.latinWords,
                 tables = tables,
             )
         }
     }
+}
+
+/**
+ * The 性能档位, by the names the addon's config keeps ([key]): how much of the sentence models the
+ * pinyins run, from the decoder alone to the most right and the most work.
+ */
+enum class ModelLevel(val key: String) {
+    /** 低档: the decoder alone, its n-gram model. */
+    LOW("Low"),
+
+    /** 中档: and the small sentence model, at every key, picking among the decoder's sentences. */
+    MEDIUM("Medium"),
+
+    /** 高档: and the large one too, once the user pauses (PinyinSession's refiner). */
+    HIGH("High"),
 }
 
 /**

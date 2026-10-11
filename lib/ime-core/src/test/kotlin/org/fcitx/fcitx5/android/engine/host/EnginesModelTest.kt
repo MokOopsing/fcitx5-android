@@ -79,14 +79,48 @@ class EnginesModelTest {
         assertEquals(models, loaded.filter { it in models })
         loaded.clear()
         val off = Engines(::load, null)
-        off.settings = EngineSettings(sentenceModel = false)
+        off.settings = EngineSettings(modelLevel = ModelLevel.LOW)
         assertEquals(listOf("你", "拟"), off.type(Engines.PINYIN, "ni").candidates)
         assertTrue(loaded.none { it in models })
         // dropped when turned off, and read again when turned back on
-        engines.settings = EngineSettings(sentenceModel = false)
+        engines.settings = EngineSettings(modelLevel = ModelLevel.LOW)
         engines.settings = EngineSettings()
         engines.pause(Engines.PINYIN, engines.type(Engines.PINYIN, "ni"))
         assertEquals(models, loaded.filter { it in models })
+    }
+
+    /** 中档 runs the small model at every key and never refines; 低档 neither; for every pinyin alike. */
+    @Test
+    fun eachLevelRunsItsModelsAndDropsThoseItNoLongerRuns() {
+        val engines = Engines(::load, null)
+        // what 高档 refines (two sentences, ending on a syllable)
+        val high = Engines(::load, null)
+        for ((im, typed) in listOf(Engines.PINYIN to "ni", Engines.SHUANGPIN to "ni", Engines.T9 to "64")) assertTrue(im, high.type(im, typed).refines)
+        loaded.clear()
+        engines.settings = EngineSettings(modelLevel = ModelLevel.MEDIUM)
+        for ((im, typed) in listOf(Engines.PINYIN to "ni", Engines.SHUANGPIN to "ni", Engines.T9 to "64")) {
+            assertFalse(im, engines.type(im, typed).refines)
+            engines.onEvent(im, EngineEvent.REFINE, 0)
+            engines.onEvent(im, EngineEvent.RESET, 0)
+        }
+        assertEquals(listOf(Engines.SENTENCE_MODEL), loaded.filter { it.endsWith(".safetensors") })
+        engines.settings = EngineSettings(modelLevel = ModelLevel.LOW)
+        loaded.clear()
+        for ((im, typed) in listOf(Engines.PINYIN to "ni", Engines.SHUANGPIN to "ni", Engines.T9 to "64")) {
+            assertFalse(im, engines.type(im, typed).refines)
+            engines.onEvent(im, EngineEvent.RESET, 0)
+        }
+        assertTrue(loaded.none { it.endsWith(".safetensors") })
+        // up to 高档 again: both read anew, the first dropped on the way down
+        engines.settings = EngineSettings()
+        engines.pause(Engines.PINYIN, engines.type(Engines.PINYIN, "ni"))
+        assertEquals(listOf(Engines.SENTENCE_MODEL, Engines.REFINING_MODEL), loaded.filter { it.endsWith(".safetensors") })
+        // down to 中档: the large one dropped, the small one kept
+        loaded.clear()
+        engines.settings = EngineSettings(modelLevel = ModelLevel.MEDIUM)
+        engines.settings = EngineSettings()
+        engines.pause(Engines.PINYIN, engines.type(Engines.PINYIN, "ni"))
+        assertEquals(listOf(Engines.REFINING_MODEL), loaded.filter { it.endsWith(".safetensors") })
     }
 
     @Test

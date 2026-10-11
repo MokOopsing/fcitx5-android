@@ -444,8 +444,11 @@
     <string name="im_page_size">每頁候選數</string>
     <string name="im_prediction">聯想下一個詞</string>
     <string name="im_prediction_summary">打完一個詞，接著給出可能要打的下一個詞</string>
-    <string name="im_sentence_model">按整句挑候選</string>
-    <string name="im_sentence_model_summary">整句讀起來最通順的排在前面</string>
+    <string name="im_model_level">效能檔位</string>
+    <string name="im_model_level_summary">檔位越高越準，也越耗電</string>
+    <string name="im_model_level_low">低檔：只按詞頻和搭配，最省電</string>
+    <string name="im_model_level_medium">中檔：每次按鍵按整句通順程度重排</string>
+    <string name="im_model_level_high">高檔：停頓時再用大模型精挑首選，最準</string>
     <string name="im_typos">糾正錯拼和按偏的鍵</string>
     <string name="im_typos_summary">比如把 gn 當成 ng，或按到了旁邊的鍵</string>
     <string name="im_latin_words">中英混輸</string>

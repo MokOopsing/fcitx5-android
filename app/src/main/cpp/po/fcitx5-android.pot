@@ -50,7 +50,16 @@ msgstr ""
 msgid "Typos and slipped keys"
 msgstr ""
 
-msgid "Weigh readings as whole sentences"
+msgid "Performance level"
+msgstr ""
+
+msgid "Low"
+msgstr ""
+
+msgid "Medium"
+msgstr ""
+
+msgid "High"
 msgstr ""
 
 msgid "Type English words in pinyin"

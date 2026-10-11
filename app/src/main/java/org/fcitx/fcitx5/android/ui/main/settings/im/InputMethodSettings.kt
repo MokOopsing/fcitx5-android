@@ -22,6 +22,7 @@ import org.fcitx.fcitx5.android.core.InputMethodNames
 import org.fcitx.fcitx5.android.core.RawConfig
 import org.fcitx.fcitx5.android.engine.host.EngineSettings
 import org.fcitx.fcitx5.android.engine.host.Engines
+import org.fcitx.fcitx5.android.engine.host.ModelLevel
 import org.fcitx.fcitx5.android.engine.host.TableSettings
 import org.fcitx.fcitx5.android.engine.pinyin.Fuzzy
 import org.fcitx.fcitx5.android.engine.pinyin.ShuangpinScheme
@@ -103,6 +104,12 @@ object InputMethodSettings {
         ShuangpinScheme.GB to R.string.shuangpin_gb,
     )
 
+    private val MODEL_LEVELS = mapOf(
+        ModelLevel.LOW to R.string.im_model_level_low,
+        ModelLevel.MEDIUM to R.string.im_model_level_medium,
+        ModelLevel.HIGH to R.string.im_model_level_high,
+    )
+
     // keyed by Fuzzy's names, as the engine reads them (EngineSettings.parse)
     private val FUZZY = listOf(
         Fuzzy.V_U to "u ↔ v", Fuzzy.AN_ANG to "an ↔ ang", Fuzzy.EN_ENG to "en ↔ eng", Fuzzy.IAN_IANG to "ian ↔ iang",
@@ -130,7 +137,12 @@ object InputMethodSettings {
                 R.string.im_section_typing, listOfNotNull(
                     Choice(EngineSettings.PAGE_SIZE, R.string.im_page_size, PAGE_SIZES, label = { _, v -> v }, nearest = numbers(EngineSettings.PAGE_SIZES)),
                     Toggle(EngineSettings.PREDICTION, text(R.string.im_prediction), R.string.im_prediction_summary),
-                    Toggle(EngineSettings.SENTENCE_MODEL, text(R.string.im_sentence_model), R.string.im_sentence_model_summary),
+                    Choice(
+                        EngineSettings.MODEL_LEVEL, R.string.im_model_level, ModelLevel.entries.map { it.key }, R.string.im_model_level_summary,
+                        label = { ctx, v -> ctx.getString(MODEL_LEVELS.getValue(ModelLevel.entries.first { it.key == v })) },
+                        // what the engine reads as the default (EngineSettings.parse)
+                        nearest = { v -> ModelLevel.entries.firstOrNull { it.key == v }?.key ?: ModelLevel.HIGH.key },
+                    ),
                     Toggle("${EngineSettings.FUZZY}/${EngineSettings.TYPOS}", text(R.string.im_typos), R.string.im_typos_summary, unused = if (nineKeys) R.string.im_not_for_t9 else 0),
                     // full pinyin's alone: 双拼 types its letters otherwise, the nine keys digits
                     Toggle(EngineSettings.LATIN_WORDS, text(R.string.im_latin_words), R.string.im_latin_words_summary, unused = if (nineKeys) R.string.im_not_for_t9 else 0)

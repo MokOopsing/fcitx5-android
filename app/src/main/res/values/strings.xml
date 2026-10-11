@@ -457,8 +457,11 @@
     <string name="im_page_size">Candidates per page</string>
     <string name="im_prediction">Suggest the next word</string>
     <string name="im_prediction_summary">After a word is typed, offer the words likely to follow it</string>
-    <string name="im_sentence_model">Pick by the whole sentence</string>
-    <string name="im_sentence_model_summary">Put first what makes the whole sentence read best</string>
+    <string name="im_model_level">Performance level</string>
+    <string name="im_model_level_summary">Higher picks better and uses more battery</string>
+    <string name="im_model_level_low">Low: by how common words and pairs are, least battery</string>
+    <string name="im_model_level_medium">Medium: weighs the whole sentence at every key</string>
+    <string name="im_model_level_high">High: a larger model picks the first again as you pause, most accurate</string>
     <string name="im_typos">Fix typos and slipped keys</string>
     <string name="im_typos_summary">Such as gn for ng, or a key next to the one meant</string>
     <string name="im_latin_words">Type English words</string>

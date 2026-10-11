@@ -53,6 +53,16 @@ FCITX_CONFIGURATION(
         Option<bool> s{this, "S_SH", _("s <-> sh"), false};
         Option<bool> z{this, "Z_ZH", _("z <-> zh"), false};)
 
+// the 性能档位, in the app's own words on its page: the decoder alone, the small sentence model at
+// every key, and the large one too at a pause (ime-core's ModelLevel)
+#undef FCITX_GETTEXT_DOMAIN
+#define FCITX_GETTEXT_DOMAIN "fcitx5-android"
+enum class EngineModelLevel { Low, Medium, High };
+
+FCITX_CONFIG_ENUM_NAME_WITH_I18N(EngineModelLevel, N_("Low"), N_("Medium"), N_("High"))
+#undef FCITX_GETTEXT_DOMAIN
+#define FCITX_GETTEXT_DOMAIN "fcitx5-chinese-addons"
+
 enum class EngineOrderPolicy { No, Freq, Fast };
 
 FCITX_CONFIG_ENUM_NAME_WITH_I18N(EngineOrderPolicy, N_("No"), N_("Freq"), N_("Fast"))
@@ -90,8 +100,9 @@ inline EngineTableConfig engineTable(bool hint, EngineOrderPolicy order, int aut
 #define ENGINE_PAGE_SIZE \
     Option<int, IntConstrain> pageSize{this, "PageSize", _("Candidates Per Page"), 7, IntConstrain(3, 10)};
 #define ENGINE_PREDICTION Option<bool> prediction{this, "Prediction", _("Enable Prediction"), true};
-#define ENGINE_SENTENCE_MODEL \
-    Option<bool> sentenceModel{this, "SentenceModel", D_("fcitx5-android", "Weigh readings as whole sentences"), true};
+#define ENGINE_MODEL_LEVEL \
+    OptionWithAnnotation<EngineModelLevel, EngineModelLevelI18NAnnotation> modelLevel{ \
+            this, "ModelLevel", D_("fcitx5-android", "Performance level"), EngineModelLevel::High};
 #define ENGINE_LATIN_WORDS \
     Option<bool> latinWords{this, "LatinWords", D_("fcitx5-android", "Type English words in pinyin"), true};
 #define ENGINE_FUZZY Option<EngineFuzzyConfig> fuzzy{this, "Fuzzy", _("Fuzzy Pinyin")};
@@ -101,7 +112,7 @@ FCITX_CONFIGURATION(
         ENGINE_SHUANGPIN_PROFILE
         ENGINE_PAGE_SIZE
         ENGINE_PREDICTION
-        ENGINE_SENTENCE_MODEL
+        ENGINE_MODEL_LEVEL
         ENGINE_LATIN_WORDS
         ENGINE_FUZZY
         // named as the input methods are listed (androidengine.cpp)
@@ -124,7 +135,7 @@ FCITX_CONFIGURATION(
         EnginePinyinPage,
         ENGINE_PAGE_SIZE
         ENGINE_PREDICTION
-        ENGINE_SENTENCE_MODEL
+        ENGINE_MODEL_LEVEL
         ENGINE_LATIN_WORDS
         ENGINE_FUZZY)
 
@@ -133,13 +144,13 @@ FCITX_CONFIGURATION(
         ENGINE_SHUANGPIN_PROFILE
         ENGINE_PAGE_SIZE
         ENGINE_PREDICTION
-        ENGINE_SENTENCE_MODEL
+        ENGINE_MODEL_LEVEL
         ENGINE_FUZZY)
 
 #undef ENGINE_SHUANGPIN_PROFILE
 #undef ENGINE_PAGE_SIZE
 #undef ENGINE_PREDICTION
-#undef ENGINE_SENTENCE_MODEL
+#undef ENGINE_MODEL_LEVEL
 #undef ENGINE_LATIN_WORDS
 #undef ENGINE_FUZZY
 

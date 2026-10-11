@@ -82,7 +82,7 @@ class AndroidEngineHeaderTest {
     fun eachOptionTheEngineReadsIsOneTheAddonKeeps() {
         val engine = options("AndroidEngineConfig")
         val groups = Engines.TABLES.values.map { it.group }
-        val settings = with(EngineSettings) { setOf(SHUANGPIN_PROFILE, PAGE_SIZE, PREDICTION, SENTENCE_MODEL, LATIN_WORDS, FUZZY) }
+        val settings = with(EngineSettings) { setOf(SHUANGPIN_PROFILE, PAGE_SIZE, PREDICTION, MODEL_LEVEL, LATIN_WORDS, FUZZY) }
         assertEquals(settings + groups, engine.keys)
         assertEquals("EngineFuzzyConfig", engine[EngineSettings.FUZZY])
         groups.forEach { assertEquals(it, "EngineTableConfig", engine[it]) }

@@ -57,8 +57,17 @@ msgstr "拼音與碼表引擎"
 msgid "Typos and slipped keys"
 msgstr "糾正錯拼和按偏的鍵"
 
-msgid "Weigh readings as whole sentences"
-msgstr "按整句通順程度排候選"
+msgid "Performance level"
+msgstr "效能檔位"
+
+msgid "Low"
+msgstr "低檔"
+
+msgid "Medium"
+msgstr "中檔"
+
+msgid "High"
+msgstr "高檔"
 
 msgid "Type English words in pinyin"
 msgstr "中英混輸"

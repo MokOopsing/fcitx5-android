@@ -64,7 +64,7 @@ class EngineAssetsTest : EnginesFixture() {
             .toByteArray()
         val engines = Engines({ if (it == Engines.PINYIN_DATA) ByteBuffer.wrap(data) else load(it) }, null)
         // the decoder's reading alone
-        engines.settings = EngineSettings(sentenceModel = false)
+        engines.settings = EngineSettings(modelLevel = ModelLevel.LOW)
         assertEquals(listOf("你", "拟"), engines.type(Engines.PINYIN, "n").candidates.take(2))
         repeat(PICKS) {
             engines.onEvent(Engines.PINYIN, EngineEvent.RESET, 0)
