@@ -747,6 +747,14 @@ class EditingSessionTest {
         assertTrue("the report is the new truth", s.selection.latest.rangeEquals(2))
     }
 
+    // the engine is told as for a cursor: what English committed may no longer be before it
+    @Test
+    fun theUserSelectingWithNothingComposedResetsFcitx() {
+        val (s, _) = session("hello world", cursor = 11)
+        assertEquals(EditingSession.CursorUpdate.ResetIfNotEmpty, s.report(6, 11))
+        assertTrue(s.selection.latest.rangeEquals(6, 11))
+    }
+
     @Test
     fun anUnexpectedSelectionIsTrackedButLeavesTheCompositionAlone() {
         val (s, e) = session("abnihao", cursor = 7)

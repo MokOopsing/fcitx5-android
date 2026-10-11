@@ -48,13 +48,17 @@ class FieldPolicy(private val memory: ContextMemory) {
 
     /**
      * The engine's context where the editor shows [before] before the cursor at [now]; null, nothing
-     * to tell, where the field is [sensitive] or none is focused (not even read), or the editor would
-     * not say. [after], what follows the cursor, is asked only of a field with nothing before it and
-     * something fresh remembered of it, as a chat's box once a message is sent: a round trip.
+     * to tell, where no field is focused. Where the field is [sensitive] (not even read) or the
+     * editor would not say, empty: the engine is told it does not know what is there, as what it
+     * committed may not be before the cursor now (English would put its space behind punctuation
+     * in some other word). [after], what follows the cursor, is asked only of a field with nothing
+     * before it and something fresh remembered of it, as a chat's box once a message is sent: a
+     * round trip.
      */
     fun context(now: Long, before: () -> CharSequence?, after: () -> CharSequence?): String? {
-        if (!focused || sensitive) return null
-        val text = before()?.toString() ?: return null
+        if (!focused) return null
+        if (sensitive) return ""
+        val text = before()?.toString() ?: return ""
         return memory.context(text, now, after)
     }
 }

@@ -828,6 +828,8 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_startupFcitx(
         snapshot.actionable = env->GetBooleanField(result, GlobalRef->EngineResultActionable);
         snapshot.labels = utf8FromJString(env, JRef<jstring>(env, env->GetObjectField(result, GlobalRef->EngineResultLabels)));
         snapshot.refines = env->GetBooleanField(result, GlobalRef->EngineResultRefines);
+        snapshot.deleteBefore = env->GetIntField(result, GlobalRef->EngineResultDeleteBefore);
+        snapshot.cursor = env->GetIntField(result, GlobalRef->EngineResultCursor);
         return snapshot;
     };
     auto engineCandidatesCallback = [](const std::string &im, int from, int count) {

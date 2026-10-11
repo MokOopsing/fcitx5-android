@@ -14,30 +14,6 @@ msgstr ""
 msgid "Android Frontend" 
 msgstr ""
 
-msgid "Android Keyboard"
-msgstr ""
-
-msgid "Word hint"
-msgstr ""
-
-msgid "Enable word hint"
-msgstr ""
-
-msgid "Enable word hint when using physical keyboard"
-msgstr ""
-
-msgid "Disable word hint based on editor attributes"
-msgstr ""
-
-msgid "Word hint page size"
-msgstr ""
-
-msgid "Choose key modifier"
-msgstr ""
-
-msgid "Insert space between words"
-msgstr ""
-
 msgid "Android Toast & Notification"
 msgstr ""
 
@@ -60,6 +36,9 @@ msgid "Medium"
 msgstr ""
 
 msgid "High"
+msgstr ""
+
+msgid "Suggest English words"
 msgstr ""
 
 msgid "Type English words in pinyin"

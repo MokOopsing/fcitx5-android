@@ -31,7 +31,6 @@ android {
                     "copy-fcitx5-modules",
                     // android specific modules
                     "androidfrontend",
-                    "androidkeyboard",
                     "androidnotification",
                     "androidengine"
                 )

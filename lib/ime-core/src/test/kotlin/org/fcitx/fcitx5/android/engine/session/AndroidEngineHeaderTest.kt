@@ -82,14 +82,14 @@ class AndroidEngineHeaderTest {
     fun eachOptionTheEngineReadsIsOneTheAddonKeeps() {
         val engine = options("AndroidEngineConfig")
         val groups = Engines.TABLES.values.map { it.group }
-        val settings = with(EngineSettings) { setOf(SHUANGPIN_PROFILE, PAGE_SIZE, PREDICTION, MODEL_LEVEL, LATIN_WORDS, FUZZY) }
+        val settings = with(EngineSettings) { setOf(SHUANGPIN_PROFILE, PAGE_SIZE, PREDICTION, MODEL_LEVEL, LATIN_WORDS, FUZZY, ENGLISH_SUGGEST) }
         assertEquals(settings + groups, engine.keys)
         assertEquals("EngineFuzzyConfig", engine[EngineSettings.FUZZY])
         groups.forEach { assertEquals(it, "EngineTableConfig", engine[it]) }
         assertEquals(Fuzzy.entries.map { it.name }.toSet() + EngineSettings.TYPOS, options("EngineFuzzyConfig").keys)
         assertEquals(TableSettings.KEYS, options("EngineTableConfig").keys)
         // what the app's page of an input method shows, under the config's own keys
-        for (page in listOf("EnginePinyinPage", "EngineShuangpinPage")) {
+        for (page in listOf("EnginePinyinPage", "EngineShuangpinPage", "EngineEnglishPage")) {
             val shown = options(page)
             assertEquals(page, shown, engine.filterKeys(shown::containsKey))
         }

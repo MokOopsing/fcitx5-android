@@ -186,6 +186,7 @@ class PinyinSession(
             snapshot()
         }
         is Action.Context -> takeContext(action.before)
+        is Action.Cursor -> snapshot(handled = false)
     }
 
     /**

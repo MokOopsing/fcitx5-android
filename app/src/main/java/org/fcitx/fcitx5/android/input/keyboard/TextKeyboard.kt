@@ -121,6 +121,22 @@ class TextKeyboard(
 
     private var capsState: CapsState = CapsState.None
 
+    private val autoCaps = AutoCaps()
+
+    /** Shift on by itself where the editor [wants] a capital next, as [AutoCaps] decides. */
+    fun sentenceStart(wants: Boolean) {
+        val next = when (autoCaps.next(AutoCaps.Caps.entries[capsState.ordinal], wants)) {
+            AutoCaps.Caps.NONE -> CapsState.None
+            AutoCaps.Caps.ONCE -> CapsState.Once
+            AutoCaps.Caps.LOCK -> CapsState.Lock
+        }
+        if (next == capsState) return
+        capsState = next
+        updateCapsButtonIcon()
+        updateAlphabetKeys()
+        updatePunctuationKeys()
+    }
+
     private fun transformAlphabet(c: String): String {
         return when (capsState) {
             CapsState.None -> c.lowercase()
@@ -171,6 +187,7 @@ class TextKeyboard(
 
     override fun onAttach() {
         capsState = CapsState.None
+        autoCaps.changed()
         updateCapsButtonIcon()
         updateAlphabetKeys()
         updatePunctuationKeys()
@@ -221,6 +238,7 @@ class TextKeyboard(
     }
 
     private fun switchCapsState(lock: Boolean = false) {
+        autoCaps.changed()
         capsState =
             if (lock) {
                 when (capsState) {

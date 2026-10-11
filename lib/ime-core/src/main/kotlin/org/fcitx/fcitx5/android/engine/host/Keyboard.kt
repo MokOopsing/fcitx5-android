@@ -44,6 +44,9 @@ object EngineEvent {
 
     /** "Never show this word" on a candidate; the argument is its index among all of them. */
     const val BLOCK = 13
+
+    /** A tap in the composed text; the argument is the character it puts the cursor before. */
+    const val CURSOR = 14
 }
 
 /**
@@ -63,9 +66,12 @@ object EngineEvent {
  * as [SYLLABLES]. The host says so: a table whose codes are digits reads 2 as well, and its
  * Escape and characters are the app's.
  *
+ * [english]: the session is English's, which takes every character itself: space ends a word
+ * there and digits are typed, neither picks.
+ *
  * [learning] is passed to the session: off where the app asks that nothing be learned.
  */
-class Keyboard(private val session: Session, private val nineKeys: Boolean) {
+class Keyboard(private val session: Session, private val nineKeys: Boolean, private val english: Boolean = false) {
 
     private var shown: Snapshot = IDLE
 
@@ -77,15 +83,12 @@ class Keyboard(private val session: Session, private val nineKeys: Boolean) {
         shown = when (event) {
             EngineEvent.CHAR -> char(arg)
             EngineEvent.BACKSPACE -> session.apply(Action.Backspace)
-            EngineEvent.ENTER -> if (composing) session.apply(Action.CommitRaw) else passOn()
+            EngineEvent.ENTER, EngineEvent.PAGE_UP, EngineEvent.PAGE_DOWN, EngineEvent.CURSOR, EngineEvent.OTHER -> whileComposing(event, arg)
             // the nine keys' 重输 is Escape: with nothing typed, nothing to start over, not the app's
             EngineEvent.ESCAPE -> if (composing || shown.predicting) session.apply(Action.Reset) else if (nineKeys) IDLE.copy(handled = true) else passOn()
-            EngineEvent.PAGE_UP -> if (composing) session.apply(Action.PreviousPage) else passOn()
-            EngineEvent.PAGE_DOWN -> if (composing) session.apply(Action.NextPage) else passOn()
             EngineEvent.PICK -> session.apply(Action.Pick(arg))
             EngineEvent.FORGET, EngineEvent.PIN, EngineEvent.UNPIN, EngineEvent.BLOCK -> session.apply(pressed(event, arg))
             EngineEvent.RESET -> session.apply(Action.Reset).copy(handled = false)
-            EngineEvent.OTHER -> if (composing) shown.copy(commit = "", handled = true) else passOn()
             EngineEvent.REFINE -> refine()
             else -> passOn()
         }
@@ -123,7 +126,7 @@ class Keyboard(private val session: Session, private val nineKeys: Boolean) {
             val n = c - SYLLABLES.first
             return session.apply(Action.Syllable(n % Action.Syllable.MAX, n / Action.Syllable.MAX))
         }
-        if (session.reads(c)) return session.apply(Action.Key(c))
+        if (session.reads(c) || english) return session.apply(Action.Key(c))
         // on the nine keys a digit is a key: one not read (0) ends the input, as punctuation does
         val digit = c.digitToIntOrNull()?.takeUnless { nineKeys }
         return when {
@@ -134,6 +137,24 @@ class Keyboard(private val session: Session, private val nineKeys: Boolean) {
         }
     }
 
+    // keys the session takes while something is typed, the app's otherwise
+    private fun whileComposing(event: Int, arg: Int): Snapshot = when {
+        // an arrow, Tab: English commits its word and the key moves on from it; another session
+        // keeps the key, its input as it was
+        composing && event == EngineEvent.OTHER -> if (english) session.apply(Action.CommitRaw) else shown.copy(commit = "", handled = true)
+        composing -> session.apply(
+            when (event) {
+                EngineEvent.ENTER -> Action.CommitRaw
+                EngineEvent.PAGE_UP -> Action.PreviousPage
+                EngineEvent.PAGE_DOWN -> Action.NextPage
+                else -> Action.Cursor(arg)
+            },
+        )
+        // a tap in the app's text: the panel as it was
+        event == EngineEvent.CURSOR -> shown.copy(commit = "", handled = false)
+        else -> passOn()
+    }
+
     private fun refine(): Snapshot {
         val last = shown.copy(commit = "", handled = true)
         if (!last.refines) return last.copy(handled = false)
@@ -141,8 +162,11 @@ class Keyboard(private val session: Session, private val nineKeys: Boolean) {
         return if (next.copy(refines = false) == last.copy(refines = false)) next.copy(handled = false) else next
     }
 
-    /** The key is the app's; an offer of what may follow goes away with it. */
-    private fun passOn(): Snapshot = if (shown.predicting) session.apply(Action.Reset).copy(handled = false) else IDLE
+    /**
+     * The key is the app's; an offer of what may follow goes away with it, and so does what English
+     * knows of the text before the cursor (an Enter or an arrow: the space it added is not there).
+     */
+    private fun passOn(): Snapshot = if (shown.predicting || english) session.apply(Action.Reset).copy(handled = false) else IDLE
 
     companion object {
         private const val DIGITS = 10

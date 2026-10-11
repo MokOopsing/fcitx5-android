@@ -156,6 +156,8 @@ public:
     jfieldID EngineResultActionable;
     jfieldID EngineResultLabels;
     jfieldID EngineResultRefines;
+    jfieldID EngineResultDeleteBefore;
+    jfieldID EngineResultCursor;
 
     explicit GlobalRefSingleton(JavaVM *jvm_) : jvm(jvm_) {
         JNIEnv *env;
@@ -221,6 +223,8 @@ public:
         EngineResultActionable = env->GetFieldID(engineResult, "actionable", "Z");
         EngineResultLabels = env->GetFieldID(engineResult, "labels", "Ljava/lang/String;");
         EngineResultRefines = env->GetFieldID(engineResult, "refines", "Z");
+        EngineResultDeleteBefore = env->GetFieldID(engineResult, "deleteBefore", "I");
+        EngineResultCursor = env->GetFieldID(engineResult, "cursor", "I");
         env->DeleteLocalRef(engineResult);
     }
 

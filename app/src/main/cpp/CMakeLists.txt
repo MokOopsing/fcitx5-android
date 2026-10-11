@@ -20,7 +20,6 @@ include("${FCITX_INSTALL_CMAKECONFIG_DIR}/Fcitx5Utils/Fcitx5CompilerSettings.cma
 
 add_subdirectory(po)
 add_subdirectory(androidfrontend)
-add_subdirectory(androidkeyboard)
 add_subdirectory(androidnotification)
 add_subdirectory(androidengine)
 

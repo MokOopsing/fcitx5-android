@@ -21,30 +21,6 @@ msgstr ""
 msgid "Android Frontend"
 msgstr "Android 输入法前端"
 
-msgid "Android Keyboard"
-msgstr "Android 英文键盘"
-
-msgid "Word hint"
-msgstr "单词提示"
-
-msgid "Enable word hint"
-msgstr "启用单词提示"
-
-msgid "Enable word hint when using physical keyboard"
-msgstr "在使用物理键盘时启用单词提示"
-
-msgid "Disable word hint based on editor attributes"
-msgstr "根据编辑器属性禁用单词提示"
-
-msgid "Word hint page size"
-msgstr "单词提示页大小"
-
-msgid "Choose key modifier"
-msgstr "选词修饰键"
-
-msgid "Insert space between words"
-msgstr "在单词间插入空格"
-
 msgid "Android Toast & Notification"
 msgstr "Android 弹出提示与通知"
 
@@ -68,6 +44,9 @@ msgstr "中档"
 
 msgid "High"
 msgstr "高档"
+
+msgid "Suggest English words"
+msgstr "提示英文单词"
 
 msgid "Type English words in pinyin"
 msgstr "中英混输"

@@ -7,9 +7,7 @@ package org.fcitx.fcitx5.android.input.keyboard
 
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.fcitx.fcitx5.android.core.FcitxAPI
 import org.fcitx.fcitx5.android.daemon.launchOnReady
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
@@ -65,21 +63,7 @@ class CommonKeyActionListener :
 
     private val backspaceSwipe = BackspaceSwipeBehavior()
 
-    // there should be a new fcitx API for this
-    private suspend fun FcitxAPI.commitAndReset() {
-        val resolution = PendingInputPolicy.resolve(
-            inputMethodEntryCached.languageCode,
-            hasPreedit = clientPreeditCached.isNotEmpty() || inputPanelCached.preedit.isNotEmpty()
-        )
-        when (resolution) {
-            PendingInputPolicy.Resolution.SelectFirstCandidate -> select(0)
-            // This runs on fcitx's thread pool, and the composing state belongs to the main thread.
-            PendingInputPolicy.Resolution.FinishComposing ->
-                withContext(Dispatchers.Main) { service.finishComposing() }
-            PendingInputPolicy.Resolution.None -> {}
-        }
-        reset()
-    }
+    private suspend fun FcitxAPI.commitAndReset() = with(service) { commitAndReset() }
 
     private fun showInputMethodPicker() {
         fcitx.launchOnReady {
@@ -98,10 +82,7 @@ class CommonKeyActionListener :
                 is SymAction -> service.postFcitxJob {
                     sendKey(action.sym, action.states)
                 }
-                is CommitAction -> service.postFcitxJob {
-                    commitAndReset()
-                    service.lifecycleScope.launch { service.commitText(action.text) }
-                }
+                is CommitAction -> service.commitOverEngine(action.text)
                 is QuickPhraseAction -> service.postFcitxJob {
                     commitAndReset()
                     triggerQuickPhrase()
@@ -146,8 +127,12 @@ class CommonKeyActionListener :
                 }
                 is DeleteSelectionAction -> {
                     when (backspaceSwipe.onRelease(action.totalCnt)) {
-                        BackspaceSwipeBehavior.ReleaseEffect.DeleteSelection ->
+                        // the engine first forgets what it committed, maybe deleted with the
+                        // selection: the cursor reports of both are predicted and bring no Context
+                        BackspaceSwipeBehavior.ReleaseEffect.DeleteSelection -> {
+                            service.postFcitxJob { reset() }
                             service.deleteSelection()
+                        }
                         BackspaceSwipeBehavior.ReleaseEffect.ResetComposition ->
                             service.postFcitxJob { reset() }
                         BackspaceSwipeBehavior.ReleaseEffect.None -> {}

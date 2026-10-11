@@ -227,12 +227,15 @@ private:
 };
 
 /** Shows [text] as what is typed. */
-void showPreedit(InputContext *ic, const std::string &text) {
+// [cursor]: in characters, -1 at the end
+void showPreedit(InputContext *ic, const std::string &text, int cursor = -1) {
     auto &panel = ic->inputPanel();
     // in the app where it can show it, as libime's pinyin does by default (ComposingPinyin)
     const bool client = ic->capabilityFlags().test(CapabilityFlag::Preedit);
     Text preedit(text, client ? TextFormatFlag::Underline : TextFormatFlag::NoFlag);
-    preedit.setCursor(static_cast<int>(text.size()));
+    const auto chars = utf8::length(text);
+    const auto at = cursor < 0 || static_cast<size_t>(cursor) >= chars ? text.size() : utf8::ncharByteLength(text.begin(), cursor);
+    preedit.setCursor(static_cast<int>(at));
     if (client) {
         panel.setClientPreedit(preedit);
     } else {
@@ -312,23 +315,27 @@ bool endPunctuation(InputContext *ic, bool take) {
 
 using TableOption = Option<EngineTableConfig> AndroidEngineConfig::*;
 
+constexpr char EnglishName[] = "keyboard-us";
+
 // the input methods, named as ime-core's Engines knows them
 struct Method {
-    const char *name, *label, *text, *icon;
+    const char *name, *label, *text, *icon, *language;
     // a table's options, in AndroidEngineConfig; null for pinyin, shuangpin and T9, whose options
     // are config_'s own keys
     TableOption table;
 };
 
 const Method methods[] = {
-        {"engine-pinyin", "拼", "拼音", "fcitx-pinyin", nullptr},
-        {"engine-shuangpin", "双", "双拼", "fcitx-shuangpin", nullptr},
-        {"engine-t9", "九", "九键拼音", "fcitx-pinyin", nullptr},
-        {"engine-wubi", "五", "五笔", "fcitx-wubi", &AndroidEngineConfig::wubi},
-        {"engine-cangjie", "倉", "仓颉", "fcitx-cangjie", &AndroidEngineConfig::cangjie},
-        {"engine-ziranma", "自", "自然码", "fcitx-ziranma", &AndroidEngineConfig::ziranma},
-        {"engine-erbi", "二", "二笔", "fcitx-erbi", &AndroidEngineConfig::erbi},
-        {"engine-wubipinyin", "五", "五笔拼音", "fcitx-wubi", &AndroidEngineConfig::wubiPinyin},
+        {"engine-pinyin", "拼", "拼音", "fcitx-pinyin", "zh_CN", nullptr},
+        {"engine-shuangpin", "双", "双拼", "fcitx-shuangpin", "zh_CN", nullptr},
+        {"engine-t9", "九", "九键拼音", "fcitx-pinyin", "zh_CN", nullptr},
+        {"engine-wubi", "五", "五笔", "fcitx-wubi", "zh_CN", &AndroidEngineConfig::wubi},
+        {"engine-cangjie", "倉", "仓颉", "fcitx-cangjie", "zh_CN", &AndroidEngineConfig::cangjie},
+        {"engine-ziranma", "自", "自然码", "fcitx-ziranma", "zh_CN", &AndroidEngineConfig::ziranma},
+        {"engine-erbi", "二", "二笔", "fcitx-erbi", "zh_CN", &AndroidEngineConfig::erbi},
+        {"engine-wubipinyin", "五", "五笔拼音", "fcitx-wubi", "zh_CN", &AndroidEngineConfig::wubiPinyin},
+        // fcitx's own name for English, which it falls back to: a user's lists keep it
+        {EnglishName, "En", "English", "input-keyboard", "en", nullptr},
 };
 
 // the one of methods named [im]; null for a table the user imported
@@ -376,7 +383,7 @@ std::vector<InputMethodEntry> AndroidEngine::listInputMethods() {
     std::vector<InputMethodEntry> result;
     for (const auto &m: methods) {
         result.emplace_back(std::move(
-                InputMethodEntry(m.name, m.text, "zh_CN", "androidengine")
+                InputMethodEntry(m.name, m.text, m.language, "androidengine")
                         .setLabel(m.label)
                         .setIcon(m.icon)
                         .setConfigurable(true)));
@@ -416,6 +423,10 @@ const Configuration *AndroidEngine::getConfigForInputMethod(const InputMethodEnt
     if (im == "engine-shuangpin") {
         shuangpinPage_.load(raw, true);
         return &shuangpinPage_;
+    }
+    if (im == EnglishName) {
+        englishPage_.load(raw, true);
+        return &englishPage_;
     }
     pinyinPage_.load(raw, true);
     return &pinyinPage_;
@@ -554,6 +565,12 @@ void AndroidEngine::keyEvent(const InputMethodEntry &entry, KeyEvent &event) {
         return;
     }
     endPunctuation(event.inputContext(), true);
+    // English where it suggests nothing: the keys type themselves, what was typed going in first,
+    // as typed (Enter commits it, and has the session forget the space after a word)
+    if (entry.uniqueName() == EnglishName && !suggestsEnglish(event.inputContext(), event.isVirtual())) {
+        send(event.inputContext(), entry.uniqueName(), EngineEvent::Enter);
+        return;
+    }
     EngineEvent what;
     int arg = 0;
     switch (key.sym()) {
@@ -577,10 +594,19 @@ void AndroidEngine::keyEvent(const InputMethodEntry &entry, KeyEvent &event) {
             }
         }
     }
+    // English's punctuation is the key's own, not a Chinese mark
     if (send(event.inputContext(), entry.uniqueName(), what, arg) ||
-        (what == EngineEvent::Char && pushPunctuation(event.inputContext(), key))) {
+        (what == EngineEvent::Char && entry.uniqueName() != EnglishName && pushPunctuation(event.inputContext(), key))) {
         event.filterAndAccept();
     }
+}
+
+bool AndroidEngine::suggestsEnglish(InputContext *ic, bool virtualKey) const {
+    // a hardware keyboard types as its keys, as the editor asking for no suggestions has it; and
+    // an address, where a space after a word, or ". " for two, would break it
+    return *config_.englishSuggest && virtualKey &&
+           !ic->capabilityFlags().testAny(CapabilityFlags{CapabilityFlag::Password, CapabilityFlag::NoSpellCheck,
+                                                          CapabilityFlag::Url, CapabilityFlag::Email});
 }
 
 bool AndroidEngine::send(InputContext *ic, std::string im, EngineEvent event, int arg) {
@@ -590,8 +616,9 @@ bool AndroidEngine::send(InputContext *ic, std::string im, EngineEvent event, in
     const auto snapshot = eventCallback_(im, event, arg, learning);
     // a key may be on its way: the pause starts a little after it, the next slice at once
     if (snapshot.refines) refineLater(ic, im, event == EngineEvent::Refine ? 0 : PauseBeforeRefine);
-    // a slice of refining that changed nothing leaves the panel as it is, the list scrolled
-    if (event != EngineEvent::Refine || snapshot.handled) show(ic, std::move(im), snapshot);
+    // a slice of refining that changed nothing leaves the panel as it is, the list scrolled; as
+    // does a tap no session takes
+    if ((event != EngineEvent::Refine && event != EngineEvent::Cursor) || snapshot.handled) show(ic, std::move(im), snapshot);
     return snapshot.handled;
 }
 
@@ -613,13 +640,25 @@ void AndroidEngine::refineLater(InputContext *ic, const std::string &im, uint64_
 }
 
 void AndroidEngine::show(InputContext *ic, std::string im, const EngineSnapshot &snapshot) {
+    // English's space after a word, put behind the punctuation typed next
+    if (snapshot.deleteBefore > 0) ic->deleteSurroundingText(-snapshot.deleteBefore, snapshot.deleteBefore);
     if (!snapshot.commit.empty()) ic->commitString(snapshot.commit);
     auto &panel = ic->inputPanel();
     panel.reset();
-    if (!snapshot.preedit.empty()) showPreedit(ic, snapshot.preedit);
+    if (!snapshot.preedit.empty()) showPreedit(ic, snapshot.preedit, snapshot.cursor);
     if (!snapshot.candidates.empty()) panel.setCandidateList(std::make_unique<EngineCandidateList>(this, ic, std::move(im), snapshot));
     ic->updatePreedit();
     ic->updateUserInterface(UserInterfaceComponent::InputPanel);
+}
+
+void AndroidEngine::invokeActionImpl(const InputMethodEntry &entry, InvokeActionEvent &event) {
+    // a tap in the composed text: a session keeping a cursor in its input (English) puts it there
+    if (event.action() == InvokeActionEvent::Action::LeftClick && event.cursor() >= 0 &&
+        send(event.inputContext(), entry.uniqueName(), EngineEvent::Cursor, event.cursor())) {
+        event.filter();
+        return;
+    }
+    InputMethodEngineV3::invokeActionImpl(entry, event);
 }
 
 void AndroidEngine::reset(const InputMethodEntry &entry, InputContextEvent &event) {

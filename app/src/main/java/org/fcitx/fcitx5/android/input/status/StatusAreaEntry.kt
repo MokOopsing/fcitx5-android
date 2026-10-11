@@ -29,8 +29,6 @@ sealed class StatusAreaEntry(
 
     companion object {
         private fun drawableFromIconName(icon: String) = when (icon) {
-            // androidkeyboard
-            "tools-check-spelling" -> R.drawable.ic_baseline_spellcheck_24
             // fcitx5-chinese-addons
             "fcitx-chttrans-active" -> R.drawable.ic_fcitx_status_chttrans_trad
             "fcitx-chttrans-inactive" -> R.drawable.ic_fcitx_status_chttrans_simp
@@ -65,7 +63,6 @@ sealed class StatusAreaEntry(
             "punctuation" -> if (active) R.string.status_punctuation_chinese else R.string.status_punctuation_english
             "fullwidth" -> if (active) R.string.status_full_width else R.string.status_half_width
             "chttrans" -> if (active) R.string.status_traditional else R.string.status_simplified
-            "androidkeyboard-word-hint" -> R.string.im_word_hint
             else -> null
         }?.let(context::getString)
     }

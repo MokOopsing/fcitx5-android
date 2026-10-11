@@ -14,6 +14,7 @@ import androidx.transition.Slide
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.CapabilityFlags
 import org.fcitx.fcitx5.android.core.InputMethodEntry
+import org.fcitx.fcitx5.android.core.InputMethodNames
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.engine.host.Engines
 import org.fcitx.fcitx5.android.input.bar.KawaiiBarComponent
@@ -77,6 +78,18 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     // the space's badge asks what the hold to talk asks (CommonKeyActionListener), a shown password too
     private val service by manager.inputMethodService()
 
+    private val autoCapsPref = AppPrefs.getInstance().keyboard.englishAutoCaps
+
+    // English is typed: Shift may come on by itself at a sentence start
+    private var english = false
+
+    // a word is being composed: no sentence starts within it, and the editor is not asked
+    private var composing = false
+
+    override fun onPreeditEmptyStateUpdate(empty: Boolean) {
+        composing = !empty
+    }
+
     private val currentKeyboard: BaseKeyboard?
         get() = makers[currentKeyboardName]?.let { keyboards.getOrPut(currentKeyboardName, it) }
 
@@ -127,6 +140,8 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     private fun showLayout(target: String) {
         detachCurrentLayout()
         attachLayout(target)
+        // the letters back from the symbols, Shift off as they attach: at a sentence start, on again
+        capitalize()
         if (windowManager.isAttached(this)) {
             notifyBarLayoutChanged()
         }
@@ -160,6 +175,19 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
             else -> TextKeyboard.Name
         }
         switchLayout(targetLayout, remember = false)
+        // after the layout, which switchLayout posts
+        ContextCompat.getMainExecutor(context).execute(::capitalize)
+    }
+
+    override fun onSelectionUpdate(start: Int, end: Int) = capitalize()
+
+    // what the field's caps flags make of the text before the cursor: a capital where a sentence starts
+    private fun capitalize() {
+        val keyboard = currentKeyboard as? TextKeyboard ?: return
+        if (composing) return
+        val wants = english && autoCapsPref.getValue() &&
+            (service.currentInputConnection?.getCursorCapsMode(service.currentInputEditorInfo.inputType) ?: 0) != 0
+        keyboard.sentenceStart(wants)
     }
 
     override fun onImeUpdate(ime: InputMethodEntry) {
@@ -168,6 +196,8 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
         val shown = lettersLayout.inputMethodChanged(letters, currentKeyboardName)
         // a layout shown anew is told the input method as it is attached
         if (shown != null) showLayout(shown) else currentKeyboard?.let(spaceKeys::show)
+        english = ime.uniqueName == InputMethodNames.KEYBOARD
+        capitalize()
     }
 
     override fun onPunctuationUpdate(mapping: Map<String, String>) {

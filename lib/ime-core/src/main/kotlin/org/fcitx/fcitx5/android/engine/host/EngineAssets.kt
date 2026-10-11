@@ -7,6 +7,7 @@ package org.fcitx.fcitx5.android.engine.host
 import org.fcitx.fcitx5.android.engine.data.CodeTable
 import org.fcitx.fcitx5.android.engine.data.DataFormatException
 import org.fcitx.fcitx5.android.engine.data.PinyinData
+import org.fcitx.fcitx5.android.engine.english.EnglishWords
 import org.fcitx.fcitx5.android.engine.host.Engines.Companion.PINYIN_DATA
 import org.fcitx.fcitx5.android.engine.host.Engines.Companion.REFINING_MODEL
 import org.fcitx.fcitx5.android.engine.host.Engines.Companion.SENTENCE_MODEL
@@ -44,6 +45,15 @@ internal class EngineAssets(
 
     // the Latin words full pinyin reads as typed in lower case (iphone for iPhone)
     val latinWords by lazy(LazyThreadSafetyMode.NONE) { LatinWords.of(pinyinData.dictionary) }
+
+    // English's words; none if the app has not got them, English then suggesting nothing
+    val englishWords: EnglishWords? by lazy(LazyThreadSafetyMode.NONE) {
+        try {
+            EnglishWords.load(load(Engines.ENGLISH_WORDS))
+        } catch (_: IOException) {
+            null
+        }
+    }
 
     // built once for the pinyins' sessions, which read the same data and score alike
     val charSyllables by lazy(LazyThreadSafetyMode.NONE) { Predictor.charReadingsOf(pinyinData.dictionary, pinyinData.vocabulary) }

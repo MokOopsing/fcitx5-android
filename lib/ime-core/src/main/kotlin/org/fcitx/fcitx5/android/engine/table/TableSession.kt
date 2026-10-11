@@ -86,6 +86,7 @@ class TableSession(
         }
         // nothing to weigh again: a table's order is its own; a table has no custom phrases
         Action.Refine, is Action.Pin, is Action.Unpin, is Action.Syllable, is Action.Letter -> snapshot()
+        is Action.Cursor -> snapshot(handled = false)
         // auto phrases are made of what was committed here, not of what the editor had: kept
         // only while the text still ends with it (the cursor did not go anywhere)
         Action.Reset, is Action.Context -> {

@@ -37,6 +37,8 @@ data class EngineSettings(
         const val FUZZY = "Fuzzy"
         const val MODEL_LEVEL = "ModelLevel"
         const val LATIN_WORDS = "LatinWords"
+        /** Read by the addon itself: off, English hands the session no key, and they type themselves. */
+        const val ENGLISH_SUGGEST = "EnglishSuggest"
 
         /** libime's key for its common misspellings (gn for ng); here it turns slips on too. */
         const val TYPOS = "NG_GN"

@@ -303,7 +303,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
             clipboardUi.suggestionView.apply {
                 setOnClickListener {
                     ClipboardManager.lastEntry?.let {
-                        service.commitText(it.text)
+                        service.commitOverEngine(it.text)
                     }
                     clipboardTimeoutJob?.cancel()
                     clipboardTimeoutJob = null

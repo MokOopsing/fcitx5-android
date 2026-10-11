@@ -138,6 +138,9 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
                 override fun decode(raw: String) = T9MultiTap.entries.firstOrNull { it.name == raw }
             },
         ).apply { register() }
+
+        /** Shown on the English page (InputMethodSettings), not here: English's alone. */
+        val englishAutoCaps = ManagedPreference.PBool(sharedPreferences, ENGLISH_AUTO_CAPS, true).apply { register() }
         val showLangSwitchKey =
             switch(R.string.show_lang_switch_key, "show_lang_switch_key", true)
         val langSwitchKeyBehavior = hidden {
@@ -569,6 +572,8 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
 
     companion object {
         private var instance: AppPrefs? = null
+
+        const val ENGLISH_AUTO_CAPS = "english_auto_caps"
 
         /**
          * MUST call before use

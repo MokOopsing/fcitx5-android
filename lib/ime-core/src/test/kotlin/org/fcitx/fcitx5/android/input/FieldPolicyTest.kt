@@ -29,7 +29,8 @@ class FieldPolicyTest {
         policy.focus("chat", password = false, sensitive = false)
         memory.committed("你好", now = 0)
         policy.focus("incognito", password = false, sensitive = true)
-        assertNull(context(1, "密码"))
+        // not read, only told that what is there is not known
+        assertEquals("", context(1, "密码"))
         assertTrue(reads.isEmpty())
         // what is typed there is not kept as the field's, nor as the chat's
         memory.committed("秘密", now = 2)
@@ -61,10 +62,10 @@ class FieldPolicyTest {
     }
 
     @Test
-    fun anEditorThatWillNotSayTellsNothingAndKeepsWhatWasWritten() {
+    fun anEditorThatWillNotSayTellsItIsNotKnownAndKeepsWhatWasWritten() {
         policy.focus("chat", password = false, sensitive = false)
         memory.committed("在吗", now = 0)
-        assertNull(context(1, null))
+        assertEquals("", context(1, null))
         // nor will it say what follows the cursor: what was written stays for the next time
         assertEquals("", context(2, "", after = null))
         assertEquals("在吗", context(3, ""))
@@ -108,7 +109,7 @@ class FieldPolicyTest {
     fun aPasswordIsNotReadNorKeptWhateverElseTheServiceSays() {
         policy.focus("login", password = true, sensitive = false)
         assertTrue(policy.sensitive)
-        assertNull(context(0, "hunter2"))
+        assertEquals("", context(0, "hunter2"))
         assertTrue(reads.isEmpty())
         // what is typed there is not kept as the field's
         memory.committed("hunter2", now = 1)

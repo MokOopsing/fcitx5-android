@@ -75,6 +75,8 @@ class StrokeLookup(
                 end()
                 pinyin.apply(action).also { idle = it.preedit.isEmpty() }
             }
+            // no cursor in the input: the tap is the app's
+            is Action.Cursor -> snapshot().copy(handled = false)
             // nothing learned, nothing to offer: as it was
             else -> snapshot()
         }

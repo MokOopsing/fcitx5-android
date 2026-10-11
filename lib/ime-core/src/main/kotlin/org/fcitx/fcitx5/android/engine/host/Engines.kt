@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.engine.host
 
 import org.fcitx.fcitx5.android.engine.data.CodeTableReader
+import org.fcitx.fcitx5.android.engine.english.EnglishSession
 import org.fcitx.fcitx5.android.engine.phrase.CustomPhrases
 import org.fcitx.fcitx5.android.engine.phrase.PhraseBook
 import org.fcitx.fcitx5.android.engine.pinyin.PinyinSegmenter
@@ -204,7 +205,7 @@ class Engines(
 
     /** [event] of [im]'s keyboard; nothing picked is learned unless [learning], nor by a table that does not learn. */
     fun onEvent(im: String, event: Int, arg: Int, learning: Boolean = true): Snapshot {
-        val keyboard = keyboards[im] ?: Keyboard(session(im), nineKeys = im == T9).also { keyboards[im] = it }
+        val keyboard = keyboards[im] ?: Keyboard(session(im), nineKeys = im == T9, english = im == ENGLISH).also { keyboards[im] = it }
         // the field's alone: a table that does not learn still forgets and blocks as asked (TableSession.learns)
         return keyboard.onEvent(event, arg, learning)
     }
@@ -230,6 +231,7 @@ class Engines(
                 val pinyin = pinyinSession(segmenter, spell = false, habitScope = PINYIN)
                 ForgetsInTables(StrokeLookup(pinyin, assets::strokes, assets::charReading, s.pageSize, blocked = lexicon::isBlocked, follow = pinyin::follow, retype = pinyin::typeAll))
             }
+            ENGLISH -> EnglishSession(assets.englishWords, pageSize = s.pageSize)
             // 简拼 only where the digits read nothing else: as common on the evaluation set, and faster
             T9 -> ForgetsInTables(pinyinSession(T9Segmenter(s.fuzzy, abbreviations = false), spell = true, habitScope = T9))
             SHUANGPIN -> ForgetsInTables(
@@ -307,6 +309,12 @@ class Engines(
 
         /** Pinyin on a phone's nine keys (九键). */
         const val T9 = "engine-t9"
+
+        /** English: fcitx's own name for it, which fcitx falls back to, so a user's lists keep it. */
+        const val ENGLISH = "keyboard-us"
+
+        /** Its words, until a list of our own: fcitx's spell dictionary, in the app's assets. */
+        const val ENGLISH_WORDS = "usr/share/fcitx5/spell/en_dict.fscd"
 
         const val PINYIN_DATA = "engine/pinyin.data"
 

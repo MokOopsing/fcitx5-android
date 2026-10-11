@@ -23,6 +23,7 @@ import org.fcitx.fcitx5.android.core.CapabilityFlag
 import org.fcitx.fcitx5.android.core.CapabilityFlags
 import org.fcitx.fcitx5.android.core.Fcitx
 import org.fcitx.fcitx5.android.core.FcitxEvent
+import org.fcitx.fcitx5.android.core.InputMethodNames
 import org.fcitx.fcitx5.android.core.KeyState
 import org.fcitx.fcitx5.android.core.RawConfig
 import org.fcitx.fcitx5.android.data.punctuation.PunctuationManager
@@ -364,6 +365,36 @@ class FcitxTest {
         Timber.i("candidates for 6, m, 4 are $candidates")
         Assert.assertTrue("米 among $candidates", "米" in candidates)
         Assert.assertFalse("no 你 among $candidates", "你" in candidates)
+        fcitx.reset()
+    }
+
+    /**
+     * English through the engine as the keyboard types it (virtual keys): the word typed offered
+     * with what it starts, space committing it with a space, and a full stop typed next put in
+     * that space's place, `hel. `; a hardware key types itself.
+     */
+    @Test
+    fun englishPutsTheSpaceAfterAWordBehindTheFullStopTypedNext(): Unit = runBlocking {
+        fcitx.setEnabledIme(arrayOf(InputMethodNames.KEYBOARD))
+        fcitx.activateIme(InputMethodNames.KEYBOARD)
+        awaitQuiet()
+        "hel".forEach { fcitx.sendKey(it, KeyState.Virtual.state) }
+        awaitQuiet()
+        val candidates = fcitx.getCandidates(0, 8).map { it.text }
+        Assert.assertEquals("hel", candidates.firstOrNull())
+        Assert.assertTrue("hello among $candidates", "hello" in candidates)
+        fcitx.sendKey(' ', KeyState.Virtual.state)
+        val space = eventsTillQuiet()
+        Assert.assertEquals("hel ", space.filterIsInstance<FcitxEvent.CommitStringEvent>().joinToString("") { it.data.text })
+        fcitx.sendKey('.', KeyState.Virtual.state)
+        val stop = eventsTillQuiet()
+        val deleted = stop.filterIsInstance<FcitxEvent.DeleteSurroundingEvent>().map { it.data }
+        Assert.assertEquals("$stop", listOf(FcitxEvent.DeleteSurroundingEvent.Data(1, 0)), deleted)
+        Assert.assertEquals(". ", stop.filterIsInstance<FcitxEvent.CommitStringEvent>().joinToString("") { it.data.text })
+        // a hardware keyboard's key is the app's to type
+        fcitx.sendKey('a')
+        Assert.assertTrue(eventsTillQuiet().any { it is FcitxEvent.KeyEvent })
+        Assert.assertEquals("", latestInputPanel.preedit.toString())
         fcitx.reset()
     }
 

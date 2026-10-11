@@ -66,6 +66,8 @@ object EngineBridge {
         @JvmField val actionable: Boolean,
         @JvmField val labels: String,
         @JvmField val refines: Boolean,
+        @JvmField val deleteBefore: Int = 0,
+        @JvmField val cursor: Int = -1,
     )
 
     /**
@@ -376,7 +378,7 @@ object EngineBridge {
         return Result(
             s.handled, s.commit, s.preedit,
             all.map { it.text }.toTypedArray(), all.map { it.hint }.toTypedArray(),
-            s.first, s.candidates.size, s.total, s.actionable, s.labels, s.refines,
+            s.first, s.candidates.size, s.total, s.actionable, s.labels, s.refines, s.deleteBefore, s.cursor,
         )
     }
 

@@ -143,9 +143,11 @@ class EditingSession(
         // the user moved the cursor, or the app changed the text: the pairs are not around it,
         // unless it moved within what is composed between them (the empty range still holds 0)
         if (selStart != selEnd || composing.isEmpty() || !composing.contains(selStart)) pairs.forget()
+        // nothing composed: the engine is told, as for a cursor (what it committed may not be
+        // before the selection, where the next key goes)
+        if (composing.isEmpty()) return CursorUpdate.ResetIfNotEmpty
         // a selection (rather than a cursor) leaves the composition to the next cursor report
         if (selStart != selEnd) return CursorUpdate.None
-        if (composing.isEmpty()) return CursorUpdate.ResetIfNotEmpty
         if (composing.contains(selStart)) {
             if (ignoreSystemCursor) return CursorUpdate.None
             // fcitx's cursor is relative to the preedit

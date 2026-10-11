@@ -34,7 +34,7 @@ import kotlin.math.abs
 
 /**
  * The pages of the app's own input methods, in its own words: fcitx stores the values (the keys
- * are androidengine's and androidkeyboard's options), while what an option is called, which of
+ * are androidengine's options), while what an option is called, which of
  * them a user sees and how they are grouped is decided here. fcitx's own descriptions came in
  * fcitx's language, not the app's, and named every knob the engine has.
  */
@@ -91,6 +91,14 @@ object InputMethodSettings {
         val values: List<T>,
         val pref: () -> ManagedPreference.PStringLike<T>,
     ) : Item where T : Enum<T>, T : ManagedPreferenceEnum
+
+    /** A switch over the app's own preference [pref], as [AppChoice] is a list. */
+    class AppToggle(
+        val key: String,
+        @StringRes val title: Int,
+        @StringRes val summary: Int,
+        val pref: () -> ManagedPreference<Boolean>,
+    ) : Item
 
     class Section(@StringRes val title: Int, val items: List<Item>) : Item
 
@@ -222,31 +230,15 @@ object InputMethodSettings {
         ),
     )
 
-    private val MODIFIERS = listOf(
-        "None" to R.string.im_modifier_none, "Alt" to R.string.im_modifier_alt,
-        "Control" to R.string.im_modifier_control, "Super" to R.string.im_modifier_super,
-    )
-
-    // androidkeyboard's own (androidkeyboard.h), not the engine's EngineSettings.PAGE_SIZES
-    private val WORD_HINT_SIZES = 3..10
-
+    // androidengine's English page (EngineEnglishPage)
     private val english = listOf(
         Section(
             R.string.im_section_typing, listOf(
-                Toggle("EnableWordHint", text(R.string.im_word_hint), R.string.im_word_hint_summary),
-                Choice("PageSize", R.string.im_word_hint_size, WORD_HINT_SIZES.map { it.toString() }, label = { _, v -> v }, nearest = numbers(WORD_HINT_SIZES)),
-                Toggle("EditorControlledWordHint", text(R.string.im_word_hint_editor), R.string.im_word_hint_editor_summary),
-                Toggle("InsertSpace", text(R.string.im_insert_space)),
-            )
-        ),
-        Section(
-            R.string.im_section_physical, listOf(
-                Toggle("WordHintOnPhysicalKeyboard", text(R.string.im_word_hint_physical)),
-                Choice(
-                    "ChooseModifier", R.string.im_choose_modifier, MODIFIERS.map { it.first },
-                    label = { ctx, v -> ctx.getString(MODIFIERS.first { it.first == v }.second) },
-                    nearest = { v -> if (MODIFIERS.any { it.first == v }) v else "Alt" },
-                ),
+                Toggle(EngineSettings.ENGLISH_SUGGEST, text(R.string.im_word_hint), R.string.im_word_hint_summary),
+                // the keyboard's: Shift where a sentence starts
+                AppToggle(AppPrefs.ENGLISH_AUTO_CAPS, R.string.im_auto_caps, R.string.im_auto_caps_summary) {
+                    AppPrefs.getInstance().keyboard.englishAutoCaps
+                },
             )
         ),
     )
@@ -324,6 +316,21 @@ object InputMethodSettings {
                 }
                 is Flags -> into(flagsPreference(context, item, item.flags.map { raw("${item.path}/${it.first}") }, save))
                 is AppChoice<*> -> into(appChoice(context, item))
+                is AppToggle -> into(SwitchPreferenceCompat(context).apply {
+                    val pref = item.pref()
+                    key = item.key
+                    // the app's preference set by hand: this screen's store is fcitx's config
+                    isPersistent = false
+                    isIconSpaceReserved = false
+                    isSingleLineTitle = false
+                    setTitle(item.title)
+                    setSummary(item.summary)
+                    isChecked = pref.getValue()
+                    setOnPreferenceChangeListener { _, value ->
+                        pref.setValue(value as Boolean)
+                        true
+                    }
+                })
             }
         }
         items.forEach { add(it, screen::addPreference) }

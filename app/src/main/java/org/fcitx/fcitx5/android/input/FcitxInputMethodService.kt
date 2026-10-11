@@ -80,6 +80,7 @@ import org.fcitx.fcitx5.android.input.editing.ForwardedKeys
 import org.fcitx.fcitx5.android.input.editing.InputConnectionEditor
 import org.fcitx.fcitx5.android.input.editing.KeyEventRelay
 import org.fcitx.fcitx5.android.input.editing.toEditorTraits
+import org.fcitx.fcitx5.android.input.keyboard.PendingInputPolicy
 import org.fcitx.fcitx5.android.utils.InputMethodUtil
 import org.fcitx.fcitx5.android.utils.Locales
 import org.fcitx.fcitx5.android.utils.alpha
@@ -421,6 +422,33 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     fun commitText(text: String, cursor: Int = -1) {
         editingSession.commitText(text, cursor)
         contextMemory.committed(text, cursor, SystemClock.elapsedRealtime())
+    }
+
+    /**
+     * [text] put in by the app itself, not the engine (a paste, a word from a long press): what
+     * the engine has typed goes in first, and the engine forgets what it committed, no longer
+     * before the cursor (English would put its space behind punctuation typed next, in [text]).
+     */
+    fun commitOverEngine(text: String) = postFcitxJob {
+        commitAndReset()
+        lifecycleScope.launch { commitText(text) }
+    }
+
+    /** What is typed put in as the input method would (its first candidate, or as composed), then fcitx reset. */
+    // there should be a new fcitx API for this
+    suspend fun FcitxAPI.commitAndReset() {
+        val resolution = PendingInputPolicy.resolve(
+            inputMethodEntryCached.languageCode,
+            hasPreedit = clientPreeditCached.isNotEmpty() || inputPanelCached.preedit.isNotEmpty()
+        )
+        when (resolution) {
+            PendingInputPolicy.Resolution.SelectFirstCandidate -> select(0)
+            // This runs on fcitx's thread pool, and the composing state belongs to the main thread.
+            PendingInputPolicy.Resolution.FinishComposing ->
+                withContext(Dispatchers.Main) { finishComposing() }
+            PendingInputPolicy.Resolution.None -> {}
+        }
+        reset()
     }
 
     private fun sendDownKeyEvent(eventTime: Long, keyEventCode: Int, metaState: Int = 0) {

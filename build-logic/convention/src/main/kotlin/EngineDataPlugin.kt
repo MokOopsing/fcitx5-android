@@ -212,8 +212,9 @@ class EngineDataPlugin : Plugin<Project> {
 
         target.extensions.configure<ApplicationExtension> {
             // matched as a plain suffix: "data" alone would catch charselectdata too; and the
-            // sentence models: openFd cannot read one compressed, and the engine takes that for none
-            androidResources.noCompress += listOf(".data", ".safetensors")
+            // sentence models and English's words (fcitx's spell dictionary): openFd cannot read one
+            // compressed, and the engine takes that for none
+            androidResources.noCompress += listOf(".data", ".safetensors", ".fscd")
             // what the settings show as the engine's data, and the release a missing-word report names
             defaultConfig.buildConfigField("String", "ENGINE_DATA", "\"$LM_RELEASE\"")
             // the releases of the word pack and of the sentence models, which change apart from it

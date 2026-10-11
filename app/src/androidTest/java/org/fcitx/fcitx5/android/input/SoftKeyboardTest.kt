@@ -427,6 +427,7 @@ class SoftKeyboardTest {
         /** What the device and fcitx had before, put back after the class. */
         var originalDeviceIme: String? = null
         var wasEnabled = false
+        var spellChecker: String? = null
         var originalIms: Array<String>? = null
 
         fun shell(command: String): String = device.executeShellCommand(command).trim()
@@ -445,6 +446,10 @@ class SoftKeyboardTest {
             val self = ComponentName.unflattenFromString(imeId)
             wasEnabled = shell("settings get secure enabled_input_methods").split(':')
                 .any { ComponentName.unflattenFromString(it.substringBefore(';')) == self }
+            // the system's spell checker (on in AOSP images, as redroid) underlines "ab", and a tap
+            // on it opens its suggestions over the field, which takes the next tap on a key
+            spellChecker = shell("settings get secure spell_checker_enabled")
+            shell("settings put secure spell_checker_enabled 0")
         }
 
         /**
@@ -478,6 +483,7 @@ class SoftKeyboardTest {
                 else -> shell("ime set $original")
             }
             if (!wasEnabled) shell("ime disable $imeId")
+            spellChecker.let { if (it == null || it == "null") shell("settings delete secure spell_checker_enabled") else shell("settings put secure spell_checker_enabled $it") }
             // The system unbinds the service asynchronously; its onDestroy stops the engine
             // (FcitxDaemon.disconnect -> Fcitx.stop, which blocks until stopped).
             val deadline = SystemClock.uptimeMillis() + 10_000

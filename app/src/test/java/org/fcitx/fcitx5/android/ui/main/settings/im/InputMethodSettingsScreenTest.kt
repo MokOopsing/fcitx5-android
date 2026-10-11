@@ -120,7 +120,7 @@ class InputMethodSettingsScreenTest {
     @Test
     fun aChoiceHasNoDefaultToGoBackTo() {
         appInputMethods.forEach { page -> screen(page).lists().forEach { assertFalse("$page ${it.key}", it.hasDefault()) } }
-        val given = screen("keyboard-us").lists().first().apply { setDefaultValue("5") }
+        val given = screen(Engines.PINYIN).lists().first().apply { setDefaultValue("5") }
         assertTrue(given.hasDefault())
     }
 

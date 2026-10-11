@@ -30,6 +30,10 @@ struct EngineSnapshot {
     std::string labels;
     // whether to send Refine while the user pauses
     bool refines = false;
+    // how many characters before the cursor to delete first, before commit
+    int deleteBefore = 0;
+    // where in preedit the cursor is, in characters; -1 at its end
+    int cursor = -1;
 };
 
 // What happened, numbered as ime-core's EngineEvent reads them. Which key does what is decided
@@ -49,6 +53,7 @@ enum class EngineEvent : int {
     Pin = 11,       // "Pin to top as custom phrase" on a candidate; arg: the index among all
     Unpin = 12,     // "Delete from custom phrase" on a candidate; arg: the index among all
     Block = 13,     // "Never show this word" on a candidate; arg: the index among all
+    Cursor = 14,    // a tap in the composed text; arg: the character it puts the cursor before
 };
 
 // What a long press on a candidate offers, as bits of what EngineOffersCallback returns: ime-core's

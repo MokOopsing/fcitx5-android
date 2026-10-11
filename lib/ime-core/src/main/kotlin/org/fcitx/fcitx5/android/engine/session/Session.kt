@@ -107,6 +107,13 @@ sealed class Action {
     object CommitRaw : Action()
 
     /**
+     * Puts the cursor [at] that character of the preedit (a tap in the composed text, where the
+     * app shows it): what is typed next goes there. Only English keeps a cursor in its input;
+     * elsewhere the snapshot is not [handled][Snapshot.handled].
+     */
+    data class Cursor(val at: Int) : Action()
+
+    /**
      * The user pauses: some of the work that may put a better reading first, where the
      * snapshot [refines][Snapshot.refines]. Any other action drops what is left of it.
      */
@@ -146,6 +153,9 @@ sealed class Action {
  *   a letter for an initial last: on the nine keys, for [Action.Syllable]; empty elsewhere
  * @property syllablesId which list [syllables] is: another for each change of it, below
  *   [Action.Syllable.IDS]
+ * @property cursor where in [preedit] the cursor is, in characters; -1 at its end
+ * @property deleteBefore how many characters before the cursor go first, before [commit]: English
+ *   puts a space it added after a word behind the punctuation typed next (`word .` as `word. `)
  */
 data class Snapshot(
     val commit: String,
@@ -164,4 +174,6 @@ data class Snapshot(
     val refines: Boolean = false,
     val syllables: List<String> = emptyList(),
     val syllablesId: Int = 0,
+    val deleteBefore: Int = 0,
+    val cursor: Int = -1,
 )

@@ -106,6 +106,8 @@ inline EngineTableConfig engineTable(bool hint, EngineOrderPolicy order, int aut
 #define ENGINE_LATIN_WORDS \
     Option<bool> latinWords{this, "LatinWords", D_("fcitx5-android", "Type English words in pinyin"), true};
 #define ENGINE_FUZZY Option<EngineFuzzyConfig> fuzzy{this, "Fuzzy", _("Fuzzy Pinyin")};
+#define ENGINE_ENGLISH_SUGGEST \
+    Option<bool> englishSuggest{this, "EnglishSuggest", D_("fcitx5-android", "Suggest English words"), true};
 
 FCITX_CONFIGURATION(
         AndroidEngineConfig,
@@ -115,6 +117,7 @@ FCITX_CONFIGURATION(
         ENGINE_MODEL_LEVEL
         ENGINE_LATIN_WORDS
         ENGINE_FUZZY
+        ENGINE_ENGLISH_SUGGEST
         // named as the input methods are listed (androidengine.cpp)
         Option<EngineTableConfig> wubi{this, "Wubi", "五笔", engineTable(true, EngineOrderPolicy::Freq, 4, 3)};
         Option<EngineTableConfig> cangjie{this, "Cangjie", "仓颉", engineTable(false, EngineOrderPolicy::No, -1, -1)};
@@ -147,6 +150,11 @@ FCITX_CONFIGURATION(
         ENGINE_MODEL_LEVEL
         ENGINE_FUZZY)
 
+FCITX_CONFIGURATION(
+        EngineEnglishPage,
+        ENGINE_ENGLISH_SUGGEST)
+
+#undef ENGINE_ENGLISH_SUGGEST
 #undef ENGINE_SHUANGPIN_PROFILE
 #undef ENGINE_PAGE_SIZE
 #undef ENGINE_PREDICTION
@@ -186,6 +194,7 @@ public:
     void keyEvent(const InputMethodEntry &entry, KeyEvent &event) override;
 
     void reset(const InputMethodEntry &entry, InputContextEvent &event) override;
+    void invokeActionImpl(const InputMethodEntry &entry, InvokeActionEvent &event) override;
 
     void deactivate(const InputMethodEntry &entry, InputContextEvent &event) override;
 
@@ -224,6 +233,8 @@ public:
 private:
     /** Shows [snapshot], [im]'s: what it commits, its preedit and candidates. */
     void show(InputContext *ic, std::string im, const EngineSnapshot &snapshot);
+    // whether English suggests words for a key typed in [ic]; else the keys type themselves
+    bool suggestsEnglish(InputContext *ic, bool virtualKey) const;
 
     /** Sends Refine to [im]'s session after [delay] µs, unless another event comes first. */
     void refineLater(InputContext *ic, const std::string &im, uint64_t delay);
@@ -252,6 +263,7 @@ private:
     // filled from config_ as a page is opened
     mutable EnginePinyinPage pinyinPage_;
     mutable EngineShuangpinPage shuangpinPage_;
+    mutable EngineEnglishPage englishPage_;
     // the pause a snapshot that refines waits for; any event ends it
     std::unique_ptr<EventSourceTime> refine_;
 
