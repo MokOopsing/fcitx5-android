@@ -18,6 +18,7 @@ import org.fcitx.fcitx5.android.ui.main.MainViewModel
 import org.fcitx.fcitx5.android.ui.main.settings.FcitxPreferenceFragment
 import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
 import org.fcitx.fcitx5.android.utils.lazyRoute
+import org.fcitx.fcitx5.android.utils.navigateWithAnim
 import java.util.concurrent.atomic.AtomicBoolean
 
 class InputMethodConfigFragment : FcitxPreferenceFragment() {
@@ -30,7 +31,7 @@ class InputMethodConfigFragment : FcitxPreferenceFragment() {
     override fun getPageTitle(): String = InputMethodNames.of(requireContext(), args.uniqueName, args.name)
 
     override fun createScreen(raw: RawConfig, save: () -> Unit): PreferenceScreen =
-        InputMethodSettings.of(args.uniqueName)?.let { InputMethodSettings.create(preferenceManager, it, raw["cfg"], save) }
+        InputMethodSettings.of(args.uniqueName)?.let { InputMethodSettings.create(preferenceManager, it, raw["cfg"], save) { route -> navigateWithAnim(route) } }
             ?: super.createScreen(raw, save)
 
     override suspend fun obtainConfig(fcitx: FcitxAPI): RawConfig {

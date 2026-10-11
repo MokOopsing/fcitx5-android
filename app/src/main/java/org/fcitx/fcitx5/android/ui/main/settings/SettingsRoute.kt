@@ -173,7 +173,7 @@ sealed class SettingsRoute : Parcelable {
     data object UserWords : SettingsRoute()
 
     @Serializable
-    data class UserWordList(val kind: String) : SettingsRoute()
+    data class UserWordList(val kind: String, val english: Boolean = false) : SettingsRoute()
 
     @Serializable
     data object PopupOverrides : SettingsRoute()

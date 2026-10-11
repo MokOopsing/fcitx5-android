@@ -25,11 +25,13 @@ import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceEnum
 import org.fcitx.fcitx5.android.engine.host.EngineSettings
 import org.fcitx.fcitx5.android.engine.host.Engines
+import org.fcitx.fcitx5.android.engine.host.Engines.UserWord
 import org.fcitx.fcitx5.android.engine.host.ModelLevel
 import org.fcitx.fcitx5.android.engine.host.TableSettings
 import org.fcitx.fcitx5.android.engine.pinyin.Fuzzy
 import org.fcitx.fcitx5.android.engine.pinyin.ShuangpinScheme
 import org.fcitx.fcitx5.android.input.keyboard.T9MultiTap
+import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
 import kotlin.math.abs
 
 /**
@@ -99,6 +101,9 @@ object InputMethodSettings {
         @StringRes val summary: Int,
         val pref: () -> ManagedPreference<Boolean>,
     ) : Item
+
+    /** A page of its own, [route], as the app's settings open one: not an option of fcitx's. */
+    class Page(val key: String, @StringRes val title: Int, @StringRes val summary: Int, val route: SettingsRoute) : Item
 
     class Section(@StringRes val title: Int, val items: List<Item>) : Item
 
@@ -241,7 +246,18 @@ object InputMethodSettings {
                 },
             )
         ),
+        Section(
+            R.string.im_section_words, listOf(
+                Page(
+                    ENGLISH_WORDS, R.string.english_words, R.string.english_words_summary,
+                    SettingsRoute.UserWordList(UserWord.Kind.LEARNED.name, english = true),
+                ),
+            )
+        ),
     )
+
+    /** The English page's word list: its key. */
+    const val ENGLISH_WORDS = "english_words"
 
     /** The app's own input methods, each with a page in [of]. */
     val BUILT_IN: List<String> = listOf(Engines.PINYIN, Engines.T9, Engines.SHUANGPIN) + Engines.TABLES.keys + InputMethodNames.KEYBOARD
@@ -255,8 +271,27 @@ object InputMethodSettings {
         else -> if (uniqueName.startsWith("engine-")) table else null
     }
 
-    /** [items] as a screen over [cfg], [save] called after each change. */
-    fun create(manager: PreferenceManager, items: List<Item>, cfg: RawConfig, save: () -> Unit): PreferenceScreen {
+    private fun page(context: Context, item: Page, open: (SettingsRoute) -> Unit) = Preference(context).apply {
+        key = item.key
+        isPersistent = false
+        isIconSpaceReserved = false
+        isSingleLineTitle = false
+        setTitle(item.title)
+        setSummary(item.summary)
+        setOnPreferenceClickListener {
+            open(item.route)
+            true
+        }
+    }
+
+    /** [items] as a screen over [cfg], [save] called after each change, [open] opening a [Page]'s route. */
+    fun create(
+        manager: PreferenceManager,
+        items: List<Item>,
+        cfg: RawConfig,
+        save: () -> Unit,
+        open: (SettingsRoute) -> Unit = {},
+    ): PreferenceScreen {
         val context = manager.context
         val screen = manager.createPreferenceScreen(context)
         fun raw(path: String) = path.split('/').fold(cfg) { at, name -> at.getOrCreate(name) }
@@ -316,6 +351,7 @@ object InputMethodSettings {
                 }
                 is Flags -> into(flagsPreference(context, item, item.flags.map { raw("${item.path}/${it.first}") }, save))
                 is AppChoice<*> -> into(appChoice(context, item))
+                is Page -> into(page(context, item, open))
                 is AppToggle -> into(SwitchPreferenceCompat(context).apply {
                     val pref = item.pref()
                     key = item.key

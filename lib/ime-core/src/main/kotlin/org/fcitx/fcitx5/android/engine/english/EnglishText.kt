@@ -56,6 +56,10 @@ object EnglishText {
         return words.takeLast(2)
     }
 
+    /** Whether [text] is a word as English types it: letters, an apostrophe or a hyphen between them, at most [MAX_WORD]. */
+    fun isWord(text: String): Boolean =
+        text.length in 1..MAX_WORD && text.first().isAsciiLetter() && text.all { it.isAsciiLetter() || it == '\'' || it == '-' }
+
     /** How much of the text before the cursor [context] looks at: enough for two words and what is before them. */
     const val CONTEXT_CHARS = 160
 

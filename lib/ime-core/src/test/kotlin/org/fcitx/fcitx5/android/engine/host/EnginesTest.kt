@@ -67,6 +67,24 @@ class EnginesTest : EnginesFixture() {
         again.close()
     }
 
+    // as the English page's word list has them: added as typed twice, forgotten for good
+    @Test
+    fun theEnglishWordsAreListedAddedAndForgotten() {
+        val engines = Engines(::load, folder.root)
+        engines.type(Engines.ENGLISH, "the")
+        engines.onEvent(Engines.ENGLISH, EngineEvent.CHAR, ' '.code)
+        assertTrue(engines.addEnglishWord("Youmo"))
+        assertFalse(engines.addEnglishWord("you mo"))
+        assertFalse(engines.addEnglishWord("'em"))
+        assertEquals(listOf("Youmo" to 2f, "the" to 1f), engines.englishWords().map { it.text to it.count })
+        // the user's: not corrected, offered by its keys
+        assertTrue("Youmo" in engines.type(Engines.ENGLISH, "you").candidates)
+        engines.onEvent(Engines.ENGLISH, EngineEvent.CHAR, ' '.code)
+        engines.forgetEnglishWords(listOf("Youmo"))
+        engines.close()
+        assertEquals(listOf("the", "you"), Engines(::load, folder.root).englishWords().map { it.text })
+    }
+
     @Test
     fun theRestOfTheCandidatesAreFetchedFromTheSession() {
         val engines = Engines(::load, null)

@@ -99,6 +99,21 @@ class FakeFcitxAPI : FcitxAPI {
         userWords -= words.toSet()
     }
 
+    val englishWords = ArrayList<Engines.UserWord>()
+
+    override suspend fun englishWords(): List<Engines.UserWord> = englishWords.toList()
+
+    override suspend fun addEnglishWord(text: String): Boolean {
+        calls += "addEnglishWord($text)"
+        englishWords += Engines.UserWord(text, "", Engines.UserWord.Kind.LEARNED, 2f)
+        return true
+    }
+
+    override suspend fun forgetEnglishWords(texts: List<String>) {
+        calls += "forgetEnglishWords(${texts.joinToString(",")})"
+        englishWords.removeAll { it.text in texts }
+    }
+
     override suspend fun importUserWords(lines: Sequence<String>): Engines.Imported {
         // once: a file's lines may be read only once
         val count = lines.count()

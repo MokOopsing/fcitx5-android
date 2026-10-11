@@ -12,6 +12,7 @@ import androidx.preference.PreferenceManager
 import androidx.preference.PreferenceScreen
 import org.fcitx.fcitx5.android.FcitxApplication
 import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.core.InputMethodNames
 import org.fcitx.fcitx5.android.core.RawConfig
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.engine.host.EngineSettings
@@ -21,6 +22,7 @@ import org.fcitx.fcitx5.android.engine.pinyin.Fuzzy
 import org.fcitx.fcitx5.android.input.keyboard.T9MultiTap
 import org.fcitx.fcitx5.android.ui.main.modified.hasDefault
 import org.fcitx.fcitx5.android.ui.main.settings.PlaceholderStrings
+import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodSettings.Choice
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodSettings.Item
 import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodSettings.Section
@@ -65,6 +67,18 @@ class InputMethodSettingsScreenTest {
     // that it keeps these keys, the options androidengine.h declares, is AndroidEngineHeaderTest's to hold
     private fun RawConfig.flattened(prefix: String = ""): String = subItems.orEmpty().joinToString("") {
         if (it.subItems.isNullOrEmpty()) "$prefix${it.name}=${it.value}\n" else it.flattened("$prefix${it.name}/")
+    }
+
+    // the English page's word list, opened as the app's settings open a page
+    @Test
+    fun theEnglishPageOpensItsWordList() {
+        val opened = ArrayList<SettingsRoute>()
+        val ctx = PlaceholderStrings(RuntimeEnvironment.getApplication())
+        val screen = InputMethodSettings.create(PreferenceManager(ctx), InputMethodSettings.of(InputMethodNames.KEYBOARD)!!, RawConfig(), {}) { opened += it }
+        val words = screen.titled(R.string.english_words)
+        assertSame(words, screen.findPreference<Preference>(InputMethodSettings.ENGLISH_WORDS))
+        words.performClick()
+        assertEquals(listOf<SettingsRoute>(SettingsRoute.UserWordList("LEARNED", english = true)), opened)
     }
 
     // a list's dialog looks its preference up by key: one without a key crashed on a tap

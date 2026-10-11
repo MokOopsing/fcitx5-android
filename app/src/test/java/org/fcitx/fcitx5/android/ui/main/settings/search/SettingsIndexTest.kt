@@ -39,7 +39,7 @@ class SettingsIndexTest {
 
     /** [uniqueName]'s page, as InputMethodConfigFragment draws it. */
     private fun pageOf(ctx: Context, uniqueName: String): PreferenceScreen =
-        InputMethodSettings.create(PreferenceManager(ctx), InputMethodSettings.of(uniqueName)!!, RawConfig()) {}
+        InputMethodSettings.create(PreferenceManager(ctx), InputMethodSettings.of(uniqueName)!!, RawConfig(), save = {})
 
     /** The keys of the settings on [uniqueName]'s page. */
     private fun keysOn(ctx: Context, uniqueName: String): Set<String> {

@@ -69,6 +69,9 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
     override suspend fun addUserWord(text: String, pinyin: String) = withFcitxContext { EngineBridge.engines.addWord(text, pinyin) }
     override suspend fun blockUserWord(text: String, pinyin: String) = withFcitxContext { EngineBridge.engines.blockWord(text, pinyin) }
     override suspend fun removeUserWords(words: List<Engines.UserWord>) = withFcitxContext { EngineBridge.engines.removeWords(words) }
+    override suspend fun englishWords() = withFcitxContext { EngineBridge.engines.englishWords() }
+    override suspend fun addEnglishWord(text: String) = withFcitxContext { EngineBridge.engines.addEnglishWord(text) }
+    override suspend fun forgetEnglishWords(texts: List<String>) = withFcitxContext { EngineBridge.engines.forgetEnglishWords(texts) }
     override suspend fun importUserWords(lines: Sequence<String>) = withFcitxContext { EngineBridge.engines.importWords(lines) }
     override suspend fun exportUserWords() = withFcitxContext { EngineBridge.engines.exportWords() }
 

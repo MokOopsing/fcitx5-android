@@ -68,6 +68,15 @@ interface FcitxAPI {
     /** Takes [words] off their lists: see [Engines.removeWords]. */
     suspend fun removeUserWords(words: List<Engines.UserWord>)
 
+    /** The English words the user typed: see [Engines.englishWords]. */
+    suspend fun englishWords(): List<Engines.UserWord>
+
+    /** Makes [text] an English word of the user's; false if it is none: see [Engines.addEnglishWord]. */
+    suspend fun addEnglishWord(text: String): Boolean
+
+    /** Forgets the English words [texts]: see [Engines.forgetEnglishWords]. */
+    suspend fun forgetEnglishWords(texts: List<String>)
+
     /**
      * Adds and blocks the words of a list the user imports, a word a line: see [Engines.importWords].
      * [lines] are read as the engine takes them, on fcitx's thread: those of a local file, not of a

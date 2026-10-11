@@ -75,6 +75,9 @@ import kotlin.math.roundToInt
  * by a tap, several deleted at once after a long press. A list may run to thousands: a
  * [RecyclerView] makes views for the rows on screen only, and the search runs off the main
  * thread, the list shown whole again rather than diffed, as a search changes most of it.
+ *
+ * With [SettingsRoute.UserWordList.english], the English words the user typed instead (the
+ * English page's list): no pinyin, a word added as typed twice, forgotten as a learned one is.
  */
 class UserWordListFragment : Fragment() {
 
@@ -82,6 +85,7 @@ class UserWordListFragment : Fragment() {
 
     private val args by lazyRoute<SettingsRoute.UserWordList>()
     private val kind by lazy { UserWord.Kind.valueOf(args.kind) }
+    private val english by lazy { args.english }
 
     private var all = emptyList<UserWord>()
     private var shown = emptyList<UserWord>()
@@ -102,7 +106,9 @@ class UserWordListFragment : Fragment() {
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val ctx = requireContext()
-        val (searchLayout, searchField) = ctx.materialTextInput { hint = getString(R.string.search_words_hint) }
+        val (searchLayout, searchField) = ctx.materialTextInput {
+            hint = getString(if (english) R.string.search_english_words_hint else R.string.search_words_hint)
+        }
         searchLayout.endIconMode = TextInputLayout.END_ICON_CLEAR_TEXT
         searchField.apply {
             isSingleLine = true
@@ -122,7 +128,7 @@ class UserWordListFragment : Fragment() {
             addItemDecoration(DividerItemDecoration(ctx, DividerItemDecoration.VERTICAL))
             clipToPadding = false
         }
-        val fab = if (kind == UserWord.Kind.LEARNED) null else FloatingActionButton(ctx).apply {
+        val fab = if (kind == UserWord.Kind.LEARNED && !english) null else FloatingActionButton(ctx).apply {
             this@UserWordListFragment.fab = this
             imageDrawable = ctx.getDrawable(R.drawable.ic_baseline_plus_24)
             contentDescription = getString(if (kind == UserWord.Kind.BLOCKED) R.string.block_word else R.string.add_word)
@@ -180,14 +186,14 @@ class UserWordListFragment : Fragment() {
 
     private fun setTitle() {
         viewModel.setToolbarTitle(
-            if (selected.isEmpty()) getString(UserWordsFragment.title(kind))
+            if (selected.isEmpty()) getString(if (english) R.string.english_words else UserWordsFragment.title(kind))
             else getString(R.string.selected_count, selected.size)
         )
     }
 
     private fun load() {
         lifecycleScope.launch {
-            all = viewModel.fcitx.runOnReady { userWords(kind) }
+            all = words()
             // by word and reading: a learned word's count may have changed since it was picked
             val picked = selected.mapTo(HashSet()) { it.text to it.pinyin }
             selected.clear()
@@ -256,9 +262,11 @@ class UserWordListFragment : Fragment() {
         // thousands at once take a moment: the added words' model is made again without them
         lifecycleScope.withLoadingDialog(ctx) {
             try {
-                viewModel.fcitx.runOnReady { removeUserWords(words) }
+                viewModel.fcitx.runOnReady {
+                    if (english) forgetEnglishWords(words.map { it.text }) else removeUserWords(words)
+                }
                 selected.removeAll(words.toSet())
-                all = viewModel.fcitx.runOnReady { userWords(kind) }
+                all = words()
                 filter(immediately = true)
                 selectionChanged()
             } catch (e: CancellationException) {
@@ -271,14 +279,16 @@ class UserWordListFragment : Fragment() {
         }
     }
 
-    /** What can be done to [word]: edited (not a blocked one), taken off its list. */
+    private suspend fun words() = viewModel.fcitx.runOnReady { if (english) englishWords() else userWords(kind) }
+
+    /** What can be done to [word]: edited (not a blocked one, nor an English one), taken off its list. */
     private fun act(word: UserWord) {
         val actions = buildList {
-            if (kind != UserWord.Kind.BLOCKED) add(R.string.edit)
+            if (kind != UserWord.Kind.BLOCKED && !english) add(R.string.edit)
             add(removeLabel())
         }
         AlertDialog.Builder(requireContext())
-            .setTitle("${word.text}  ${word.pinyin}")
+            .setTitle("${word.text}  ${word.pinyin}".trim())
             .setItems(actions.map { getString(it) }.toTypedArray()) { _, which ->
                 if (actions[which] == R.string.edit) {
                     edit(R.string.edit, word) { text, pinyin ->
@@ -292,10 +302,44 @@ class UserWordListFragment : Fragment() {
             .show()
     }
 
-    private fun add() = if (kind == UserWord.Kind.BLOCKED) {
+    private fun add() = if (english) {
+        addEnglish()
+    } else if (kind == UserWord.Kind.BLOCKED) {
         edit(R.string.block_word, null) { text, pinyin -> blockUserWord(text, pinyin) }
     } else {
         edit(R.string.add_word, null) { text, pinyin -> addUserWord(text, pinyin) }
+    }
+
+    /** Asks for an English word, kept open with an error under it while it is none. */
+    private fun addEnglish() {
+        val ctx = requireContext()
+        val (layout, field) = ctx.materialTextInput { hint = getString(R.string.word_text) }
+        field.apply {
+            isSingleLine = true
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        val padded = ctx.verticalLayout {
+            setPaddingDp(20, 10, 20, 0)
+            add(layout, lParams(matchParent))
+        }
+        AlertDialog.Builder(ctx)
+            .setTitle(R.string.add_word)
+            .setView(padded)
+            .setPositiveButton(android.R.string.ok, null)
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+            .onPositiveButtonClick onClick@{
+                val dialog = this
+                lifecycleScope.launch {
+                    if (viewModel.fcitx.runOnReady { addEnglishWord(field.str.trim()) }) {
+                        dialog.dismiss()
+                        load()
+                    } else {
+                        field.error = getString(R.string.english_word_invalid)
+                    }
+                }
+                false
+            }
     }
 
     /**
@@ -401,7 +445,10 @@ class UserWordListFragment : Fragment() {
         override fun onBindViewHolder(holder: WordHolder, position: Int) {
             val word = shown[position]
             holder.text.text = word.text
-            holder.detail.text = if (word.kind == UserWord.Kind.LEARNED) {
+            holder.detail.text = if (english) {
+                val times = word.count.roundToInt().coerceAtLeast(1)
+                resources.getQuantityString(R.plurals.english_word_typed_times, times, times)
+            } else if (word.kind == UserWord.Kind.LEARNED) {
                 val times = word.count.roundToInt().coerceAtLeast(1)
                 resources.getQuantityString(R.plurals.word_typed_times, times, word.pinyin, times)
             } else {

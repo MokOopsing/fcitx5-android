@@ -6,6 +6,7 @@ package org.fcitx.fcitx5.android.engine.host
 
 import org.fcitx.fcitx5.android.engine.data.CodeTableReader
 import org.fcitx.fcitx5.android.engine.english.EnglishSession
+import org.fcitx.fcitx5.android.engine.english.EnglishText
 import org.fcitx.fcitx5.android.engine.english.EnglishUser
 import org.fcitx.fcitx5.android.engine.english.EnglishUserStore
 import org.fcitx.fcitx5.android.engine.phrase.CustomPhrases
@@ -169,6 +170,28 @@ class Engines(
 
     /** [removeWord] for each of [words], a list written once. */
     fun removeWords(words: Collection<UserWord>) = lexicon.removeWords(words)
+
+    /** The English words the user committed, as written, the most typed first: [UserWord.Kind.LEARNED], no pinyin. */
+    fun englishWords(): List<UserWord> {
+        val user = englishUser()
+        return user.words.map { UserWord(it, "", UserWord.Kind.LEARNED, user.count(it)) }
+            .sortedWith(compareByDescending<UserWord> { it.count }.thenBy { it.text })
+    }
+
+    /**
+     * Makes [text] an English word of the user's, as typed twice: offered by its keys, never
+     * corrected. False for what is no word English types (letters, an apostrophe or a hyphen within).
+     */
+    fun addEnglishWord(text: String): Boolean {
+        if (!EnglishText.isWord(text)) return false
+        val user = englishUser()
+        val missing = EnglishUser.LEARNED - user.count(text)
+        if (missing > 0f) user.learn(null, text, missing)
+        return true
+    }
+
+    /** Forgets each of the English words [texts]: their counts and the pairs they are in. */
+    fun forgetEnglishWords(texts: Collection<String>) = englishUser().let { user -> texts.forEach(user::forget) }
 
     /** What [importWords] made of the lines: words added and blocked that were not already, lines it could not read. */
     data class Imported(val added: Int, val blocked: Int, val unread: Int)
