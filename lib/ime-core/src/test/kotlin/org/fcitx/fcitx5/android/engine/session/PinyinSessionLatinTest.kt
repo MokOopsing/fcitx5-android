@@ -10,6 +10,7 @@ import org.fcitx.fcitx5.android.engine.pinyin.LatinWords
 import org.fcitx.fcitx5.android.engine.pinyin.PinyinSegmenter
 import org.fcitx.fcitx5.android.engine.session.Action.Key
 import org.fcitx.fcitx5.android.engine.session.Action.Select
+import org.fcitx.fcitx5.android.engine.user.KeyHabits
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
@@ -31,6 +32,8 @@ class PinyinSessionLatinTest {
                 .unigram("app", -4.5f, 0f)
                 .unigram("APP", -4.7f, 0f)
                 .unigram("AI", -5.5f, 0f)
+                .unigram("啧啧啧", -5f, 0f)
+                .unigram("ZZZ", -6f, 0f)
                 .bigram("我", "的", -0.5f, 0f)
                 .entry("我", syl("wo"))
                 .entry("的", syl("de"))
@@ -39,6 +42,8 @@ class PinyinSessionLatinTest {
                 .entry("app", syl(*letters("app")))
                 .entry("APP", syl(*letters("app")))
                 .entry("AI", syl(*letters("ai")))
+                .entry("啧啧啧", syl("ze", "ze", "ze"))
+                .entry("ZZZ", syl(*letters("zzz")))
                 .build().toByteArray(),
         ),
     )
@@ -51,7 +56,7 @@ class PinyinSessionLatinTest {
 
     @Test
     fun theWordsSpeltInLettersAreFoundWhereTheyAreTyped() {
-        assertEquals(3, latin.size)
+        assertEquals(4, latin.size)
         fun at(input: String, at: Int) = ArrayList<Int>().also { found -> latin.forEachAt(input, at) { found += it } }
         assertEquals(listOf(6), at("wodeiphone", 4))
         assertEquals(emptyList<Int>(), at("wodeiphone", 0))
@@ -69,6 +74,21 @@ class PinyinSessionLatinTest {
         assertEquals("iPhone", session().type("iphone").candidates.first())
         // without the Latin words: what it was
         assertNotEquals("iPhone", session(latin = null).type("iphone").candidates.first())
+    }
+
+    // a word's letters cost nothing, 简拼 an initial each: learning the word alone never made it up
+    @Test
+    fun aWordPickedOverALatinWordTwiceIsFirstThereafter() {
+        val session = PinyinSession(data, PinyinSegmenter(latin = latin), habits = KeyHabits().scope("pinyin"))
+        fun pick(): List<String> {
+            val zzz = session.type("zzz").candidates
+            session.apply(Select(zzz.indexOf("啧啧啧")))
+            session.apply(Action.Reset)
+            return zzz
+        }
+        assertEquals("ZZZ", pick().first())
+        assertEquals("ZZZ", pick().first())
+        assertEquals("啧啧啧", session.type("zzz").candidates.first())
     }
 
     @Test

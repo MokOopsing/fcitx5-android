@@ -11,8 +11,9 @@ package org.fcitx.fcitx5.android.engine.user
  * and 嗯 once, it stayed far down. A habit is offered first for its keys instead, however the
  * decoder reads them.
  *
- * Each text of a key counts its commits: [learn] adds one to what was committed, unless the
- * engine offers it first on its own, and halves the others of the key, passed over. The text
+ * Each text of a key counts its commits: [learn] adds one to what was committed (or [WHOLE], see
+ * there), unless the engine offers it first on its own, and halves the others of the key, passed
+ * over. The text
  * counted most is the habit, from [MIN_COUNT] on. Keys are as typed and per input method
  * ([scope]): `ee` in 双拼 is other syllables. At most [limit] are kept, those counted least going
  * first. What the session teaches it is its to say (PinyinSession: text put together from pieces).
@@ -41,10 +42,11 @@ class KeyHabits(private val limit: Int = DEFAULT_LIMIT) {
 
         /**
          * [text] committed for [keys], where the engine would offer [own] first without habits:
-         * counted unless it is that, which needs no habit; the key's others, passed over, halved.
+         * counted, by [weight], unless it is that, which needs no habit; the key's others, passed
+         * over, halved.
          */
-        fun learn(keys: String, text: String, own: String?) {
-            if (keys.length <= MAX_KEY) this@KeyHabits.learn(key(keys), text, own)
+        fun learn(keys: String, text: String, own: String?, weight: Float = 1f) {
+            if (keys.length <= MAX_KEY) this@KeyHabits.learn(key(keys), text, own, weight)
         }
 
         /** Forgets every habit of [text], of any input method. */
@@ -59,12 +61,12 @@ class KeyHabits(private val limit: Int = DEFAULT_LIMIT) {
     private fun habit(key: String): String? =
         habits[key]?.maxByOrNull { it.value }?.takeIf { it.value >= MIN_COUNT }?.key
 
-    private fun learn(key: String, text: String, own: String?) {
+    private fun learn(key: String, text: String, own: String?, weight: Float) {
         if (text.isEmpty() || text.length > MAX_TEXT) return
         // the others committed for these keys before, passed over now
         habits[key]?.filterKeys { it != text }?.forEach { (other, count) -> set(key, other, count / 2) }
         if (text == own) return
-        set(key, text, (habits[key]?.get(text) ?: 0f) + 1f)
+        set(key, text, (habits[key]?.get(text) ?: 0f) + weight)
         trim(key, text)
     }
 
@@ -132,6 +134,29 @@ class KeyHabits(private val limit: Int = DEFAULT_LIMIT) {
 
     companion object {
         const val DEFAULT_LIMIT = 5000
+
+        /**
+         * What a word of two characters or more picked whole for keys of 简拼 counts, not put
+         * together: twice is a habit. The user model's lift never put such a word first where the
+         * engine reads its keys at a penalty another reading does not pay: 啧啧啧 for zzz, three
+         * initials, below ZZZ, letters at no cost; 那个 for ng below 嗯. Once is not, as one pick
+         * may be a slip. Keys spelt out are the user model's, which weighs what came before: a
+         * habit of 实施 for shishi would put it before 事实 everywhere.
+         */
+        const val WHOLE = 0.5f
+
+        /**
+         * What committing [text] counts for its keys: one where it was [putTogether] from pieces,
+         * what learning its words does not bring up (嗯嗯 for ee, read en en only at a penalty a
+         * syllable), or where a habit was offered; [WHOLE] for a word picked whole for keys that
+         * are [abbreviated]; nothing for a character, the user model's alone: a habit would put
+         * it first whatever came before, as 泥 for ni every time.
+         */
+        fun weight(putTogether: Boolean, text: String, abbreviated: Boolean): Float = when {
+            putTogether -> 1f
+            abbreviated && text.codePointCount(0, text.length) > 1 -> WHOLE
+            else -> 0f
+        }
 
         /** Committed once is a habit: what the user had to look for, they want first next time. */
         const val MIN_COUNT = 1f

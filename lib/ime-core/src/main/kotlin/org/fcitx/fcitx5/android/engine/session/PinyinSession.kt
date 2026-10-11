@@ -325,11 +325,9 @@ class PinyinSession(
             return snapshot()
         }
         val text = pieces.joinToString("") { it.text }
-        // put together from pieces, what learning its words does not bring up (嗯嗯 for ee, read
-        // en en only at a penalty a syllable); or the habit offered, picked or passed over. A word
-        // picked alone is learned by the user model: a habit would put it first whatever came
-        // before, as 泥 for ni every time once picked
-        if (learning && (pieces.size > 1 || lastRead.habit != null)) input.toString().let { habits?.learn(it, text, ownFirstOf(it)) }
+        // put together from pieces (嗯嗯 for ee), or the habit offered, picked or passed over: see KeyHabits.weight
+        val weight = KeyHabits.weight(pieces.size > 1 || lastRead.habit != null, text, segmenter.abbreviates(input.toString()))
+        if (learning && weight > 0f) input.toString().let { habits?.learn(it, text, ownFirstOf(it), weight) }
         val learned = learn(text)
         // not learned, so no pair with what comes next either
         if (learned == null) lastEntry = null

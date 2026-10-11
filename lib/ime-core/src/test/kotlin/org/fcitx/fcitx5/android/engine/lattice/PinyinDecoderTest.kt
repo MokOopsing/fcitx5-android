@@ -127,6 +127,28 @@ class PinyinDecoderTest {
         assertEquals(-3f + p.fuzzy + p.typo, zagn.score, 1e-4f)
     }
 
+    // ng read whole is 嗯 (ńg), which hardly anyone types so: it pays for it, n'g for 那个 its initials
+    @Test
+    fun aNasalAloneReadWholeCostsItsPenalty() {
+        val nasal = PinyinData.load(
+            ByteBuffer.wrap(
+                PinyinDataBuilder()
+                    .unigram("<unk>", -7f, 0f)
+                    .unigram("嗯", -2f, 0f)
+                    .unigram("那个", -1f, 0f)
+                    .entry("嗯", syl("ng"))
+                    .entry("嗯", syl("n"))
+                    .entry("那个", syl("na", "ge"))
+                    .build().toByteArray(),
+            ),
+        )
+        val p = Penalties()
+        val s = PinyinDecoder(nasal.dictionary, nasal.vocabulary, WordScorer.of(nasal.model), p).decode(plain.segment("ng")).sentences
+        assertEquals("那个", s.first().text)
+        assertEquals(-1f + 2 * p.initial, s.first().score, 1e-4f)
+        assertEquals(-2f + p.nasal, s.first { it.text == "嗯" }.score, 1e-4f)
+    }
+
     @Test
     fun aSyllableStillBeingTypedIsScoredAsTheLongerWordItStarts() {
         val p = Penalties()

@@ -48,6 +48,9 @@ class PinyinSegmenter(
 
     private val index = SpellingIndex(fuzzy, typos, neighbours)
 
+    // no vowel, no syllable spelt out: every key an initial (ng read whole pays Penalties.nasal)
+    override fun abbreviates(keys: String): Boolean = keys.isNotEmpty() && keys.all { it in 'a'..'z' && it !in "aeiouv" }
+
     override fun segment(input: String): SyllableGraph {
         // read as slips, 简拼 turns into anything: 我喜欢你 into 网讯
         val slips = input.any { it in VOWELS }

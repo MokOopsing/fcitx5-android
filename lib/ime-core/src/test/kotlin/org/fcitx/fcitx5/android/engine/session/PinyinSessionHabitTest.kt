@@ -64,12 +64,35 @@ class PinyinSessionHabitTest {
     }
 
     @Test
-    fun aCandidatePickedAloneIsTheUserModelsToLearnNotAHabit() {
+    fun aWordPickedWholeTwiceForInitialsIsFirstAndTheFirstPickedOnceTakesItBack() {
         val session = session()
-        session.pick("xian", "西安")
-        session.pick("ni", "拟")
+        val first = session.type("nh").candidates
+        session.apply(Reset)
+        val other = first.drop(1).first { it.length > 1 }
+        session.pick("nh", other)
+        assertEquals(first.first(), session.type("nh").candidates.first())
+        session.apply(Reset)
+        session.pick("nh", other)
+        assertEquals(other, session.type("nh").candidates.first())
+        session.apply(Reset)
+        session.pick("nh", first.first())
+        assertEquals(first.first(), session.type("nh").candidates.first())
+    }
+
+    // spelt out, the user model's, which weighs what came before: 西安 is no habit of xian
+    @Test
+    fun aWordPickedWholeForKeysSpeltOutIsNoHabit() {
+        val session = session()
+        repeat(2) { session.pick("xian", "西安") }
         assertEquals(0, habits.size)
-        assertEquals("先", session.type("xian").candidates.first())
+    }
+
+    // which character is meant depends on what comes before: the user model's to learn
+    @Test
+    fun aCharacterPickedAloneIsNoHabitHoweverOften() {
+        val session = session()
+        repeat(3) { session.pick("ni", "拟") }
+        assertEquals(0, habits.size)
     }
 
     @Test

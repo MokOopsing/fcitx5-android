@@ -47,4 +47,10 @@ data class Penalties(
     val raw: Float = -10f,
     /** A letter of a Latin word typed in lower case (`iphone` for iPhone), a letter at a time. */
     val letter: Float = 0f,
+    /**
+     * A syllable of a nasal alone (m, n, ng: 呣, 嗯) read whole. Hardly anyone types 嗯 as ng
+     * (en, rather), so `ng` read so put 嗯 before 那个 of n'g; at the cost of two initials the
+     * model decides between them.
+     */
+    val nasal: Float = -2f,
 )

@@ -12,6 +12,7 @@ import org.fcitx.fcitx5.android.engine.data.Vocabulary
 import org.fcitx.fcitx5.android.engine.pinyin.SyllableGraph
 import org.fcitx.fcitx5.android.engine.pinyin.SyllableGraph.Kind
 import org.fcitx.fcitx5.android.engine.pinyin.SyllableMatches
+import org.fcitx.fcitx5.android.engine.pinyin.Syllables
 
 /**
  * Reads a [SyllableGraph] as Chinese. Every dictionary word along every path of the graph
@@ -157,7 +158,7 @@ class PinyinDecoder(
                 val child = if (node < 0) -1 else dictionary.child(node, matches.syllable(i))
                 val userChild = if (userNode < 0 || user == null) -1 else user.child(userNode, matches.syllable(i))
                 if (child < 0 && userChild < 0) continue
-                val c = edgeCost + penalty(matches.flags(i))
+                val c = edgeCost + penalty(matches.flags(i)) + if (kind == Kind.SYLLABLE && matches.syllable(i) in NASALS) penalties.nasal else 0f
                 var more = false
                 if (child >= 0) {
                     val words = minOf(dictionary.wordCount(child), limit)
@@ -522,6 +523,9 @@ class PinyinDecoder(
     }
 
     companion object {
+        /** The syllables of a nasal alone: see [Penalties.nasal]. */
+        private val NASALS = setOf("m", "n", "ng").map { Syllables.id(it) }.toIntArray()
+
         const val DEFAULT_BEAM = 16
         const val DEFAULT_WORDS = 64
         // on the 256-sample evaluation set, 16 words are as accurate as 256 at a third of the
