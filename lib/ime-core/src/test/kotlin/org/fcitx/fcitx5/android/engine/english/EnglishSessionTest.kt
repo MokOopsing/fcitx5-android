@@ -15,9 +15,9 @@ import org.junit.Test
 
 class EnglishSessionTest {
 
-    private val words = EnglishWords.of(mapOf("hello" to 9, "help" to 8, "he" to 7, "i'm" to 6, "the" to 5, "i" to 9))
+    private val data = EnglishDecoderTest.data()
 
-    private fun session() = EnglishSession(words)
+    private fun session() = EnglishSession(data)
 
     private fun EnglishSession.type(text: String): Snapshot = text.map { apply(Action.Key(it)) }.last()
 
@@ -25,9 +25,153 @@ class EnglishSessionTest {
     fun theWordTypedComesFirstThenWhatItMayBe() {
         val s = session().type("hel")
         assertEquals("hel", s.preedit)
-        // the longer words it starts, then, being no word, those one edit away
-        assertEquals(listOf("hel", "hello", "help", "he"), s.candidates)
-        assertEquals("the", session().type("teh").candidates[1])
+        // the longer words it starts, likeliest first, then those a slip from it
+        assertEquals(listOf("hel", "hello", "help", "hell", "he"), s.candidates)
+        assertFalse(s.predicting)
+    }
+
+    @Test
+    fun aWordTypedThatIsNoneIsCorrectedBySpace() {
+        val teh = session()
+        assertEquals(listOf("the", "teh"), teh.type("teh").candidates.take(2))
+        assertEquals("the ", teh.apply(Action.Key(' ')).commit)
+        // written otherwise: an apostrophe, a capital
+        for ((typed, meant) in listOf("dont" to "don't", "london" to "London", "im" to "I'm")) {
+            val session = session()
+            session.type(typed)
+            assertEquals("$meant ", session.apply(Action.Key(' ')).commit)
+        }
+        // punctuation commits the correction too
+        val comma = session().also { it.type("teh") }.apply(Action.Key(','))
+        assertEquals("the", comma.commit)
+        assertFalse(comma.handled)
+    }
+
+    @Test
+    fun aWordOrTheStartOfOneIsNotCorrected() {
+        for (typed in listOf("us", "form", "hel", "he")) {
+            val session = session()
+            session.type(typed)
+            assertEquals("$typed ", session.apply(Action.Key(' ')).commit)
+        }
+    }
+
+    private fun committed(keys: String, before: String = "I met "): String {
+        val session = session()
+        session.apply(Action.Context(before))
+        session.type(keys)
+        return session.apply(Action.Key(' ')).commit.trimEnd()
+    }
+
+    @Test
+    fun aRareWordIsCorrectedOnlyToOneFarLikelier() {
+        // of the many words the pages have, nad is a slip of and
+        assertEquals("and", committed("nad"))
+        // a word as likely is the user's: no capital more or less, no longer word
+        assertEquals("us", committed("us"))
+        assertEquals("form", committed("form"))
+    }
+
+    @Test
+    fun anApostropheTypedIsNeverTakenAway() {
+        assertEquals("year's", committed("year's"))
+        assertEquals("it's", committed("it's"))
+        // nor moved: what follows it is the user's
+        assertEquals("its'", committed("its'"))
+    }
+
+    @Test
+    fun aDigitOrAHyphenLeavesTheWordAsTyped() {
+        val digit = session().also { it.type("teh") }.apply(Action.Key('1'))
+        assertEquals("teh", digit.commit)
+        assertFalse(digit.handled)
+        // each part a word of its own, which the words have none of
+        assertEquals("teh-cut", committed("teh-cut"))
+    }
+
+    // where nothing is learned nothing is known of the text: nothing follows, nothing is a sentence's start
+    @Test
+    fun withoutLearningNothingIsOffered() {
+        val session = session().apply { learning = false }
+        session.apply(Action.Context(""))
+        session.type("i")
+        assertFalse(session.apply(Action.Key(' ')).predicting)
+        // turned off, what was known goes
+        val turned = session()
+        turned.apply(Action.Context("I fed the "))
+        turned.learning = false
+        assertEquals("cut", turned.type("cit").candidates.first())
+    }
+
+    // the user's own capital: a name, likelier than a slip, but for a key beside
+    @Test
+    fun aWordWithACapitalOfItsOwnIsCorrectedOnlyForAKeyBeside() {
+        assertEquals("Steve", committed("Stebe"))
+        assertEquals("Stve", committed("Stve"))
+        // at a sentence's start the capital is the keyboard's
+        assertEquals("Steve", committed("Stve", before = ""))
+    }
+
+    // a letter short and a key beside: the word, though the keys start it too
+    @Test
+    fun aWordALetterShortWithASlipIsCorrected() {
+        assertEquals("hello", committed("hwll"))
+        assertEquals("hwl", committed("hwl"))
+    }
+
+    @Test
+    fun backspaceTakesTheCorrectionBackForGood() {
+        val session = session()
+        session.type("teh")
+        session.apply(Action.Key(' '))
+        val back = session.apply(Action.Backspace)
+        assertEquals(4, back.deleteBefore)
+        assertEquals("teh", back.preedit)
+        assertEquals("teh ", session.apply(Action.Key(' ')).commit)
+        assertEquals("teh", session.type("teh").candidates.first())
+        // only right after: a backspace after more is the app's
+        val later = session()
+        later.type("teh")
+        later.apply(Action.Key(' '))
+        later.apply(Action.Key(','))
+        assertFalse(later.apply(Action.Backspace).handled)
+    }
+
+    @Test
+    fun theWordsBeforeTheCursorWeighWhatIsTyped() {
+        assertEquals("cut", session().type("cit").candidates.first())
+        val after = session()
+        after.apply(Action.Context("I fed the "))
+        assertEquals("cat", after.type("cit").candidates.first())
+        // committed here too
+        val typed = session()
+        typed.type("the")
+        typed.apply(Action.Key(' '))
+        assertEquals("cat", typed.type("cit").candidates.first())
+        // nothing kept where nothing is learned
+        val private = session().apply { learning = false }
+        private.apply(Action.Context("I fed the "))
+        assertEquals("cut", private.type("cit").candidates.first())
+    }
+
+    @Test
+    fun aWordCommittedIsFollowedByWhatMayComeNext() {
+        val session = session()
+        session.apply(Action.Context(""))
+        session.type("i")
+        val next = session.apply(Action.Key(' '))
+        assertTrue(next.predicting)
+        assertEquals(listOf("don't", "I'm"), next.candidates)
+        assertEquals("don't ", session.apply(Action.Pick(0)).commit)
+        // a letter starts a word in their place
+        val typed = session.type("h")
+        assertFalse(typed.predicting)
+        assertEquals("h", typed.candidates.first())
+        // a sentence's first, capitalised: after the full stop two spaces make
+        val start = session()
+        start.type("hello")
+        start.apply(Action.Key(' '))
+        assertEquals(listOf("I", "The"), start.apply(Action.Key(' ')).candidates)
     }
 
     @Test
@@ -35,7 +179,7 @@ class EnglishSessionTest {
         assertEquals(listOf("Hel", "Hello", "Help"), session().type("Hel").candidates.take(3))
         assertEquals(listOf("HEL", "HELLO", "HELP"), session().type("HEL").candidates.take(3))
         // one capital letter is a word's start, whatever follows it
-        assertEquals("I'm", session().type("I'").candidates[1])
+        assertTrue("I'm" in session().type("I'").candidates)
     }
 
     @Test
@@ -53,8 +197,8 @@ class EnglishSessionTest {
         val session = session()
         session.type("hel")
         assertEquals("hello ", session.apply(Action.Pick(1)).commit)
-        session.type("he")
-        assertEquals("help ", session.apply(Action.Select(2)).commit)
+        val he = session.type("he").candidates
+        assertEquals("help ", session.apply(Action.Select(he.indexOf("help"))).commit)
     }
 
     @Test
@@ -149,7 +293,8 @@ class EnglishSessionTest {
         // at the start, backspace deletes nothing
         session.apply(Action.Cursor(0))
         assertEquals("hllo", session.apply(Action.Backspace).preedit)
-        assertEquals("hllo ", session.apply(Action.Key(' ')).commit)
+        // no word: corrected
+        assertEquals("hello ", session.apply(Action.Key(' ')).commit)
         // nothing typed: the app's
         assertFalse(session.apply(Action.Cursor(0)).handled)
     }
@@ -161,15 +306,15 @@ class EnglishSessionTest {
 
     @Test
     fun pagesOfCandidates() {
-        val many = EnglishWords.of((1..20).associate { "a$it" to it })
-        val session = EnglishSession(many, pageSize = 4)
-        val first = session.type("a")
-        assertEquals(4, first.candidates.size)
+        val session = EnglishSession(data, pageSize = 2)
+        val first = session.type("hel")
+        assertEquals(listOf("hel", "hello"), first.candidates)
         assertTrue(first.hasNextPage)
         val next = session.apply(Action.NextPage)
         assertEquals(1, next.page)
-        assertEquals(4, next.first)
-        assertEquals("a20 ", session.apply(Action.Pick(1)).commit)
+        assertEquals(2, next.first)
+        assertEquals(listOf("help", "hell"), next.candidates)
+        assertEquals("hell ", session.apply(Action.Pick(3)).commit)
     }
 
     // the host hands it space and digits: they pick nothing here

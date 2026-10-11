@@ -7,7 +7,8 @@ package org.fcitx.fcitx5.android.engine.host
 import org.fcitx.fcitx5.android.engine.data.CodeTable
 import org.fcitx.fcitx5.android.engine.data.DataFormatException
 import org.fcitx.fcitx5.android.engine.data.PinyinData
-import org.fcitx.fcitx5.android.engine.english.EnglishWords
+import org.fcitx.fcitx5.android.engine.english.EnglishData
+import org.fcitx.fcitx5.android.engine.host.Engines.Companion.ENGLISH_DATA
 import org.fcitx.fcitx5.android.engine.host.Engines.Companion.PINYIN_DATA
 import org.fcitx.fcitx5.android.engine.host.Engines.Companion.REFINING_MODEL
 import org.fcitx.fcitx5.android.engine.host.Engines.Companion.SENTENCE_MODEL
@@ -46,11 +47,13 @@ internal class EngineAssets(
     // the Latin words full pinyin reads as typed in lower case (iphone for iPhone)
     val latinWords by lazy(LazyThreadSafetyMode.NONE) { LatinWords.of(pinyinData.dictionary) }
 
-    // English's words; none if the app has not got them, English then suggesting nothing
-    val englishWords: EnglishWords? by lazy(LazyThreadSafetyMode.NONE) {
+    // English's words and model; none if the app has not got them, English then suggesting nothing
+    val englishData: EnglishData? by lazy(LazyThreadSafetyMode.NONE) {
         try {
-            EnglishWords.load(load(Engines.ENGLISH_WORDS))
+            EnglishData.load(load(ENGLISH_DATA), verify = false)
         } catch (_: IOException) {
+            null
+        } catch (_: DataFormatException) {
             null
         }
     }

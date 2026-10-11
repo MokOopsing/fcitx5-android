@@ -231,7 +231,13 @@ class Engines(
                 val pinyin = pinyinSession(segmenter, spell = false)
                 ForgetsInTables(StrokeLookup(pinyin, assets::strokes, assets::charReading, s.pageSize, blocked = lexicon::isBlocked, follow = pinyin::follow, retype = pinyin::typeAll))
             }
-            ENGLISH -> EnglishSession(assets.englishWords, pageSize = s.pageSize)
+            ENGLISH -> {
+                val data = assets.englishData
+                // its keys and word index, some hundreds of milliseconds on a phone, built before the
+                // first key wants them; a key that comes sooner waits for them, as it would anyway
+                if (data != null) Thread(data::warmUp, "english-warm-up").apply { isDaemon = true }.start()
+                EnglishSession(data, pageSize = s.pageSize)
+            }
             // 简拼 only where the digits read nothing else: as common on the evaluation set, and faster
             T9 -> ForgetsInTables(pinyinSession(T9Segmenter(s.fuzzy, abbreviations = false), spell = true))
             SHUANGPIN -> ForgetsInTables(
@@ -314,7 +320,7 @@ class Engines(
         const val ENGLISH = "keyboard-us"
 
         /** Its words, until a list of our own: fcitx's spell dictionary, in the app's assets. */
-        const val ENGLISH_WORDS = "usr/share/fcitx5/spell/en_dict.fscd"
+        const val ENGLISH_DATA = "engine/english.data"
 
         const val PINYIN_DATA = "engine/pinyin.data"
 

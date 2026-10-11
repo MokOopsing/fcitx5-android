@@ -32,6 +32,9 @@ Free to restructure; upstream compatibility is not a constraint.
 | Engine data into app assets (part of every app build; downloads libime's sources, the mixed model of this fork's release `engine-data-*` and the curated new-word pack of `words-*`, SHA-256 checked, once) | `./gradlew :app:compileEngineData` |
 | A new `engine-data` release's files (CommonCrawl crawl, cleaning, mix, new words, evaluation; ~100 GB down, an hour on a rented 16-core box via `dev/training/jobs/engine-data.json`) | `TOOL=… EVAL=… SETS=… lib/ime-dict-tool/engine-data.sh <work dir>` |
 | Sentence models into app assets (part of every app build; fetched from this fork's release `sentence-models-*`, SHA-256 checked) | `./gradlew :app:copySentenceModels` |
+| English's words and model into app assets (part of every app build; the arpa of this fork's release `english-data-*`, SHA-256 checked, compiled) | `./gradlew :app:compileEnglishData` |
+| A new `english-data` release's arpa (FineWeb sample-10BT shards, ~3 min, 7 GB resident; its manifest says which) | `JAVA_OPTS=-Xmx9g ime-dict-tool english-lm -o english.arpa --known en_dict.fscd --tokens 300000000 <shard.parquet>...` |
+| English typing measured: committed as meant, wrongly corrected, slips fixed, words offered before a key | `ime-eval english <english.data> lib/ime-eval/data/english.txt [--misses <out.tsv>]` |
 
 Unit tests need no submodules, NDK or CMake. Instrumented tests (`FcitxTest`, `SoftKeyboardTest`)
 need the native build and an emulator; CI runs them weekly / on PRs labelled `emulator`.

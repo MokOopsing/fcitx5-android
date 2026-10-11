@@ -46,7 +46,7 @@ class AboutFragment : PaddingPreferenceFragment() {
                 addPreference(R.string.build_time, formatDateTime(BuildConfig.BUILD_TIME))
                 addPreference(
                     R.string.engine_data,
-                    "${BuildConfig.ENGINE_DATA}, ${BuildConfig.ENGINE_WORDS}, ${BuildConfig.SENTENCE_MODELS}"
+                    "${BuildConfig.ENGINE_DATA}, ${BuildConfig.ENGINE_WORDS}, ${BuildConfig.SENTENCE_MODELS}, ${BuildConfig.ENGLISH_DATA}"
                 ) {
                     requireContext().openUrl("${Const.releasesUrl}/tag/${BuildConfig.ENGINE_DATA}")
                 }

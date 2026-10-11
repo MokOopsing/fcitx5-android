@@ -7,6 +7,8 @@ package org.fcitx.fcitx5.android.eval
 import org.fcitx.fcitx5.android.engine.data.CodeTable
 import org.fcitx.fcitx5.android.engine.data.DataFormatException
 import org.fcitx.fcitx5.android.engine.data.PinyinData
+import org.fcitx.fcitx5.android.engine.english.EnglishData
+import org.fcitx.fcitx5.android.engine.english.EnglishSession
 import org.fcitx.fcitx5.android.engine.lattice.Penalties
 import org.fcitx.fcitx5.android.engine.lattice.PinyinDecoder
 import org.fcitx.fcitx5.android.engine.lattice.Predictor
@@ -54,6 +56,26 @@ internal val COMMANDS = listOf(
         // checked already: see optionsValid
         val weight = args.options["weight"]?.let { weights(it)?.first } ?: Reranker.WEIGHT
         predict(dataPath, setPath, RunOptions(args.options).threads, args.options["offers"], args.options["rerank"], weight, out)
+    },
+    Command(
+        "english", "<english.data> <sentences.txt> [--noise <rate>] [--max-correction <cost>] [--misses <out.tsv>] [--threads <n>]",
+        2..2, "noise", "max-correction", "misses", "threads",
+    ) { args, out, _ ->
+        val (dataPath, setPath) = args.operands
+        val sentences = File(setPath).readLines().filter { it.isNotBlank() && !it.startsWith("#") }
+        // checked already: see optionsValid
+        val run = EnglishRun(EnglishData.load(mapFile(dataPath)), maxCorrection = args.options["max-correction"]?.toFloat() ?: EnglishSession.MAX_CORRECTION)
+        val noise = args.options["noise"]?.toDouble() ?: ENGLISH_NOISE
+        out.appendLine(EnglishRun.Result.HEADER)
+        val threads = RunOptions(args.options).threads
+        val clean = run.run(sentences, 0.0, ENGLISH_SEED, threads)
+        val slips = run.run(sentences, noise, ENGLISH_SEED, threads)
+        out.appendLine(clean.row("clean"))
+        out.appendLine(slips.row("slips"))
+        args.options["misses"]?.let { path ->
+            File(path).printWriter().use { w -> (clean.misses.map { "clean\t$it" } + slips.misses.map { "slips\t$it" }).forEach(w::println) }
+        }
+        0
     },
     Command("predict-learn", "<pinyin.data> <set.tsv> [--user-weight <w>]", 2..2, "user-weight") { args, out, _ ->
         val (dataPath, setPath) = args.operands
@@ -186,6 +208,10 @@ fun runCli(args: Array<String>, out: Appendable, err: Appendable): Int {
     return command.run(arguments, out, err) ?: usage(err)
 }
 
+/** How often a key slips in `english`'s second run, and the slips' seed: the same each run. */
+private const val ENGLISH_NOISE = 0.04
+private const val ENGLISH_SEED = 20261011L
+
 /** Full pinyin without the Latin words. */
 private const val NO_LATIN = "no-latin"
 
@@ -200,6 +226,8 @@ private fun optionsValid(options: Map<String, String>): Boolean {
         valid("weight") { weights(it) != null },
         valid("limit") { limits(it) != null },
         valid("user-weight") { weight(it) != null },
+        valid("max-correction") { weight(it) != null },
+        valid("noise") { n -> n.toDoubleOrNull()?.let { it in 0.0..1.0 } == true },
         listOf("threads", "beam", "sentences").all { name -> valid(name) { (it.toIntOrNull() ?: 0) > 0 } },
         // only full pinyin reads slips: 双拼 and the nine keys read none
         valid("neighbours") { it in ON_OFF && (scheme == null || scheme == NO_LATIN) },

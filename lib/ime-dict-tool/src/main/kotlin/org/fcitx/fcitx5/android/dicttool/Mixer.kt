@@ -15,7 +15,7 @@ import kotlin.math.pow
  */
 class Mixer(
     private val base: ArpaModel,
-    private val counts: ChatCounts,
+    private val counts: NgramCounts,
     private val chat: KneserNey,
     private val weight: Double,
     private val minBigram: Int,

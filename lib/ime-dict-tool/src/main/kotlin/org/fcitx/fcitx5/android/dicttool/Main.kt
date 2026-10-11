@@ -14,6 +14,8 @@ import org.fcitx.fcitx5.android.engine.data.SourceException
 import org.fcitx.fcitx5.android.engine.data.WordIndex
 import org.fcitx.fcitx5.android.engine.data.WordLayers
 import org.fcitx.fcitx5.android.engine.data.forEachNumberedLine
+import org.fcitx.fcitx5.android.engine.english.EnglishDataBuilder
+import org.fcitx.fcitx5.android.engine.english.EnglishText
 import org.fcitx.fcitx5.android.engine.pinyin.Syllables
 import org.fcitx.fcitx5.android.engine.stroke.Strokes
 import org.fcitx.fcitx5.android.engine.table.TableText
@@ -23,6 +25,7 @@ import java.io.File
 import java.io.IOException
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 import java.util.Formatter
 import java.util.Locale
@@ -133,6 +136,15 @@ private val COMMANDS = listOf(
         action = ::examples,
     ),
     Command(
+        "english-lm -o <out.arpa> [--known <en_dict.fscd>] [--vocabulary <n>] [--tokens <n>] [--cutoffs <bigram>,<trigram>] <shard.parquet>...",
+        """
+            the English model: the words of FineWeb's pages
+            and their n-grams, Kneser-Ney (EnglishVocabulary)
+        """,
+        action = ::englishLm,
+    ),
+    Command("english -o <out> --lm <english.arpa>", "compile the English words and model (EnglishData)", 0..0, ::english),
+    Command(
         "text -o <out.jsonl.gz> <shard.parquet>...",
         """
             the chat-like pages as mix takes them, a JSON array
@@ -221,6 +233,11 @@ private class Options(
     val words: String?,
     /** `table`: compiled pinyin data whose words go in too. */
     val pinyin: String?,
+    /** `english-lm`: how many words, and at most how many of the pages' words to read. */
+    val vocabulary: Int,
+    val tokens: Long,
+    /** `english-lm`: a spell dictionary (fcitx's .fscd) whose words are none of the pages' slips. */
+    val known: String?,
     val crawl: Crawl,
 ) {
     /** `cc`: the crawl, its first WET file and how many, and where CommonCrawl is. */
@@ -251,6 +268,9 @@ private class Options(
         val MIN_SURPRISE = Double.NEGATIVE_INFINITY
 
         const val MAX_SKETCH_BITS = 30
+
+        // Gboard's own lists are of this order; what the pages have past it is mostly names and slips
+        const val VOCABULARY = 200_000
 
         // every command's flags, each taking a value: a value is none of them
         private val FLAGS = COMMANDS.flatMapTo(HashSet()) { it.flags }
@@ -319,6 +339,10 @@ private class Options(
                 misreadings = values["--misreadings"],
                 words = values["--words"],
                 pinyin = values["--pinyin"],
+                // the start's id must fit an n-gram key too (EnglishCounts)
+                vocabulary = values.count("--vocabulary", VOCABULARY, 1 until NgramKey.MAX_WORDS - 2) ?: return null,
+                tokens = values.read("--tokens", Long.MAX_VALUE) { it.toLongOrNull()?.takeIf { n -> n >= 1 } } ?: return null,
+                known = values["--known"],
             )
         }
     }
@@ -681,6 +705,75 @@ private fun mix(options: Options, out: Appendable) {
 
 private const val PACK_SUFFIX = ".words"
 
+/**
+ * The words of fcitx's spell dictionary (`en_dict.fscd`): `FSCD0000`, the count, then per word a
+ * little-endian 16-bit weight and the word, 0-ended.
+ */
+private fun spellWords(bytes: ByteArray): List<String> {
+    val b = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+    val magic = "FSCD0000"
+    require(bytes.size >= magic.length + Int.SIZE_BYTES && String(bytes, 0, magic.length, Charsets.US_ASCII) == magic) { "not a spell dictionary" }
+    b.position(magic.length)
+    val count = b.int
+    val words = ArrayList<String>(count)
+    while (words.size < count && b.remaining() > Short.SIZE_BYTES) {
+        b.short
+        val start = b.position()
+        while (b.hasRemaining() && b.get() != 0.toByte()) Unit
+        val end = b.position() - if (bytes[b.position() - 1] == 0.toByte()) 1 else 0
+        if (end > start) words += String(bytes, start, end - start, Charsets.UTF_8)
+    }
+    return words
+}
+
+private fun englishLm(options: Options, out: Appendable) {
+    val shards = options.inputs.map(::File)
+    val vocabulary = EnglishVocabulary()
+    readEnglish(shards, options.tokens, vocabulary::add)
+    // fcitx's spell dictionary, which the app has had: its words are no slips
+    val known = options.known?.let { path ->
+        spellWords(File(path).readBytes()).mapTo(HashSet(), EnglishVocabulary::key)
+    }.orEmpty()
+    val words = vocabulary.words(options.vocabulary, known)
+    out.appendLine("pass one: ${vocabulary.spellings} spellings, ${words.list.size} words, ${words.slips.size} slips")
+    // for a look at what was taken for a slip, and of what
+    File(options.output!! + ".slips").printWriter().use { w -> words.slips.toSortedMap().forEach { (slip, of) -> w.println("$slip\t$of") } }
+    val counts = EnglishCounts(words)
+    readEnglish(shards, options.tokens, counts::add)
+    out.appendLine("pass two: ${counts.tokens} words, ${counts.bigrams.size} bigrams, ${counts.trigrams.size} trigrams")
+    // no model to mix with: Kneser-Ney's alone, its n-grams cut off and the backoff weights worked out
+    val n = words.list.size
+    val none = ArpaModel(words.list, DoubleArray(n) { NO_PROB }, DoubleArray(n), LongIndex(), DoubleColumn(), DoubleColumn(), LongIndex(), DoubleColumn())
+    val (minBigram, minTrigram) = options.cutoffs
+    val model = Mixer(none, counts, KneserNey(counts), 0.0, minBigram, minTrigram).mix()
+    out.appendLine("model: ${model.size} / ${model.bigrams.size} / ${model.trigrams.size} n-grams")
+    File(options.output!!).bufferedWriter().use { model.write(it) }
+    out.appendLine("wrote ${options.output}: ${File(options.output).length()} bytes")
+}
+
+// what a model mixed in at weight 0 gives every word: anything finite, as it is multiplied by 0
+private const val NO_PROB = -99.0
+
+/** Each run of words of [shards]' pages, as [EnglishText] splits them, till [tokens] words are read. */
+private fun readEnglish(shards: List<File>, tokens: Long, run: (List<String>, Boolean) -> Unit) {
+    var read = 0L
+    try {
+        for (shard in shards) {
+            WebText.pages(shard) { page ->
+                EnglishText.runs(page.text) { words, sentence ->
+                    run(words, sentence)
+                    read += words.size
+                }
+                if (read >= tokens) throw Enough()
+            }
+        }
+    } catch (_: Enough) {
+        // as many as asked for: the rest of the shard unread
+    }
+}
+
+private class Enough : RuntimeException(null, null, false, false)
+
 private fun pinyin(options: Options, out: Appendable) {
     val output = options.output!!
     val lm = options.lm!!
@@ -803,6 +896,22 @@ internal fun hotwords(lines: List<String>): String = lines.asSequence()
     .mapNotNull(HotwordSpelling::spelled)
     .distinct()
     .joinToString("") { "$it\n" }
+
+private fun english(options: Options, out: Appendable) {
+    val lm = options.lm!!
+    val builder = EnglishDataBuilder()
+    val counts = File(lm).bufferedReader().use { r ->
+        ArpaReader.read(r, lm) { words, prob, backoff ->
+            when (words.size) {
+                1 -> builder.unigram(words[0], prob, backoff)
+                2 -> builder.bigram(words[0], words[1], prob, backoff)
+                else -> builder.trigram(words[0], words[1], words[2], prob)
+            }
+        }
+    }
+    out.appendLine("model: ${counts.joinToString(" / ")} n-grams")
+    write(options.output!!, builder.build(), out)
+}
 
 private fun write(output: String, writer: DataFile.Writer, out: Appendable) {
     File(output).outputStream().buffered().use { writer.writeTo(it) }

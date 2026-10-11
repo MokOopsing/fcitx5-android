@@ -371,7 +371,8 @@ class FcitxTest {
     /**
      * English through the engine as the keyboard types it (virtual keys): the word typed offered
      * with what it starts, space committing it with a space, and a full stop typed next put in
-     * that space's place, `hel. `; a hardware key types itself.
+     * that space's place, `hel. `; a slip corrected by space, and, nothing learned here, no words
+     * offered after it; a hardware key types itself.
      */
     @Test
     fun englishPutsTheSpaceAfterAWordBehindTheFullStopTypedNext(): Unit = runBlocking {
@@ -382,7 +383,7 @@ class FcitxTest {
         awaitQuiet()
         val candidates = fcitx.getCandidates(0, 8).map { it.text }
         Assert.assertEquals("hel", candidates.firstOrNull())
-        Assert.assertTrue("hello among $candidates", "hello" in candidates)
+        Assert.assertTrue("help among $candidates", "help" in candidates)
         fcitx.sendKey(' ', KeyState.Virtual.state)
         val space = eventsTillQuiet()
         Assert.assertEquals("hel ", space.filterIsInstance<FcitxEvent.CommitStringEvent>().joinToString("") { it.data.text })
@@ -391,6 +392,22 @@ class FcitxTest {
         val deleted = stop.filterIsInstance<FcitxEvent.DeleteSurroundingEvent>().map { it.data }
         Assert.assertEquals("$stop", listOf(FcitxEvent.DeleteSurroundingEvent.Data(1, 0)), deleted)
         Assert.assertEquals(". ", stop.filterIsInstance<FcitxEvent.CommitStringEvent>().joinToString("") { it.data.text })
+        val started = System.nanoTime()
+        "teh".forEach { fcitx.sendKey(it, KeyState.Virtual.state) }
+        awaitQuiet()
+        Timber.i("teh typed in ${(System.nanoTime() - started) / 1_000_000} ms, the first key building the word index")
+        fcitx.sendKey(' ', KeyState.Virtual.state)
+        val corrected = eventsTillQuiet()
+        // the capital at a sentence's start is the keyboard's (AutoCaps), which these keys are not
+        Assert.assertEquals("the ", corrected.filterIsInstance<FcitxEvent.CommitStringEvent>().joinToString("") { it.data.text })
+        // the engine is Sensitive here (setUpEngine): nothing of the text kept, so nothing offered after it
+        Assert.assertEquals("$corrected", 0, corrected.filterIsInstance<FcitxEvent.CandidateListEvent>().last().data.total)
+        val warm = System.nanoTime()
+        "becuase".forEach { fcitx.sendKey(it, KeyState.Virtual.state) }
+        awaitQuiet()
+        Timber.i("becuase typed in ${(System.nanoTime() - warm) / 1_000_000} ms: ${fcitx.getCandidates(0, 4).map { it.text }}")
+        fcitx.sendKey(' ', KeyState.Virtual.state)
+        Assert.assertEquals("because ", eventsTillQuiet().filterIsInstance<FcitxEvent.CommitStringEvent>().joinToString("") { it.data.text })
         // a hardware keyboard's key is the app's to type
         fcitx.sendKey('a')
         Assert.assertTrue(eventsTillQuiet().any { it is FcitxEvent.KeyEvent })

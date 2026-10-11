@@ -60,7 +60,9 @@ import javax.inject.Inject
  * curated lexicon (`lexicon/`), packed for that model and published as a `words-*` release. The
  * sentence models, `engine/sentence-model.safetensors` (4M, weighing the readings at each key) and
  * `engine/sentence-model-large.safetensors` (25M, while the user pauses), are this fork's own too
- * (trained on FineWeb-2 pages scored by Qwen3.5-9B-Base), from another release. The
+ * (trained on FineWeb-2 pages scored by Qwen3.5-9B-Base), from another release. English's words
+ * and model, `engine/english.data`, are compiled from the trigram model of FineWeb's English pages
+ * the tool's `english-lm` made, an `english-data-*` release. The
  * .data files and the models are stored uncompressed, so the engine can map them straight out of
  * the APK rather than copying them out first; they are also left out of the data descriptor for
  * that reason (the descriptor lists only src/main/assets).
@@ -123,6 +125,17 @@ class EngineDataPlugin : Plugin<Project> {
             "b3e93dce89c185f45c3d6e189b86b3a8626913352cc85e1094c786579a665791",
             "engine-data/stroke-$STROKES_COMMIT.dict.yaml",
         )
+        const val ENGLISH_TASK = "compileEnglishData"
+        // FineWeb's English pages, counted by lib/ime-dict-tool's english-lm (its manifest.txt in the
+        // release says from what and how): the arpa the tool compiles, in a tar CMake unpacks
+        private const val ENGLISH_RELEASE = "english-data-20261011"
+        private val ENGLISH = Download(
+            "$RELEASES_URL$ENGLISH_RELEASE/english.tar.zst",
+            "5be175367d041abf7ff2863d01e388e3d2cecaf375aa2b525d094a5e167eb4cc",
+            "engine-data/$ENGLISH_RELEASE-english.tar.zst",
+        )
+        private const val ENGLISH_FILE = "english.arpa"
+
         const val MODEL_TASK = "copySentenceModels"
         // a tag of its own, not "latest": what is downloaded is what was measured
         private const val MODELS_RELEASE = "sentence-models-20261001"
@@ -159,6 +172,8 @@ class EngineDataPlugin : Plugin<Project> {
         val lm = registerExtract(target, "extractEngineModel", lmDownload, sourcesDir.map { it.dir("lm_mixed") })
         val words = registerDownload(target, WORDS_TASK, WORDS, downloadsDir)
         val strokes = registerDownload(target, "downloadStrokes", STROKES, downloadsDir)
+        val englishDownload = registerDownload(target, "downloadEnglishModel", ENGLISH, downloadsDir)
+        val englishLm = registerExtract(target, "extractEnglishModel", englishDownload, sourcesDir.map { it.dir("english") })
 
         val tool = target.configurations.create(TOOL_CONFIGURATION) {
             isCanBeConsumed = false
@@ -190,6 +205,12 @@ class EngineDataPlugin : Plugin<Project> {
             dictionaries.from(lexicon.file("latin.words"))
             outputDir.set(target.layout.buildDirectory.dir("generated/engine-assets"))
         }
+        val english = target.tasks.register<CompileEnglishData>(ENGLISH_TASK) {
+            classpath.from(tool)
+            toolCode.set(fingerprint.flatMap { it.outputFile })
+            this.lm.set(englishLm.flatMap { it.outputDir.file(ENGLISH_FILE) })
+            outputDir.set(target.layout.buildDirectory.dir("generated/engine-english"))
+        }
         val tableRuns = target.gradle.sharedServices.registerIfAbsent("engineTableRuns", TableRuns::class.java)
         val tables = target.tasks.register<CompileTables>(TABLES_TASK) {
             classpath.from(tool)
@@ -212,17 +233,18 @@ class EngineDataPlugin : Plugin<Project> {
 
         target.extensions.configure<ApplicationExtension> {
             // matched as a plain suffix: "data" alone would catch charselectdata too; and the
-            // sentence models and English's words (fcitx's spell dictionary): openFd cannot read one
-            // compressed, and the engine takes that for none
-            androidResources.noCompress += listOf(".data", ".safetensors", ".fscd")
+            // sentence models: openFd cannot read one compressed, and the engine takes that for none
+            androidResources.noCompress += listOf(".data", ".safetensors")
             // what the settings show as the engine's data, and the release a missing-word report names
             defaultConfig.buildConfigField("String", "ENGINE_DATA", "\"$LM_RELEASE\"")
             // the releases of the word pack and of the sentence models, which change apart from it
             defaultConfig.buildConfigField("String", "ENGINE_WORDS", "\"$WORDS_RELEASE\"")
             defaultConfig.buildConfigField("String", "SENTENCE_MODELS", "\"$MODELS_RELEASE\"")
+            defaultConfig.buildConfigField("String", "ENGLISH_DATA", "\"$ENGLISH_RELEASE\"")
         }
         components.onVariants { variant ->
             variant.sources.assets?.addGeneratedSourceDirectory(compile, CompileEngineData::outputDir)
+            variant.sources.assets?.addGeneratedSourceDirectory(english, CompileEnglishData::outputDir)
             variant.sources.assets?.addGeneratedSourceDirectory(tables, CompileTables::outputDir)
             variant.sources.assets?.addGeneratedSourceDirectory(model, CopyModels::outputDir)
         }
@@ -324,6 +346,38 @@ class EngineDataPlugin : Plugin<Project> {
                         "--misreadings", misreadings.get().asFile.path,
                     ) + dictionaries.files.map { it.path }
                 )
+            }
+        }
+    }
+
+    /** English's words and model as `engine/english.data`, compiled from the arpa of the release. */
+    abstract class CompileEnglishData @Inject constructor(private val exec: ExecOperations) : DefaultTask() {
+        // built before this runs, but keyed on by toolCode only
+        @get:Internal
+        abstract val classpath: ConfigurableFileCollection
+
+        @get:InputFile
+        @get:PathSensitive(PathSensitivity.NONE)
+        abstract val toolCode: RegularFileProperty
+
+        init {
+            dependsOn(classpath)
+        }
+
+        @get:InputFiles
+        @get:PathSensitive(PathSensitivity.NAME_ONLY)
+        abstract val lm: RegularFileProperty
+
+        @get:OutputDirectory
+        abstract val outputDir: DirectoryProperty
+
+        @TaskAction
+        fun compile() {
+            val output = outputDir.get().asFile.resolve("engine/english.data")
+            output.parentFile.mkdirs()
+            exec.javaexec {
+                // the model is held in memory while it is sorted: 2.1 GB resident, as measured
+                configureTool(this@CompileEnglishData.classpath, "2g", listOf("english", "-o", output.path, "--lm", lm.get().asFile.path))
             }
         }
     }

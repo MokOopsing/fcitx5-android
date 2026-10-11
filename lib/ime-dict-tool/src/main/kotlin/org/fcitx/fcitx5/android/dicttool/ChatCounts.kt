@@ -7,6 +7,24 @@ package org.fcitx.fcitx5.android.dicttool
 import org.fcitx.fcitx5.android.engine.lattice.TextWords
 
 /**
+ * Bigrams and trigrams counted, as [KneserNey] and [Mixer] take them: word ids below [start], which
+ * is a virtual start no n-gram is kept from (counted for the continuation counts alone).
+ */
+interface NgramCounts {
+    val start: Int
+    val bigrams: LongIndex
+    val bigramCount: IntColumn
+    val trigrams: LongIndex
+    val trigramCount: IntColumn
+
+    /**
+     * A word of the model's own every sentence starts with (`<s>`), none before it: its bigrams
+     * have no continuation counts, and are counted as they were seen, as KenLM has it. -1 for none.
+     */
+    val sentenceStart: Int get() = -1
+}
+
+/**
  * N-gram counts of text split into [model]'s words: what people write to each other, which the
  * model (news and the like) has little of.
  *
@@ -16,7 +34,7 @@ import org.fcitx.fcitx5.android.engine.lattice.TextWords
  * [start]: counted only for how many different words come before a word (Kneser-Ney's
  * continuation counts), never an n-gram of its own, as the model has no sentence start.
  */
-class ChatCounts(private val model: ArpaModel) {
+class ChatCounts(private val model: ArpaModel) : NgramCounts {
 
     private val ids = WordIds(model.words)
     // as the engine reads text (TextWords): a few names are longer
@@ -27,11 +45,11 @@ class ChatCounts(private val model: ArpaModel) {
         require(model.size < NgramKey.MAX_WORDS) { "${model.size} words leave no id for the start" }
     }
 
-    val start = model.size
-    val bigrams = LongIndex(1 shl 20)
-    val bigramCount = IntColumn(1 shl 20)
-    val trigrams = LongIndex(1 shl 22)
-    val trigramCount = IntColumn(1 shl 22)
+    override val start = model.size
+    override val bigrams = LongIndex(1 shl 20)
+    override val bigramCount = IntColumn(1 shl 20)
+    override val trigrams = LongIndex(1 shl 22)
+    override val trigramCount = IntColumn(1 shl 22)
 
     var tokens = 0L
         private set
@@ -152,7 +170,7 @@ private class WordIds(private val words: List<String>) {
  * came before. Every word of the model has a probability: each, seen or not, gets an equal share
  * of what the unigrams' discount leaves.
  */
-class KneserNey(private val counts: ChatCounts) {
+class KneserNey(private val counts: NgramCounts) {
 
     private val vocabulary = counts.start
     // continuation counts: how many different words came before
@@ -190,8 +208,8 @@ class KneserNey(private val counts: ChatCounts) {
             val v = NgramKey.word(key, 2, 0)
             val w = NgramKey.word(key, 2, 1)
             before1[w]++
-            // a bigram from the start has no word before it: no continuation count
-            val c = before2[i]
+            // a bigram from the virtual start has no word before it: no continuation count
+            val c = count2(i, v)
             if (c > 0) {
                 total2[v] += c
                 after2[v]++
@@ -223,7 +241,7 @@ class KneserNey(private val counts: ChatCounts) {
     fun p2(v: Int, w: Int): Double {
         if (total2[v] == 0) return p1(w)
         val bigram = counts.bigrams.indexOf(NgramKey.of(v, w))
-        val c = if (bigram >= 0) before2[bigram] else 0
+        val c = if (bigram >= 0) count2(bigram, v) else 0
         return (maxOf(c - discount2, 0.0) + discount2 * after2[v] * p1(w)) / total2[v]
     }
 
@@ -234,6 +252,10 @@ class KneserNey(private val counts: ChatCounts) {
         val c = if (trigram >= 0) counts.trigramCount[trigram] else 0
         return (maxOf(c - discount3, 0.0) + discount3 * after3[context] * p2(v, w)) / total3[context]
     }
+
+    // what bigram [i], of [v] and a word, counts for: how many different words came before it, or,
+    // nothing ever before it, how many times it was seen
+    private fun count2(i: Int, v: Int) = if (v == counts.sentenceStart) counts.bigramCount[i] else before2[i]
 
     private companion object {
         const val FALLBACK = 0.5

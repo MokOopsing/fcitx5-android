@@ -19,16 +19,7 @@ class PinyinDataBuilder {
 
     private val ids = HashMap<String, Int>()
     private val words = ArrayList<String>()
-    private val uniProb = FloatList()
-    private val uniBackoff = FloatList()
-    private val biPrev = IntList()
-    private val biWord = IntList()
-    private val biProb = FloatList()
-    private val biBackoff = FloatList()
-    private val triPrev2 = IntList()
-    private val triPrev = IntList()
-    private val triWord = IntList()
-    private val triProb = FloatList()
+    private val tables = NgramTables { words[it] }
     private val entries = ArrayList<Entry>()
     private var layerNames = listOf(WordLayers.BASE)
 
@@ -44,27 +35,20 @@ class PinyinDataBuilder {
         finite(prob, backoff) { word }
         require(ids.put(word, words.size) == null) { "unigram \"$word\" added twice" }
         words += word
-        uniProb += prob
-        uniBackoff += backoff
+        tables.unigram(prob, backoff)
     }
 
     /** [word]'s unigram probability, or null if it was not added as one. */
-    fun unigramOf(word: String): Float? = ids[word]?.let { uniProb[it] }
+    fun unigramOf(word: String): Float? = ids[word]?.let { tables.unigramProb(it) }
 
     fun bigram(prev: String, word: String, prob: Float, backoff: Float) = apply {
         finite(prob, backoff) { "$prev $word" }
-        biPrev += lmId(prev)
-        biWord += lmId(word)
-        biProb += prob
-        biBackoff += backoff
+        tables.bigram(lmId(prev), lmId(word), prob, backoff)
     }
 
     fun trigram(prev2: String, prev: String, word: String, prob: Float) = apply {
         finite(prob, 0f) { "$prev2 $prev $word" }
-        triPrev2 += lmId(prev2)
-        triPrev += lmId(prev)
-        triWord += lmId(word)
-        triProb += prob
+        tables.trigram(lmId(prev2), lmId(prev), lmId(word), prob)
     }
 
     /**
@@ -108,9 +92,9 @@ class PinyinDataBuilder {
             )
         )
         writeVocabulary(out)
-        writeDictionary(out) { id -> uniProb[if (id < lmSize) id else unknown] }
+        writeDictionary(out) { id -> tables.unigramProb(if (id < lmSize) id else unknown) }
         writeLayers(out)
-        writeModel(out, lmSize)
+        tables.write(out, lmSize)
         return out
     }
 
@@ -169,66 +153,6 @@ class PinyinDataBuilder {
         out.add(Section.DICT_WORDS, BitPacked.encode(nodeWords.size) { nodeWords[it].key })
         out.add(Section.DICT_WEIGHT, ByteArray(weights.size) { weightQ.encode(weights[it]).toByte() })
         out.add(Section.DICT_WEIGHT_CODEBOOK, weightQ.codebook())
-    }
-
-    private fun writeModel(out: DataFile.Writer, lmSize: Int) {
-        val bi = order(biWord.size, lmSize, { biPrev[it] }, { biWord[it] })
-        val biKeys = LongArray(bi.size) { key(biPrev[bi[it]], biWord[bi[it]]) }
-        for (k in 1 until biKeys.size) require(biKeys[k - 1] != biKeys[k]) { "duplicate bigram at ${bi[k]}" }
-        // each trigram's context is the position of its leading bigram in sorted order
-        val triContext = IntArray(triWord.size) { t ->
-            val at = biKeys.binarySearch(key(triPrev2[t], triPrev[t]))
-            require(at >= 0) { "trigram ${words[triPrev2[t]]} ${words[triPrev[t]]} ${words[triWord[t]]} has no leading bigram" }
-            at
-        }
-        val tri = order(triWord.size, bi.size, { triContext[it] }, { triWord[it] })
-        for (k in 1 until tri.size) {
-            require(triContext[tri[k - 1]] != triContext[tri[k]] || triWord[tri[k - 1]] != triWord[tri[k]]) { "duplicate trigram at ${tri[k]}" }
-        }
-
-        out.add(Section.UNI_PROB, floats(lmSize) { uniProb[it] })
-        out.add(Section.UNI_BACKOFF, floats(lmSize) { uniBackoff[it] })
-        out.add(Section.UNI_BIGRAM_START, BitPacked.encode(starts(lmSize, bi.size) { biPrev[bi[it]] }))
-        out.add(Section.BI_WORD, BitPacked.encode(bi.size) { biWord[bi[it]] })
-        val biProbQ = Quantizer.build(biProb.toArray(), exactZero = false)
-        val biBackoffQ = Quantizer.build(biBackoff.toArray(), exactZero = true)
-        out.add(Section.BI_PROB, ByteArray(bi.size) { biProbQ.encode(biProb[bi[it]]).toByte() })
-        out.add(Section.BI_BACKOFF, ByteArray(bi.size) { biBackoffQ.encode(biBackoff[bi[it]]).toByte() })
-        out.add(Section.BI_PROB_CODEBOOK, biProbQ.codebook())
-        out.add(Section.BI_BACKOFF_CODEBOOK, biBackoffQ.codebook())
-        out.add(Section.BI_TRIGRAM_START, BitPacked.encode(starts(bi.size, tri.size) { triContext[tri[it]] }))
-        val triProbQ = Quantizer.build(triProb.toArray(), exactZero = false)
-        out.add(Section.TRI_WORD, BitPacked.encode(tri.size) { triWord[tri[it]] })
-        out.add(Section.TRI_PROB, ByteArray(tri.size) { triProbQ.encode(triProb[tri[it]]).toByte() })
-        out.add(Section.TRI_PROB_CODEBOOK, triProbQ.codebook())
-    }
-
-    private fun key(a: Int, b: Int) = (a.toLong() shl 32) or b.toLong()
-
-    private fun floats(size: Int, value: (Int) -> Float): ByteArray =
-        LittleEndianOutput(size * 4).apply { for (i in 0 until size) writeFloat(value(i)) }.toByteArray()
-
-    /** For [count] items sorted by [owner] in 0 until [owners]: where each owner's run starts, plus the end. */
-    private inline fun starts(owners: Int, count: Int, owner: (Int) -> Int): IntArray {
-        val starts = IntArray(owners + 1)
-        for (i in 0 until count) starts[owner(i) + 1]++
-        for (o in 0 until owners) starts[o + 1] += starts[o]
-        return starts
-    }
-
-    /**
-     * Indices 0 until [count] sorted by ([major] in 0 until [majors], [minor]), ties in index
-     * order as a stable sort leaves them. Not sortedWith, which boxes each of millions of indices
-     * and keys: a count places each major's run, sorted on primitive keys, minor above index.
-     * Inline, as [major] and [minor] would box each index and key through Function1 too.
-     */
-    private inline fun order(count: Int, majors: Int, major: (Int) -> Int, minor: (Int) -> Int): IntArray {
-        val runs = starts(majors, count, major)
-        val next = runs.copyOf()
-        val keys = LongArray(count)
-        for (i in 0 until count) keys[next[major(i)]++] = (minor(i).toLong() shl 32) or i.toLong()
-        for (m in 0 until majors) keys.sort(runs[m], runs[m + 1])
-        return IntArray(count) { keys[it].toInt() }
     }
 
     companion object {
