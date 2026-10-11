@@ -7,6 +7,7 @@ package org.fcitx.fcitx5.android.data.quickphrase
 import kotlinx.parcelize.Parcelize
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.utils.errorArg
+import timber.log.Timber
 import java.io.File
 
 @Parcelize
@@ -50,7 +51,8 @@ class CustomQuickPhrase(
         if (isEnabled)
             return
         val newFile = file.resolveSibling("$name.$EXT")
-        file.renameTo(newFile)
+        if (!renamedTo(newFile))
+            return
         file = newFile
         isEnabled = true
     }
@@ -59,10 +61,15 @@ class CustomQuickPhrase(
         if (!isEnabled)
             return
         val newFile = file.resolveSibling("$name.$EXT.$DISABLE")
-        file.renameTo(newFile)
+        if (!renamedTo(newFile))
+            return
         file = newFile
         isEnabled = false
     }
+
+    // the list sets its switch back from isEnabled: only a log says why it did not move
+    private fun renamedTo(newFile: File): Boolean =
+        file.renameTo(newFile).also { if (!it) Timber.w("Cannot rename ${file.name} to ${newFile.name}") }
 
     override fun saveData(data: QuickPhraseData) =
         file.writeText(data.serialize())

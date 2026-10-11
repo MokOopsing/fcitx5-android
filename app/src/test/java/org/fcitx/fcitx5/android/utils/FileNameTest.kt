@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.utils
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,5 +25,12 @@ class FileNameTest {
         for (name in names) {
             assertFalse(name, isPlainFileName(name))
         }
+    }
+
+    @Test
+    fun anExtensionIsLowercasedAndTheRestKept() {
+        assertEquals("词库.scel", withLowercaseExtension("词库.SCEL"))
+        assertEquals("My.Words.txt", withLowercaseExtension("My.Words.TXT"))
+        assertEquals("NOEXT", withLowercaseExtension("NOEXT"))
     }
 }

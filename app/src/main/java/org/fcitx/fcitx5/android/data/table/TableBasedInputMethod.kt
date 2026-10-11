@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.data.table
 
 import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.core.EngineBridge
 import org.fcitx.fcitx5.android.core.RawConfig
 import org.fcitx.fcitx5.android.data.table.dict.Dictionary
 import org.fcitx.fcitx5.android.engine.host.Engines
@@ -16,9 +17,10 @@ import org.fcitx.fcitx5.android.utils.errorRuntime
 import timber.log.Timber
 import java.io.File
 
-class TableBasedInputMethod(val file: File) {
+class TableBasedInputMethod internal constructor(val file: File, private var ini: Ini) {
 
-    private var ini = Ini.parseIniFromFile(file) ?: errorRuntime(R.string.invalid_im, file.name)
+    // fcitx parses the conf, over JNI: a JVM test, which has no fcitx, gives the internal one its ini
+    constructor(file: File) : this(file, Ini.parseIniFromFile(file) ?: errorRuntime(R.string.invalid_im, file.name))
 
     var table: Dictionary? = null
 
@@ -54,12 +56,8 @@ class TableBasedInputMethod(val file: File) {
     }
 
     fun delete() {
-        table?.file?.delete()
+        deleteTable(file, table?.file, File(appContext.filesDir, "engine"), EngineBridge.fcitxHome())
         table = null
-        // what the engine built of it and learned: a table imported later by its name starts afresh
-        val im = file.name.removeSuffix(".conf")
-        Engines.addedTableFiles(im).forEach { File(appContext.filesDir, "engine/$it").delete() }
-        file.delete()
     }
 
     companion object {
@@ -80,11 +78,11 @@ class TableBasedInputMethod(val file: File) {
 
         /**
          * The file a table replacing the one in [oldName] goes to: the same, or for libime's
-         * binary the text one a table imported now would have (`db.main.dict`, `db.main.txt`).
+         * binary the text one a table imported now would have, named after its input method [im].
          */
-        fun replacedTableFileName(oldName: String) =
+        fun replacedTableFileName(oldName: String, im: String) =
             if (oldName.endsWith(".txt")) oldName
-            else fixedTableFileName(oldName.substringBeforeLast('.'))
+            else fixedTableFileName(im)
 
         fun new(configFile: File): TableBasedInputMethod {
             val im = TableBasedInputMethod(configFile)
@@ -92,4 +90,15 @@ class TableBasedInputMethod(val file: File) {
             return im
         }
     }
+}
+
+/** Deletes the table input method of [conf] and its [tableFile], as [TableBasedInputMethod.delete] does, its directories passed in. */
+internal fun deleteTable(conf: File, tableFile: File?, engineDir: File, home: File) {
+    tableFile?.delete()
+    // what the engine built of it and learned: a table imported later by its name starts afresh
+    val im = conf.name.removeSuffix(".conf")
+    Engines.addedTableFiles(im).forEach { File(engineDir, it).delete() }
+    // and what its page set, which the engine reads over its conf (EngineBridge.userTable) in fcitx's home
+    File(home, "config/table/$im.conf").delete()
+    conf.delete()
 }

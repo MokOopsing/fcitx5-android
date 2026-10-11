@@ -113,6 +113,7 @@ class IniTest {
         assertEquals("五笔", ini.get("InputMethod", "Name", "zh")?.value)
     }
 
+    /** Here the keys lead to the parent and the node is named by the raw config, so no keys is not a no-op. */
     @Test
     fun setRawWithNoKeysGraftsOntoTheRoot() {
         val ini = ini()

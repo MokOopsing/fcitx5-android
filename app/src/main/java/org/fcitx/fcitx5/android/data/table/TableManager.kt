@@ -10,18 +10,20 @@ import org.fcitx.fcitx5.android.engine.host.LibimeMigration
 import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.errorRuntime
 import org.fcitx.fcitx5.android.utils.extract
+import org.fcitx.fcitx5.android.utils.withLowercaseExtension
 import org.fcitx.fcitx5.android.utils.withTempDir
+import timber.log.Timber
 import java.io.File
 import java.io.InputStream
 import java.util.zip.ZipInputStream
 
 object TableManager {
 
-    private val inputMethodDir = File(
+    internal val inputMethodDir = File(
         appContext.getExternalFilesDir(null)!!, "data/inputmethod"
     ).also { it.mkdirs() }
 
-    private val tableDicDir = File(
+    internal val tableDicDir = File(
         appContext.getExternalFilesDir(null)!!, "data/table"
     ).also { it.mkdirs() }
 
@@ -33,7 +35,10 @@ object TableManager {
                         table = Dictionary.new(File(tableDicDir, tableFileName))
                     }
                 }
-            }.getOrNull()
+            }.getOrElse { e ->
+                Timber.w("Failed to read input method file ${confFile.absolutePath}: ${e.message}")
+                null
+            }
         } ?: emptyList()
 
     fun importFromZip(src: InputStream): Result<TableBasedInputMethod> =
@@ -59,10 +64,12 @@ object TableManager {
         dictStream: InputStream
     ): Result<TableBasedInputMethod> = runCatching {
         withTempDir { tempDir ->
-            val confFile = File(tempDir, confName).also {
+            // the names a provider gives are no paths to trust: their last parts alone, which name the files
+            val confFile = File(tempDir, File(confName).name).also {
                 it.outputStream().use { o -> confStream.use { i -> i.copyTo(o) } }
             }
-            val dictFile = File(tempDir, dictName).also {
+            // each reader checks its extension in lowercase: a file manager's WUBI.TXT is a table too
+            val dictFile = File(tempDir, withLowercaseExtension(File(dictName).name)).also {
                 it.outputStream().use { o -> dictStream.use { i -> i.copyTo(o) } }
             }
             importFiles(confFile, dictFile)
@@ -70,7 +77,8 @@ object TableManager {
     }
 
     private fun importFiles(confFile: File, dictFile: File): TableBasedInputMethod {
-        val name = LibimeMigration.importedTableName(confFile.name.removeSuffix(".in").removeSuffix(".conf"))
+        // in any case, as isTableConf takes the conf: WUBI.CONF is the input method WUBI, so a later wubi.conf is one already there
+        val name = LibimeMigration.importedTableName(confFile.name.withoutSuffix(".in").withoutSuffix(".conf"))
         val importedConfFile = File(inputMethodDir, "$name.conf").also {
             if (it.exists())
                 errorRuntime(R.string.table_already_exists, it.name)
@@ -83,9 +91,10 @@ object TableManager {
             throw it
         }
         val table = Dictionary.new(dictFile)!!
-        im.tableFileName = TableBasedInputMethod.fixedTableFileName(table.name)
+        // named after the input method: two input methods' dictionary files may share a name
+        im.tableFileName = TableBasedInputMethod.fixedTableFileName(name)
         val dest = File(tableDicDir, im.tableFileName)
-        // another input method's
+        // another input method's, named alike or, as before, after its dictionary file
         if (dest.exists()) {
             im.file.delete()
             errorRuntime(R.string.table_dict_already_exists, dest.name)
@@ -101,7 +110,7 @@ object TableManager {
 
     /**
      * Replaces the table of [im]. One kept as libime's binary before the engine is replaced by
-     * text, under the name a table imported now would have.
+     * text, under the name [TableBasedInputMethod.replacedTableFileName] gives it.
      */
     fun replaceTableDict(
         im: TableBasedInputMethod,
@@ -109,12 +118,13 @@ object TableManager {
         dictStream: InputStream
     ): Result<Dictionary> = runCatching {
         withTempDir { tempDir ->
-            val dictFile = File(tempDir, dictName).also {
+            // as on import, the provider's name is no path
+            val dictFile = File(tempDir, withLowercaseExtension(File(dictName).name)).also {
                 it.outputStream().use { o -> dictStream.use { i -> i.copyTo(o) } }
             }
             val dict = Dictionary.new(dictFile)!!
             val old = File(tableDicDir, im.tableFileName)
-            val name = TableBasedInputMethod.replacedTableFileName(old.name)
+            val name = TableBasedInputMethod.replacedTableFileName(old.name, im.file.name.removeSuffix(".conf"))
             // another input method's
             if (name != old.name && File(tableDicDir, name).exists())
                 errorRuntime(R.string.table_dict_already_exists, name)
@@ -129,3 +139,6 @@ object TableManager {
         }
     }
 }
+
+private fun String.withoutSuffix(suffix: String) =
+    if (endsWith(suffix, ignoreCase = true)) dropLast(suffix.length) else this

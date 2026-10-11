@@ -20,12 +20,12 @@ class TableFileNameTest {
 
     @Test
     fun aTextTableIsReplacedWhereItIs() {
-        assertEquals("db.main.txt", replacedTableFileName("db.main.txt"))
+        assertEquals("db.main.txt", replacedTableFileName("db.main.txt", "wubi98"))
     }
 
-    /** As an import of the same file would name it, not after its first dot (`db.txt`). */
+    /** As an import of its input method would name it, not after the dictionary file. */
     @Test
     fun libimesTableIsReplacedByTextOfTheNameAnImportGives() {
-        assertEquals(fixedTableFileName("db.main"), replacedTableFileName("db.main.dict"))
+        assertEquals(fixedTableFileName("wubi98"), replacedTableFileName("db.main.dict", "wubi98"))
     }
 }

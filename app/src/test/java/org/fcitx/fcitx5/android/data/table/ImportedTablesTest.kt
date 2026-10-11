@@ -36,7 +36,7 @@ class ImportedTablesTest {
 
     @Test
     fun libimesTableIsKeptAsText() {
-        val bytes = javaClass.getResourceAsStream("/libime/db.main.dict")!!.readBytes()
+        val bytes = javaClass.getResourceAsStream("/libime/db.main.dict")!!.use { it.readBytes() }
         val table = Dictionary.new(File(source, "db.main.dict").apply { writeBytes(bytes) })!!
         val text = ImportedTables.install(table, File(dir, "db.txt")).file.readText()
         assertTrue(text.take(100), text.startsWith("KeyCode="))

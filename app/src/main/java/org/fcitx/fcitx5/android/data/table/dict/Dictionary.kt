@@ -12,6 +12,11 @@ abstract class Dictionary {
         LibIME("dict"), Text("txt");
 
         companion object {
+            /**
+             * Case-sensitive, as the tables kept are named in lowercase
+             * (TableBasedInputMethod.fixedTableFileName): a name from outside goes through
+             * withLowercaseExtension first.
+             */
             fun fromFileName(name: String): Type? =
                 when {
                     name.endsWith(".dict") -> LibIME
@@ -44,6 +49,7 @@ abstract class Dictionary {
     override fun toString(): String = "${javaClass.simpleName}[$name -> ${file.path}]"
 
     companion object {
+        /** Opens a kept table, or null for a name no reader takes: `WUBI.TXT` is lowercased on import, not opened here. */
         fun new(it: File): Dictionary? = when (Type.fromFileName(it.name)) {
             Type.LibIME -> LibIMEDictionary(it)
             Type.Text -> TextDictionary(it)

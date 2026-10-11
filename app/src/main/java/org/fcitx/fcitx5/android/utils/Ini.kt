@@ -23,6 +23,7 @@ value class Ini(val core: RawConfig) {
     }
 
     fun set(vararg keys: String, raw: RawConfig) {
+        // keys are the parent's path and raw names the node itself: no keys still names one, under the root
         var current = core
         keys.forEach {
             current = current.getOrCreate(it)

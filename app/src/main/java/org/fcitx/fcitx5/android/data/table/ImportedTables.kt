@@ -4,9 +4,9 @@
  */
 package org.fcitx.fcitx5.android.data.table
 
-import org.fcitx.fcitx5.android.data.replaceFile
 import org.fcitx.fcitx5.android.data.table.dict.Dictionary
 import org.fcitx.fcitx5.android.data.table.dict.TextDictionary
+import org.fcitx.fcitx5.android.engine.store.replaceFile
 import org.fcitx.fcitx5.android.engine.table.TableText
 import java.io.File
 
@@ -22,7 +22,6 @@ object ImportedTables {
         replaceFile(dest, File(dest.parentFile, ".${dest.name}")) { temp ->
             dict.toTextDictionary(temp)
             temp.bufferedReader().use { TableText.check(it, dict.file.name) }
-            true
         }
         return TextDictionary(dest)
     }

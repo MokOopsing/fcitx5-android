@@ -39,6 +39,7 @@ import org.fcitx.fcitx5.android.utils.notificationManager
 import org.fcitx.fcitx5.android.utils.onPositiveButtonClick
 import org.fcitx.fcitx5.android.utils.positiveButton
 import org.fcitx.fcitx5.android.utils.queryFileName
+import org.fcitx.fcitx5.android.utils.withLowercaseExtension
 import splitties.resources.drawable
 import splitties.resources.styledDrawable
 import splitties.views.imageDrawable
@@ -233,7 +234,7 @@ class TableInputMethodFragment : Fragment(), OnItemChangedListener<TableBasedInp
         lifecycleScope.launch {
             val importId = IMPORT_ID++
             val fileName = cr.queryFileName(uri) ?: return@launch
-            if (!fileName.endsWith(".zip")) {
+            if (!isTableZip(fileName)) {
                 ctx.importErrorDialog(R.string.exception_table_im_filename, fileName)
                 return@launch
             }
@@ -244,7 +245,7 @@ class TableInputMethodFragment : Fragment(), OnItemChangedListener<TableBasedInp
                 .setOngoing(true)
                 .setProgress(100, 0, true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .build().let { nm.notify(importId, it) }
+                .build().let { nm.notify(IMPORT_TAG, importId, it) }
             try {
                 val imported = withContext(Dispatchers.IO) {
                     val inputStream = cr.openInputStream(uri)!!
@@ -254,7 +255,7 @@ class TableInputMethodFragment : Fragment(), OnItemChangedListener<TableBasedInp
             } catch (e: Exception) {
                 ctx.importErrorDialog(e)
             }
-            nm.cancel(importId)
+            nm.cancel(IMPORT_TAG, importId)
         }
     }
 
@@ -262,7 +263,7 @@ class TableInputMethodFragment : Fragment(), OnItemChangedListener<TableBasedInp
         val ctx = requireContext()
         lifecycleScope.launch {
             val fileName = ctx.contentResolver.queryFileName(uri) ?: ""
-            if (!fileName.removeSuffix(".in").endsWith(".conf")) {
+            if (!isTableConf(fileName)) {
                 ctx.importErrorDialog(R.string.exception_table_conf_filename, fileName)
                 return@launch
             }
@@ -276,7 +277,7 @@ class TableInputMethodFragment : Fragment(), OnItemChangedListener<TableBasedInp
         val ctx = requireContext()
         lifecycleScope.launch {
             val fileName = ctx.contentResolver.queryFileName(uri) ?: ""
-            if (Dictionary.Type.fromFileName(fileName) == null) {
+            if (Dictionary.Type.fromFileName(withLowercaseExtension(fileName)) == null) {
                 ctx.importErrorDialog(R.string.exception_table_dict_filename, fileName)
                 return@launch
             }
@@ -309,7 +310,7 @@ class TableInputMethodFragment : Fragment(), OnItemChangedListener<TableBasedInp
                 .setOngoing(true)
                 .setProgress(100, 0, true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .build().let { nm.notify(importId, it) }
+                .build().let { nm.notify(IMPORT_TAG, importId, it) }
             try {
                 updateFilesSelectionDialogButton(importing = true)
                 val imported = withContext(Dispatchers.IO) {
@@ -325,7 +326,7 @@ class TableInputMethodFragment : Fragment(), OnItemChangedListener<TableBasedInp
             } finally {
                 updateFilesSelectionDialogButton(importing = false)
             }
-            nm.cancel(importId)
+            nm.cancel(IMPORT_TAG, importId)
         }
     }
 
@@ -338,7 +339,7 @@ class TableInputMethodFragment : Fragment(), OnItemChangedListener<TableBasedInp
         lifecycleScope.launch {
             val importId = IMPORT_ID++
             val dictName = cr.queryFileName(uri) ?: return@launch
-            if (Dictionary.Type.fromFileName(dictName) == null) {
+            if (Dictionary.Type.fromFileName(withLowercaseExtension(dictName)) == null) {
                 ctx.importErrorDialog(R.string.exception_table_dict_filename, dictName)
                 return@launch
             }
@@ -349,7 +350,7 @@ class TableInputMethodFragment : Fragment(), OnItemChangedListener<TableBasedInp
                 .setOngoing(true)
                 .setProgress(100, 0, true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .build().let { nm.notify(importId, it) }
+                .build().let { nm.notify(IMPORT_TAG, importId, it) }
             try {
                 val imported = withContext(Dispatchers.IO) {
                     val dictStream = cr.openInputStream(uri)!!
@@ -361,7 +362,7 @@ class TableInputMethodFragment : Fragment(), OnItemChangedListener<TableBasedInp
             } catch (e: Exception) {
                 ctx.importErrorDialog(e)
             }
-            nm.cancel(importId)
+            nm.cancel(IMPORT_TAG, importId)
         }
     }
 
@@ -433,6 +434,14 @@ class TableInputMethodFragment : Fragment(), OnItemChangedListener<TableBasedInp
 
     companion object {
         private var IMPORT_ID = 0
+        // a notification is its tag and id, app-wide: untagged, ids counting from 0 cancelled the quick phrase page's
+        private const val IMPORT_TAG = "table_import"
         const val CHANNEL_ID = "table_dict"
     }
 }
+
+// a file manager may name a table's files in capitals, as its dictionary is taken (withLowercaseExtension): WUBI.CONF with WUBI.TXT
+internal fun isTableZip(fileName: String) = fileName.endsWith(".zip", ignoreCase = true)
+
+/** A table's conf, or the template fcitx makes one of (`.conf.in`). */
+internal fun isTableConf(fileName: String) = fileName.lowercase().removeSuffix(".in").endsWith(".conf")
