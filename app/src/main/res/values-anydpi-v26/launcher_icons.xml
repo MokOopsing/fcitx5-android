@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- a launcher masks the adaptive icon to its own shape: the round one is the same icon -->
+    <item name="ic_launcher_round" type="mipmap">@mipmap/ic_launcher</item>
+    <item name="ic_launcher_round_debug" type="mipmap">@mipmap/ic_launcher_debug</item>
+</resources>

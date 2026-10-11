@@ -6,7 +6,6 @@
         android:bottom="4dp"
         android:left="4dp"
         android:right="4dp"
-        android:shape="rectangle"
         android:top="4dp">
         <shape>
             <corners android:radius="4dp" />

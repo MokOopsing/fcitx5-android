@@ -11,6 +11,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginBottom="24dp"
+        android:importantForAccessibility="no"
         android:src="@mipmap/app_icon"
         app:layout_constraintBottom_toTopOf="@+id/hint_text"
         app:layout_constraintEnd_toEndOf="parent"
@@ -43,12 +44,13 @@
         android:layout_height="24dp"
         android:layout_marginTop="36dp"
         android:layout_marginEnd="8dp"
+        android:importantForAccessibility="no"
         android:src="@drawable/ic_baseline_check_circle_24"
-        android:tint="?attr/colorPrimary"
         app:layout_constraintEnd_toStartOf="@id/done_text"
         app:layout_constraintHorizontal_chainStyle="packed"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/hint_text" />
+        app:layout_constraintTop_toBottomOf="@id/hint_text"
+        app:tint="?attr/colorPrimary" />
 
     <TextView
         android:id="@+id/done_text"

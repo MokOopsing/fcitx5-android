@@ -19,12 +19,13 @@ TILT = -6  # degrees, about (54, 56)
 
 
 def circle(cx, cy, r):
-    return f'M{cx - r},{cy} a{r},{r} 0 1,0 {2 * r},0 a{r},{r} 0 1,0 {-2 * r},0 Z'
+    return f'M{cx - r:g},{cy:g} a{r:g},{r:g} 0 1,0 {2 * r:g},0 a{r:g},{r:g} 0 1,0 {-2 * r:g},0 Z'
 
 
 def rounded(x, y, w, h, r):
-    return (f'M{x + r},{y} h{w - 2 * r} a{r},{r} 0 0,1 {r},{r} v{h - 2 * r} a{r},{r} 0 0,1 {-r},{r} '
-            f'h{-(w - 2 * r)} a{r},{r} 0 0,1 {-r},{-r} v{-(h - 2 * r)} a{r},{r} 0 0,1 {r},{-r} Z')
+    return (f'M{x + r:g},{y:g} h{w - 2 * r:g} a{r:g},{r:g} 0 0,1 {r:g},{r:g} v{h - 2 * r:g} '
+            f'a{r:g},{r:g} 0 0,1 {-r:g},{r:g} h{-(w - 2 * r):g} a{r:g},{r:g} 0 0,1 {-r:g},{-r:g} '
+            f'v{-(h - 2 * r):g} a{r:g},{r:g} 0 0,1 {r:g},{-r:g} Z')
 
 
 # (path data, fill, stroke, stroke width)
@@ -40,15 +41,17 @@ GLINTS = [('M42.5,49.5 Q45,48 48,49', None, GLINT, 1.2), ('M58.5,49.5 Q61,48 64,
 GRIN = [('M47.5,63 Q54,69.5 60.5,63', None, INK, 2.2)]
 FOREGROUND = EARS + EAR_INSIDES + HEAD + PATCH + NOSE + GLASSES + GLINTS + GRIN
 # one colour, for themed icons: the head as a ring, the rest as it is
-MONOCHROME = ([(circle(x, 56, 7.5), '#000', None, 0) for x in (33, 75)]
+MONOCHROME = ([(d, '#000', None, 0) for d, _, _, _ in EARS]
               + [(circle(54, 56, 18), None, '#000', 4), ('M48,39 Q51,30 55,37 Q58,30 61,39 Z', '#000', None, 0)]
-              + [(d, '#000', None, 0) for d, _, _, _ in NOSE + GLASSES] + [('M47.5,63 Q54,69.5 60.5,63', None, '#000', 2.6)])
+              + [(d, '#000', None, 0) for d, _, _, _ in NOSE + GLASSES] + [(d, None, '#000', 2.6) for d, _, _, _ in GRIN])
 
 
 def vector(shapes, gradient=None):
+    # only the gradient's aapt:attr uses the namespace
+    aapt = '    xmlns:aapt="http://schemas.android.com/aapt"\n' if gradient else ''
     out = ['<?xml version="1.0" encoding="utf-8"?>\n<!-- written by app/launcher-icon/make_icon.py -->\n'
            '<vector xmlns:android="http://schemas.android.com/apk/res/android"\n'
-           '    xmlns:aapt="http://schemas.android.com/aapt"\n'
+           f'{aapt}'
            '    android:width="108dp"\n    android:height="108dp"\n'
            '    android:viewportWidth="108"\n    android:viewportHeight="108">\n']
     if gradient:
@@ -104,41 +107,48 @@ def write(path, text):
         f.write(text)
 
 
-for suffix, colors in BACKGROUNDS.items():
-    write(f'drawable/ic_launcher_background{suffix}.xml', vector([], colors))
-write('drawable/ic_launcher_foreground.xml', vector(FOREGROUND))
-write('drawable/ic_launcher_foreground_monochrome.xml', vector(MONOCHROME))
-
 SIZES = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
-for suffix, colors in BACKGROUNDS.items():
-    for density, size in SIZES.items():
-        full = round(size * 108 / 72)
-        art = Image.open(io.BytesIO(cairosvg.svg2png(bytestring=svg(FOREGROUND, colors).encode(),
-                                                     output_width=full, output_height=full))).convert('RGBA')
-        margin = (full - size) // 2
-        art = art.crop((margin, margin, margin + size, margin + size))
-        for shape in ('', '_round'):
-            # the mask drawn four times over and shrunk: smooth edges
-            mask = Image.new('L', (size * 4, size * 4), 0)
-            box = (0, 0, size * 4 - 1, size * 4 - 1)
-            if shape:
-                ImageDraw.Draw(mask).ellipse(box, fill=255)
-            else:
-                ImageDraw.Draw(mask).rounded_rectangle(box, radius=size * 4 * 0.18, fill=255)
-            icon = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-            icon.paste(art, (0, 0), mask.resize((size, size), Image.LANCZOS))
-            icon.save(os.path.join(RES, f'mipmap-{density}', f'ic_launcher{shape}{suffix}.png'), optimize=True)
 
-# a sheet to look at: release, debug, themed (the monochrome layer tinted), not for the app
-preview = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'preview.png')
-sheet = Image.new('RGBA', (3 * 220 + 20, 240), (245, 245, 245, 255))
-themed = [(d, f and '#1F3A5F', s and '#1F3A5F', w) for d, f, s, w in MONOCHROME]
-for i, (shapes, colors) in enumerate(((FOREGROUND, BACKGROUNDS['']), (FOREGROUND, BACKGROUNDS['_debug']),
-                                      (themed, ('#D7E3F7', '#D7E3F7')))):
-    art = Image.open(io.BytesIO(cairosvg.svg2png(bytestring=svg(shapes, colors).encode(), output_width=300,
-                                                 output_height=300))).convert('RGBA').crop((50, 50, 250, 250))
-    mask = Image.new('L', (200, 200), 0)
-    ImageDraw.Draw(mask).ellipse((0, 0, 199, 199), fill=255)
-    sheet.paste(art, (20 + i * 220, 20), mask)
-sheet.save(preview)
-print('written; preview at', preview)
+
+def main():
+    for suffix, colors in BACKGROUNDS.items():
+        write(f'drawable-v26/ic_launcher_background{suffix}.xml', vector([], colors))
+    write('drawable/ic_launcher_foreground.xml', vector(FOREGROUND))
+    write('drawable/ic_launcher_foreground_monochrome.xml', vector(MONOCHROME))
+
+    for suffix, colors in BACKGROUNDS.items():
+        for density, size in SIZES.items():
+            full = round(size * 108 / 72)
+            art = Image.open(io.BytesIO(cairosvg.svg2png(bytestring=svg(FOREGROUND, colors).encode(),
+                                                         output_width=full, output_height=full))).convert('RGBA')
+            margin = (full - size) // 2
+            art = art.crop((margin, margin, margin + size, margin + size))
+            for shape in ('', '_round'):
+                # the mask drawn four times over and shrunk: smooth edges
+                mask = Image.new('L', (size * 4, size * 4), 0)
+                box = (0, 0, size * 4 - 1, size * 4 - 1)
+                if shape:
+                    ImageDraw.Draw(mask).ellipse(box, fill=255)
+                else:
+                    ImageDraw.Draw(mask).rounded_rectangle(box, radius=size * 4 * 0.18, fill=255)
+                icon = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+                icon.paste(art, (0, 0), mask.resize((size, size), Image.LANCZOS))
+                icon.save(os.path.join(RES, f'mipmap-{density}', f'ic_launcher{shape}{suffix}.png'), optimize=True)
+
+    # a sheet to look at: release, debug, themed (the monochrome layer tinted), not for the app
+    preview = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'preview.png')
+    sheet = Image.new('RGBA', (3 * 220 + 20, 240), (245, 245, 245, 255))
+    themed = [(d, fill and '#1F3A5F', stroke and '#1F3A5F', width) for d, fill, stroke, width in MONOCHROME]
+    for i, (shapes, colors) in enumerate(((FOREGROUND, BACKGROUNDS['']), (FOREGROUND, BACKGROUNDS['_debug']),
+                                          (themed, ('#D7E3F7', '#D7E3F7')))):
+        art = Image.open(io.BytesIO(cairosvg.svg2png(bytestring=svg(shapes, colors).encode(), output_width=300,
+                                                     output_height=300))).convert('RGBA').crop((50, 50, 250, 250))
+        mask = Image.new('L', (200, 200), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, 199, 199), fill=255)
+        sheet.paste(art, (20 + i * 220, 20), mask)
+    sheet.save(preview)
+    print('written; preview at', preview)
+
+
+if __name__ == '__main__':
+    main()
