@@ -12,17 +12,26 @@ import org.junit.Test
 
 class T9SegmenterTest {
 
-    private val segmenter = T9Segmenter()
+    // as the keyboard builds it; ime-eval's t9 scheme reads 简拼 with abbreviations too
+    private val segmenter = T9Segmenter(abbreviations = false)
 
     /** The syllables of the edges from [at] to [to] of [kind], spelt. */
     private fun SyllableGraph.read(at: Int, to: Int, kind: Kind = Kind.SYLLABLE): Set<String> =
         edges(at).filter { to(it) == to && kind(it) == kind }
             .flatMap { e -> (0 until matches(e).size).map { Syllables.spelling(matches(e).syllable(it)) } }.toSet()
 
+    /** As [read], each marked with its flags as [SyllableMatches] prints them: `zhong~`. */
+    private fun SyllableGraph.marked(at: Int, to: Int, kind: Kind = Kind.SYLLABLE): Set<String> =
+        edges(at).filter { to(it) == to && kind(it) == kind }.flatMap { matches(it).toString().split(' ') }.toSet()
+
     @Test
     fun digitsAreEverySyllableTheyType() {
         assertEquals("64426", T9Segmenter.digits("nihao"))
         assertEquals("58", T9Segmenter.digits("lv"))
+        assertEquals("64'", T9Segmenter.digits("ni'"))
+        // every letter on one key, the one that types it
+        assertEquals(('a'..'z').joinToString(""), ('2'..'9').joinToString("") { T9Segmenter.letters(it) })
+        for (d in '2'..'9') T9Segmenter.letters(d).forEach { assertEquals(d, T9Segmenter.digit(it)) }
         val g = segmenter.segment("64426")
         assertTrue(setOf("ni", "mi").all { it in g.read(0, 2) })
         assertTrue("hao" in g.read(2, 5))
@@ -40,6 +49,32 @@ class T9SegmenterTest {
         assertTrue("qu" in T9Segmenter(abbreviations = false).segment("7948").read(0, 1, Kind.INITIAL))
         // 64 reads ni: no initial n there
         assertTrue(T9Segmenter(abbreviations = false).segment("6426").read(0, 1, Kind.INITIAL).isEmpty())
+        // with them, beside a syllable no longer than the initial too: 74 is si, and sh in 745 时间
+        val abbreviating = T9Segmenter()
+        assertTrue("si" in abbreviating.segment("745").read(0, 2))
+        assertTrue("shi" in abbreviating.segment("745").read(0, 2, Kind.INITIAL))
+        assertTrue(segmenter.segment("745").read(0, 2, Kind.INITIAL).isEmpty())
+        // but not beside a longer one (744 is shi, 6426 nian), nor at the end, where its start is read
+        assertTrue(abbreviating.segment("7448").read(0, 2, Kind.INITIAL).isEmpty())
+        assertTrue(abbreviating.segment("6426").read(0, 1, Kind.INITIAL).isEmpty())
+        assertTrue(abbreviating.segment("74").read(0, 2, Kind.INITIAL).isEmpty())
+    }
+
+    @Test
+    fun aFuzzyPairReadsTheKeysOfTheOtherSpelling() {
+        val fuzzy = T9Segmenter(setOf(Fuzzy.Z_ZH, Fuzzy.L_N, Fuzzy.IN_ING), abbreviations = false)
+        // z is 9 and zh 94: each reads the other's syllables, as an initial too
+        assertTrue("zhong~" in fuzzy.segment("9664").marked(0, 4))
+        assertTrue("zong~" in fuzzy.segment("94664").marked(0, 5))
+        assertTrue("zhong~…" in fuzzy.segment("95").marked(0, 1, Kind.INITIAL))
+        // l is 5 and n 6
+        assertTrue("nan~" in fuzzy.segment("526").marked(0, 3))
+        assertTrue("lan~…" in fuzzy.segment("65").marked(0, 1, Kind.INITIAL))
+        // and a final pair: 546 is jing too
+        assertTrue("jing~" in fuzzy.segment("546").marked(0, 3))
+        // none of it without the pairs
+        assertFalse("zhong" in segmenter.segment("9664").read(0, 4))
+        assertFalse("lan" in segmenter.segment("65").read(0, 1, Kind.INITIAL))
     }
 
     @Test

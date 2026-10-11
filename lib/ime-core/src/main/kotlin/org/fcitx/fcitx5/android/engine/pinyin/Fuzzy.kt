@@ -30,7 +30,7 @@ enum class Fuzzy(internal val a: String, internal val b: String, val onInitial: 
     /** Whether this rule applies to a final after [initial]. */
     fun appliesAfter(initial: String): Boolean = when (this) {
         // the u of ju, qu, xu, yu is ü: jou is not a slip for it
-        U_OU -> initial !in setOf("j", "q", "x", "y")
+        U_OU -> initial !in SpellingIndex.U_IS_V
         // only l and n have both lü and lu
         V_U -> initial == "l" || initial == "n"
         else -> true

@@ -93,8 +93,8 @@ class PinyinSegmenterTest {
         // zh alone, or z and h alone: zhrm is 中华人民
         assertEquals(setOf("zh:INITIAL", "z:INITIAL"), plain.segment("zhg").leaving(0))
         assertEquals(setOf("h:INITIAL"), plain.segment("zhg").leaving(1))
-        // but not where zh starts a syllable
-        assertEquals(setOf("zhon:SYLLABLE", "zhong:SYLLABLE"), plain.segment("zhongg").leaving(0))
+        // but z not where zh starts a syllable, though zh stands alone there
+        assertEquals(setOf("zh:INITIAL"), plain.segment("zhoa").leaving(0))
         // ng is a syllable, but n before a consonant may still stand alone: 那个
         assertEquals(setOf("n:SYLLABLE", "ng:SYLLABLE", "n:INITIAL"), plain.segment("ng").leaving(0))
     }

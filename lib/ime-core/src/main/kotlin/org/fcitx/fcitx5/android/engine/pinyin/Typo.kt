@@ -23,10 +23,6 @@ enum class Typo {
     fun of(init: String, fin: String): String? = when (this) {
         GN -> if (fin.endsWith("ng")) init + fin.dropLast(2) + "gn" else null
         ON -> if (fin.endsWith("ong")) init + fin.dropLast(1) else null
-        V -> if (init in U_IS_V && fin.startsWith("u")) init + "v" + fin.substring(1) else null
-    }
-
-    private companion object {
-        val U_IS_V = setOf("j", "q", "x", "y")
+        V -> if (init in SpellingIndex.U_IS_V && fin.startsWith("u")) init + "v" + fin.substring(1) else null
     }
 }

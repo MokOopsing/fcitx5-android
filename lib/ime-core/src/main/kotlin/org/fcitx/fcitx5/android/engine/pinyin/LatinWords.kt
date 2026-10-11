@@ -8,21 +8,21 @@ import org.fcitx.fcitx5.android.engine.data.PinyinDictionary
 
 /**
  * The Latin words of a dictionary, spelt with the Latin-letter syllables (iPhone as I'P'H'O'N'E,
- * the `latin` layer of lexicon/latin.words), as lower-case keys: what [PinyinSegmenter] looks for
- * in what is typed, so `iphone` reaches iPhone. Words of one letter are left out, as every letter
+ * the `latin` layer of lexicon/latin.words): what [PinyinSegmenter] looks for in what is typed,
+ * in lower case, so `iphone` reaches iPhone. Words of one letter are left out, as every letter
  * typed would be one.
  */
-class LatinWords private constructor(private val keys: HashSet<String>, private val longest: Int) {
-
-    val size: Int get() = keys.size
+class LatinWords private constructor(private val dictionary: PinyinDictionary, val size: Int) {
 
     /** The length of each word [input] spells from [at], two letters or more, in lower case. */
     fun forEachAt(input: String, at: Int, visit: (length: Int) -> Unit) {
-        if (input[at] !in 'a'..'z') return
-        var length = 2
-        while (at + length <= input.length && length <= longest && input[at + length - 1] in 'a'..'z') {
-            if (input.substring(at, at + length) in keys) visit(length)
-            length++
+        // down the dictionary's trie a letter at a time: a key press makes no string
+        var node = dictionary.root
+        var end = at
+        while (end < input.length && input[end] in 'a'..'z') {
+            node = dictionary.child(node, syllable(input[end++]))
+            if (node < 0) return
+            if (end - at >= 2 && dictionary.wordCount(node) > 0) visit(end - at)
         }
     }
 
@@ -39,25 +39,16 @@ class LatinWords private constructor(private val keys: HashSet<String>, private 
 
         /** The words of [dictionary] spelt with letter syllables alone. */
         fun of(dictionary: PinyinDictionary): LatinWords {
-            val keys = HashSet<String>()
-            var longest = 0
-            val path = StringBuilder()
-            fun visit(node: Int) {
-                if (path.length >= 2 && dictionary.wordCount(node) > 0) {
-                    keys += path.toString()
-                    longest = maxOf(longest, path.length)
-                }
+            var size = 0
+            fun visit(node: Int, depth: Int) {
+                if (depth >= 2 && dictionary.wordCount(node) > 0) size++
                 val first = dictionary.firstChild(node)
                 for (child in first until first + dictionary.childCount(node)) {
-                    val s = dictionary.syllable(child)
-                    if (!isLetter(s)) continue
-                    path.append('a' + (s - FIRST))
-                    visit(child)
-                    path.setLength(path.length - 1)
+                    if (isLetter(dictionary.syllable(child))) visit(child, depth + 1)
                 }
             }
-            visit(dictionary.root)
-            return LatinWords(keys, longest)
+            visit(dictionary.root, 0)
+            return LatinWords(dictionary, size)
         }
     }
 }

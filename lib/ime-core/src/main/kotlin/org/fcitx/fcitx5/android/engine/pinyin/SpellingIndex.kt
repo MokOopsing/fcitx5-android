@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.engine.pinyin
 
+import java.util.SortedMap
 import java.util.TreeMap
 
 /**
@@ -13,8 +14,8 @@ import java.util.TreeMap
  * spelling with one letter slipped onto a key next to it ([KeyNeighbours]) reads as the syllable
  * too, where the slip spells nothing else: `hap` for hao, but not `gao` for hao.
  *
- * Each node knows the syllables its own key spells ([matches]) and those of every key below it
- * ([completions], [extensions]), the latter for input that stops part-way through a syllable.
+ * Each node knows the syllables its own key spells ([matches]) and, for input that stops part-way
+ * through a syllable, those typing on from it reaches ([extensions]).
  */
 internal class SpellingIndex(fuzzy: Set<Fuzzy>, typos: Boolean, neighbours: Boolean = false) {
 
@@ -22,7 +23,6 @@ internal class SpellingIndex(fuzzy: Set<Fuzzy>, typos: Boolean, neighbours: Bool
     private val childChar: CharArray
     private val childNode: IntArray
     private val matches: Array<SyllableMatches?>
-    private val completions: Array<SyllableMatches>
     private val extensions: Array<SyllableMatches?>
     private val initials: Array<SyllableMatches?>
     private val slips: Array<SyllableMatches?>
@@ -37,9 +37,6 @@ internal class SpellingIndex(fuzzy: Set<Fuzzy>, typos: Boolean, neighbours: Bool
 
     /** Syllables this node's key spells in full, or null if it spells none. */
     fun matches(node: Int): SyllableMatches? = matches[node]
-
-    /** Syllables whose typed spellings run through this node, flagged [SyllableMatches.COMPLETION]. */
-    fun completions(node: Int): SyllableMatches = completions[node]
 
     /**
      * Syllables that typing on from this node reaches, other than what its key spells exactly, or
@@ -91,9 +88,8 @@ internal class SpellingIndex(fuzzy: Set<Fuzzy>, typos: Boolean, neighbours: Bool
                 keepBest(byInitial.getOrPut(i.ifEmpty { spelling.take(1) }) { TreeMap() }, id, iFlags or SyllableMatches.COMPLETION)
                 // as an initial, z also stands for zh (zg 中国, sm 什么) in every mainstream input method
                 if (i.length == 2 && i[1] == 'h') keepBest(byInitial.getOrPut(i.take(1)) { TreeMap() }, id, iFlags or SyllableMatches.COMPLETION)
-                for ((f, fFlags) in finals(fin, finalRules)) {
-                    // with no initial the final is the syllable: ou's partner u is none, so u stays as typed
-                    if (i.isEmpty() && Syllables.id(f) < 0) continue
+                // with no initial ou's partner u is none (finalsAfter), so u stays as typed
+                for ((f, fFlags) in finalsAfter(i, fin, finalRules)) {
                     val flags = iFlags or fFlags
                     add(i + f, id, flags)
                     if (typos) Typo.entries.mapNotNull { it.of(i, f) }.forEach { add(it, id, flags or SyllableMatches.TYPO) }
@@ -128,7 +124,6 @@ internal class SpellingIndex(fuzzy: Set<Fuzzy>, typos: Boolean, neighbours: Bool
                 below[childNode[e]].forEach { (s, f) -> keepBest(below[i], s, f) }
             }
         }
-        completions = Array(order.size) { toMatches(below[it]) }
         // only what typing on reaches: jv is a finished slip for ju, not the start of one
         extensions = Array(order.size) { i ->
             val beyond = TreeMap<Int, Int>()
@@ -175,6 +170,9 @@ internal class SpellingIndex(fuzzy: Set<Fuzzy>, typos: Boolean, neighbours: Bool
         /** Syllables that are not an initial plus a final, so no rule applies to them. */
         private val STANDALONE = setOf("m", "n", "ng", "r")
 
+        /** Initials whose u is ü: ju, qu, xu, yu. */
+        val U_IS_V = setOf("j", "q", "x", "y")
+
         /**
          * The initial and final of [spelling], the initial empty for a, ai, er ...; null for a
          * syllable that is no initial plus a final (m, ng, the Latin letters).
@@ -193,13 +191,21 @@ internal class SpellingIndex(fuzzy: Set<Fuzzy>, typos: Boolean, neighbours: Bool
         fun finals(fin: String, rules: List<Fuzzy>): List<Pair<String, Int>> =
             variants(fin, rules) + if (fin == "ve") listOf("ue" to 0) else emptyList()
 
+        /**
+         * As [finals], after initial [init]: with none the final is the syllable, so a partner
+         * that is no syllable spells nothing (ou's partner u), in every segmenter alike.
+         */
+        fun finalsAfter(init: String, fin: String, rules: List<Fuzzy>): List<Pair<String, Int>> =
+            finals(fin, rules).filter { (f, _) -> init.isNotEmpty() || Syllables.id(f) >= 0 }
+
         /** Fewer flags win: an exact spelling beats a fuzzy one beats a typo. */
         fun keepBest(into: MutableMap<Int, Int>, syllable: Int, flags: Int) {
             val old = into[syllable]
             if (old == null || flags < old) into[syllable] = flags
         }
 
-        fun toMatches(m: Map<Int, Int>) =
+        /** Sorted by syllable, as [SyllableMatches.indexOf] searches them by halves. */
+        fun toMatches(m: SortedMap<Int, Int>) =
             SyllableMatches(m.keys.toIntArray(), m.values.toIntArray())
     }
 }

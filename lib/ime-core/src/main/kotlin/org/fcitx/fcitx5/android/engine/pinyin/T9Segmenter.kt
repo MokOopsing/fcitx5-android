@@ -21,12 +21,14 @@ import java.util.TreeMap
  * - at the end of the input or before a separator, every syllable the digits may still become
  *   ([Kind.PARTIAL], or [Kind.EXTENDED] where they are a syllable of two letters or more too: `64`
  *   on the way to nian, but not `6`, 哦, on the way to men);
- * - with [abbreviations], the initials the digits type (简拼, `94` zh), where no longer syllable
- *   starts or another digit follows; without, only where nothing else is read but a syllable of
- *   one letter (`25` is 北京 too, not only 啊 then j …).
+ * - where another digit follows, the initials the digits type (简拼, `94` zh): with
+ *   [abbreviations] where no longer syllable is read there (sh in `745` 时间, not in `744`, shi),
+ *   without only where nothing else is read but a syllable of one letter (`25` is 北京 too, not
+ *   only 啊 then j …).
  *
- * A syllable the user chose for the first digits not yet chosen ([lock]) is in the input as its
- * letters and a separator: read as that syllable alone, or as an initial for a letter (`h`).
+ * A syllable the user chose for the first digits not yet chosen
+ * ([Action.Syllable][org.fcitx.fcitx5.android.engine.session.Action.Syllable]) is in the input as
+ * its letters and a separator: read as that syllable alone, or as an initial for a letter (`h`).
  */
 class T9Segmenter(fuzzy: Set<Fuzzy> = emptySet(), private val abbreviations: Boolean = true) : Segmenter {
 
@@ -62,9 +64,7 @@ class T9Segmenter(fuzzy: Set<Fuzzy> = emptySet(), private val abbreviations: Boo
                 SpellingIndex.variants(init, initialRules).flatMap { (i, iFlags) ->
                     if (i.isNotEmpty()) keepBest(initialIds.getOrPut(digits(i)) { TreeMap() }, id, iFlags or SyllableMatches.COMPLETION)
                     // with no initial the final is the syllable: ou's partner u is none, as in 双拼
-                    SpellingIndex.finals(fin, finalRules).mapNotNull { (f, fFlags) ->
-                        if (i.isEmpty() && Syllables.id(f) < 0) null else i + f to (iFlags or fFlags)
-                    }
+                    SpellingIndex.finalsAfter(i, fin, finalRules).map { (f, fFlags) -> i + f to (iFlags or fFlags) }
                 }
             }
             for ((s, flags) in spellings) {
@@ -132,22 +132,15 @@ class T9Segmenter(fuzzy: Set<Fuzzy> = emptySet(), private val abbreviations: Boo
         private const val MAX_SYLLABLE = 6
 
         /** The key typing [c] on the nine keys: '2' for a, b, c; ü is v, on '8'. */
-        fun digit(c: Char): Char = when (c) {
-            in 'a'..'c' -> '2'
-            in 'd'..'f' -> '3'
-            in 'g'..'i' -> '4'
-            in 'j'..'l' -> '5'
-            in 'm'..'o' -> '6'
-            in 'p'..'s' -> '7'
-            in 't'..'v' -> '8'
-            in 'w'..'z' -> '9'
-            else -> c
-        }
+        fun digit(c: Char): Char = if (c in 'a'..'z') DIGITS[c - 'a'] else c
 
         /** The letters [digit] types, ü as v. */
         fun letters(digit: Char): String = KEYS.getOrElse(digit - '2') { "" }
 
         private val KEYS = listOf("abc", "def", "ghi", "jkl", "mno", "pqrs", "tuv", "wxyz")
+
+        // made from KEYS, so the two cannot disagree
+        private val DIGITS = CharArray(26).also { d -> KEYS.forEachIndexed { k, typed -> typed.forEach { d[it - 'a'] = '2' + k } } }
 
         /** [spelling] as typed on the nine keys. */
         fun digits(spelling: String): String = buildString(spelling.length) { spelling.forEach { append(digit(it)) } }

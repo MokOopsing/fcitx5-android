@@ -45,13 +45,12 @@ class ShuangpinSegmenter(private val scheme: ShuangpinScheme, fuzzy: Set<Fuzzy> 
             val (init, fin) = parts
             val finalRules = fuzzy.filter { !it.onInitial && it.appliesAfter(init) }
             for ((i, iFlags) in SpellingIndex.variants(init, initialRules)) {
-                for ((f, fFlags) in SpellingIndex.finals(fin, finalRules)) {
-                    // with no initial the final is the syllable: ou's partner u is none (uu is shu in 小鹤)
-                    if (i.isEmpty() && Syllables.id(f) < 0) continue
+                // with no initial the final is the syllable: ou's partner u is none (uu is shu in 小鹤)
+                for ((f, fFlags) in SpellingIndex.finalsAfter(i, fin, finalRules)) {
                     val flags = iFlags or fFlags
                     for (code in scheme.codes(i, f)) keepBest(table.getOrPut(code) { TreeMap() }, id, flags)
                     if (i.isEmpty() && f.length == 2) spelt += Triple(f, id, flags)
-                    if (typos && i in U_IS_V && f.startsWith("u")) {
+                    if (typos && i in SpellingIndex.U_IS_V && f.startsWith("u")) {
                         for (code in scheme.codes(i, "v" + f.substring(1))) {
                             keepBest(table.getOrPut(code) { TreeMap() }, id, flags or SyllableMatches.TYPO)
                         }
@@ -103,9 +102,6 @@ class ShuangpinSegmenter(private val scheme: ShuangpinScheme, fuzzy: Set<Fuzzy> 
     private companion object {
         /** Keys are ASCII; see [ShuangpinScheme.isKey]. */
         const val KEYS = 128
-
-        /** Initials whose u is ü. */
-        val U_IS_V = setOf("j", "q", "x", "y")
 
         fun single(syllable: Int) = SyllableMatches(intArrayOf(syllable), intArrayOf(0))
     }
