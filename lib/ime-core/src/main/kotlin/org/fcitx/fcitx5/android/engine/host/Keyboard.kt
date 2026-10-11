@@ -24,7 +24,7 @@ object EngineEvent {
     /** The app moved the cursor, or the input method was left. */
     const val RESET = 7
 
-    /** Any other key: an arrow, Home, Tab, Delete. */
+    /** Any other key: an arrow, Home, Tab, Delete; the argument is its fcitx keysym. */
     const val OTHER = 8
 
     /** "Forget word" on a candidate; the argument is its index among all of them. */
@@ -61,11 +61,11 @@ object EngineEvent {
  *
  * [nineKeys]: the session is the nine keys' (九键), whose 重输 is Escape and whose syllables come
  * as [SYLLABLES]. The host says so: a table whose codes are digits reads 2 as well, and its
- * Escape and characters are the app's. Unsaid, a session that reads 2 is taken for it.
+ * Escape and characters are the app's.
  *
  * [learning] is passed to the session: off where the app asks that nothing be learned.
  */
-class Keyboard(private val session: Session, private val nineKeys: Boolean = session.reads('2')) {
+class Keyboard(private val session: Session, private val nineKeys: Boolean) {
 
     private var shown: Snapshot = IDLE
 

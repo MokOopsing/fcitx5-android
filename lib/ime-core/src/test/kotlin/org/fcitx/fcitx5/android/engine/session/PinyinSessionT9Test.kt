@@ -6,21 +6,21 @@ package org.fcitx.fcitx5.android.engine.session
 
 import org.fcitx.fcitx5.android.engine.data.PinyinData
 import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
-import org.fcitx.fcitx5.android.engine.host.Keyboard
 import org.fcitx.fcitx5.android.engine.host.EngineEvent
+import org.fcitx.fcitx5.android.engine.host.Keyboard
 import org.fcitx.fcitx5.android.engine.pinyin.Fuzzy
-import org.fcitx.fcitx5.android.engine.pinyin.Syllables
+import org.fcitx.fcitx5.android.engine.pinyin.PinyinSegmenter
 import org.fcitx.fcitx5.android.engine.pinyin.T9Segmenter
+import org.fcitx.fcitx5.android.engine.rerank.SentenceRefiner
 import org.fcitx.fcitx5.android.engine.session.Action.Backspace
 import org.fcitx.fcitx5.android.engine.session.Action.Key
+import org.fcitx.fcitx5.android.engine.user.UserModel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.ByteBuffer
 
 class PinyinSessionT9Test {
-
-    private fun syl(vararg s: String) = s.map { Syllables.id(it) }.toIntArray()
 
     private val data = PinyinData.load(
         ByteBuffer.wrap(
@@ -44,7 +44,8 @@ class PinyinSessionT9Test {
         ),
     )
 
-    private fun session() = PinyinSession(data, T9Segmenter(abbreviations = false), spell = true, prediction = false)
+    private fun session(user: UserModel? = null, refiner: SentenceRefiner? = null) =
+        PinyinSession(data, T9Segmenter(abbreviations = false), spell = true, user = user, prediction = false, refiner = refiner)
 
     private fun Session.type(keys: String): Snapshot = keys.map { apply(Key(it)) }.last()
 
@@ -55,6 +56,12 @@ class PinyinSessionT9Test {
         assertEquals("ni hao", s.preedit)
         // the first digits' syllables, the best reading's first, the letters of 6 last
         assertEquals(listOf("ni", "mi", "o", "m", "n"), s.syllables)
+    }
+
+    @Test
+    fun keysHandedOverTogetherReadAsTypedOneByOne() {
+        // the syllables offered with their id: a pick from the list shown names it
+        assertEquals(session().type("64426"), session().typeAll("64426"))
     }
 
     @Test
@@ -89,7 +96,7 @@ class PinyinSessionT9Test {
 
     @Test
     fun theKeyboardSendsASyllableAsACharacterOfThePrivateUseArea() {
-        val keyboard = Keyboard(session())
+        val keyboard = Keyboard(session(), nineKeys = true)
         val typed = "64426".map { keyboard.onEvent(EngineEvent.CHAR, it.code) }.last()
         val s = keyboard.onEvent(EngineEvent.CHAR, Keyboard.syllableKey(1, typed.syllablesId).code)
         assertEquals("米糕", s.candidates[0])
@@ -110,7 +117,7 @@ class PinyinSessionT9Test {
 
     @Test
     fun oneSeparatesWhileTypingAndIsTheAppsOtherwise() {
-        val keyboard = Keyboard(session())
+        val keyboard = Keyboard(session(), nineKeys = true)
         assertEquals(false, keyboard.onEvent(EngineEvent.CHAR, '1'.code).handled)
         "64".forEach { keyboard.onEvent(EngineEvent.CHAR, it.code) }
         val separated = keyboard.onEvent(EngineEvent.CHAR, '1'.code)
@@ -133,7 +140,7 @@ class PinyinSessionT9Test {
         val shown = session.type("9999").preedit
         val commit = session.apply(Action.CommitRaw).commit
         assertEquals(shown.filter { it != ' ' && it != '\'' }, commit)
-        assertTrue(commit.startsWith("ni") && commit.length == 6)
+        assertEquals("ni9999", commit)
     }
 
     @Test
@@ -157,10 +164,10 @@ class PinyinSessionT9Test {
 
     @Test
     fun startingOverWithNothingTypedIsNotTheApps() {
-        val keyboard = Keyboard(session())
+        val keyboard = Keyboard(session(), nineKeys = true)
         assertEquals(true, keyboard.onEvent(EngineEvent.ESCAPE, 0).handled)
         // nor is a syllable for a session without the nine keys
-        val full = Keyboard(PinyinSession(data, org.fcitx.fcitx5.android.engine.pinyin.PinyinSegmenter(), prediction = false))
+        val full = Keyboard(PinyinSession(data, PinyinSegmenter(), prediction = false), nineKeys = false)
         assertEquals(false, full.onEvent(EngineEvent.CHAR, Keyboard.syllableKey(0, 0).code).handled)
         assertEquals(false, full.onEvent(EngineEvent.ESCAPE, 0).handled)
     }
@@ -179,7 +186,6 @@ class PinyinSessionT9Test {
         assertEquals("ni", back.preedit)
     }
 
-
     @Test
     fun aPickFromAListAKeyReplacedIsDropped() {
         val session = session()
@@ -194,10 +200,28 @@ class PinyinSessionT9Test {
         // picked from the list shown now, taken
         assertEquals("ni", session.apply(Action.Syllable(0, typed.syllablesId)).preedit)
         assertEquals(emptyList<String>(), session.apply(Action.Syllable(0, typed.syllablesId)).syllables)
-        // the same list again keeps its id: a pause that changed nothing stales no pick
-        val again = session()
+        // the same list again keeps its id: a word forgotten reads the input again, offering what
+        // it did, and stales no pick (a pause reads nothing again: see the test after this one)
+        val again = session(UserModel(data.dictionary, data.vocabulary)) { _, _, _, _ -> 0 }
         val first = again.type("64")
-        assertEquals(first.syllablesId, again.apply(Action.Refine).syllablesId)
+        val forgotten = again.apply(Action.Forget(0))
+        // the input was read again: the refiner has its readings anew
+        assertTrue(forgotten.refines)
+        assertEquals(first.syllables, forgotten.syllables)
+        assertEquals(first.syllablesId, forgotten.syllablesId)
     }
 
+    @Test
+    fun aPauseThatPutsAnotherReadingFirstKeepsTheSyllablesOffered() {
+        val session = session { _, readings, _, _ -> readings.indexOfFirst { it.startsWith("米") } }
+        val typed = session.type("64426")
+        assertEquals("ni", typed.syllables[0])
+        assertTrue(typed.refines)
+        val refined = session.apply(Action.Refine)
+        assertTrue(refined.candidates[0].startsWith("米"))
+        // as shown when the user paused: a tap on it, on its way, is not dropped
+        assertEquals(typed.syllables, refined.syllables)
+        assertEquals(typed.syllablesId, refined.syllablesId)
+        assertEquals("ni'hao", session.apply(Action.Syllable(0, typed.syllablesId)).preedit)
+    }
 }

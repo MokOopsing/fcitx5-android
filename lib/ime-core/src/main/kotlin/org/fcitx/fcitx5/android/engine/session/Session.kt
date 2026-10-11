@@ -34,8 +34,11 @@ interface Session {
     fun offers(index: Int): Set<Offer>
 }
 
-/** What a long press on a candidate may offer, each done by the [Action] of its name. */
-enum class Offer { FORGET, PIN, UNPIN, BLOCK }
+/**
+ * What a long press on a candidate may offer, each done by the [Action] of its name; [bit] is its
+ * bit in the offers the androidengine addon reads (EngineOffer in androidengine_public.h).
+ */
+enum class Offer(val bit: Int) { FORGET(1 shl 0), PIN(1 shl 1), UNPIN(1 shl 2), BLOCK(1 shl 3) }
 
 /** A candidate as a host lists it, with its [hint] (see [Snapshot.hints]). */
 data class Choice(val text: String, val hint: String = "")
@@ -129,7 +132,7 @@ sealed class Action {
  * @property actionable whether a long press on a candidate may offer something: see
  *   [Session.offers]
  * @property labels the keys picking the candidates shown, in order, where they are not the
- *   digits (电报码's `qwertyuiop`, its codes being digits); empty for the digits
+ *   digits (letters such as `qwertyuiop` where a table's codes are digits); empty for the digits
  * @property refines whether [Action.Refine] would do more: the host sends it while the user
  *   pauses, till this is false
  * @property syllables what the first keys not yet taken as a syllable may be, likeliest first,

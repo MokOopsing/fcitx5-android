@@ -108,7 +108,7 @@ class KeyboardTest {
     }
 
     private val session = FakeSession()
-    private val keyboard = Keyboard(session)
+    private val keyboard = Keyboard(session, nineKeys = false)
 
     private fun char(c: Char) = keyboard.onEvent(EngineEvent.CHAR, c.code)
 
@@ -117,7 +117,7 @@ class KeyboardTest {
     @Test
     fun aSyllablePickComesThroughAsItsIndexAndList() {
         val nine = FakeSession(nineKeys = true)
-        val keyboard = Keyboard(nine)
+        val keyboard = Keyboard(nine, nineKeys = true)
         for ((index, id) in listOf(0 to 0, 5 to 7, Action.Syllable.MAX - 1 to Action.Syllable.IDS - 1)) {
             keyboard.onEvent(EngineEvent.CHAR, Keyboard.syllableKey(index, id).code)
         }
@@ -138,6 +138,16 @@ class KeyboardTest {
         assertFalse(table.onEvent(EngineEvent.CHAR, c.code).handled)
         assertEquals(listOf<Action>(Action.Key(c)), digits.actions)
         assertTrue(Keyboard(FakeSession(), nineKeys = true).onEvent(EngineEvent.ESCAPE, 0).handled)
+    }
+
+    @Test
+    fun offTheNineKeysADigitTheSessionDoesNotReadPicksWhileComposing() {
+        // a table whose codes are the digits 2 to 9: 1 is no code, it picks the first
+        val digits = FakeSession(nineKeys = true)
+        val table = Keyboard(digits, nineKeys = false)
+        table.onEvent(EngineEvent.CHAR, '2'.code)
+        table.onEvent(EngineEvent.CHAR, '1'.code)
+        assertEquals(listOf(Action.Key('2'), Action.Select(0)), digits.actions)
     }
 
     @Test
@@ -168,8 +178,15 @@ class KeyboardTest {
         // what was committed with the last key is not committed again
         char('c')
         char(',')
-        type("d")
-        assertEquals("", keyboard.onEvent(EngineEvent.REFINE, 0).commit)
+        val afterPunctuation = keyboard.onEvent(EngineEvent.REFINE, 0)
+        assertEquals("", afterPunctuation.commit)
+        assertFalse(afterPunctuation.handled)
+        // nor what a pick that left some typed committed
+        type("ab")
+        char('2')
+        val afterPick = keyboard.onEvent(EngineEvent.REFINE, 0)
+        assertEquals("", afterPick.commit)
+        assertFalse(afterPick.handled)
     }
 
     @Test

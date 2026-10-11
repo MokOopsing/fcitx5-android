@@ -4,34 +4,17 @@
  */
 package org.fcitx.fcitx5.android.engine.session
 
-import org.fcitx.fcitx5.android.engine.data.NgramModel.Companion.NO_WORD
-import org.fcitx.fcitx5.android.engine.data.PinyinData
-import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
-import org.fcitx.fcitx5.android.engine.pinyin.Fuzzy
-import org.fcitx.fcitx5.android.engine.lattice.LayerPrior
 import org.fcitx.fcitx5.android.engine.pinyin.PinyinSegmenter
-import org.fcitx.fcitx5.android.engine.pinyin.ShuangpinScheme
-import org.fcitx.fcitx5.android.engine.pinyin.ShuangpinSegmenter
-import org.fcitx.fcitx5.android.engine.pinyin.Syllables
 import org.fcitx.fcitx5.android.engine.rerank.SentenceRefiner
-import org.fcitx.fcitx5.android.engine.session.Action.Backspace
-import org.fcitx.fcitx5.android.engine.session.Action.CommitRaw
-import org.fcitx.fcitx5.android.engine.session.Action.Forget
 import org.fcitx.fcitx5.android.engine.session.Action.Key
 import org.fcitx.fcitx5.android.engine.session.Action.NextPage
-import org.fcitx.fcitx5.android.engine.session.Action.Pick
-import org.fcitx.fcitx5.android.engine.session.Action.PreviousPage
 import org.fcitx.fcitx5.android.engine.session.Action.Reset
 import org.fcitx.fcitx5.android.engine.session.Action.Select
-import org.fcitx.fcitx5.android.engine.user.UserModel
-import org.fcitx.fcitx5.android.engine.user.UserModelTest.Companion.inTrie
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.nio.ByteBuffer
 
 /** [PinyinSession] with a refiner: what it weighs again while the user pauses, and when. */
 class PinyinSessionRefineTest {
@@ -106,26 +89,27 @@ class PinyinSessionRefineTest {
     }
 
     @Test
-    fun aPasswordIsRefinedOnlyByWhatStaysOnTheDevice() {
-        var remoteAsked = 0
-        var localAsked = 0
-        val local = SentenceRefiner { _, _, _, _ -> localAsked++; SentenceRefiner.NONE }
-        val remote = object : SentenceRefiner {
-            override fun refine(context: String, readings: List<String>, scores: List<Float>, budget: Int): Int {
-                remoteAsked++
-                return SentenceRefiner.NONE
-            }
-            override fun offline() = local
+    fun whileLearningIsOffTheRefinerIsToldNothingOfTheTextBefore() {
+        val contexts = ArrayList<String>()
+        val refiner = SentenceRefiner { context, _, _, _ -> contexts += context; SentenceRefiner.NONE }
+        val session = PinyinSession(data, PinyinSegmenter(), refiner = refiner) { _, _, _ -> 0 }
+        // what the refiner is told is before nizai, typed and paused on
+        fun told(): String {
+            assertTrue(session.type("nizai").refines)
+            session.apply(Action.Refine)
+            return contexts.last()
         }
-        val session = PinyinSession(data, PinyinSegmenter(), refiner = remote) { _, _, _ -> 0 }
-        session.learning = false
         session.type("nizai")
-        session.apply(Action.Refine)
-        assertEquals(0 to 1, remoteAsked to localAsked)
-        session.learning = true
-        session.type("ma")
-        session.apply(Action.Refine)
-        assertEquals(1 to 1, remoteAsked to localAsked)
+        val committed = session.apply(Select(0)).commit
+        assertEquals(committed, told())
+        session.apply(Action.Context("他说我"))
+        assertEquals("他说我", told())
+        session.apply(Select(0))
+        // a password: neither what was committed before it nor the app's text
+        session.learning = false
+        assertEquals("", told())
+        session.apply(Action.Context("他说我"))
+        assertEquals("", told())
     }
 
     @Test

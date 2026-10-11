@@ -17,7 +17,6 @@ import org.fcitx.fcitx5.android.engine.session.Action.Select
 import org.fcitx.fcitx5.android.engine.user.KeyHabits
 import org.fcitx.fcitx5.android.engine.user.UserModel
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -36,18 +35,19 @@ class PinyinSessionHabitTest {
 
     private fun Session.type(keys: String): Snapshot = keys.map { apply(Key(it)) }.last()
 
-    private fun Session.pick(keys: String, text: String): String {
-        val s = type(keys)
-        val i = s.candidates.indexOf(text)
-        assertTrue("$text in ${s.candidates}", i >= 0)
-        return apply(Select(i)).commit.also { apply(Reset) }
+    // a text off the page would pick nothing and fail later, far from the cause
+    private fun Session.select(shown: Snapshot, text: String): Snapshot {
+        val i = shown.candidates.indexOf(text)
+        assertTrue("$text in ${shown.candidates}", i >= 0)
+        return apply(Select(i))
     }
+
+    private fun Session.pick(keys: String, text: String): String = select(type(keys), text).commit.also { apply(Reset) }
 
     // 拟 for ni, then 好: 拟好, put together from pieces
     private fun Session.putTogether(): String {
-        val s = type("nihao")
-        val piece = apply(Select(s.candidates.indexOf("拟")))
-        return apply(Select(piece.candidates.indexOf("好"))).commit.also { apply(Reset) }
+        val piece = select(type("nihao"), "拟")
+        return select(piece, "好").commit.also { apply(Reset) }
     }
 
     @Test
@@ -127,17 +127,17 @@ class PinyinSessionHabitTest {
         val session = session()
         // nih, 你 picked, then ao and 好: 你好, the engine's own first for nihao, needs no habit
         val start = session.type("nih")
-        session.apply(Select(start.candidates.indexOf("你")))
+        session.select(start, "你")
         val rest = session.type("ao")
-        assertEquals("你好", session.apply(Select(rest.candidates.indexOf("好"))).commit)
+        assertEquals("你好", session.select(rest, "好").commit)
         session.apply(Reset)
         assertEquals(0, habits.size)
         // so too after a Backspace with the piece kept
         val typed = session.type("nih")
-        session.apply(Select(typed.candidates.indexOf("你")))
+        session.select(typed, "你")
         session.type("aoo")
         val back = session.apply(Action.Backspace)
-        assertEquals("你好", session.apply(Select(back.candidates.indexOf("好"))).commit)
+        assertEquals("你好", session.select(back, "好").commit)
         assertEquals(0, habits.size)
     }
 
@@ -166,7 +166,7 @@ class PinyinSessionHabitTest {
         scope.learn("hao", "号", own = "好")
         val session = session()
         val s = session.type("nihao")
-        val after = session.apply(Select(s.candidates.indexOf("拟")))
+        val after = session.select(s, "拟")
         assertEquals("号", after.candidates.first())
     }
 

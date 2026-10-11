@@ -45,12 +45,13 @@ class PinyinSessionMisreadingTest {
         // by its reading, separated or not: nothing to show
         assertEquals(emptyList<String>(), session.type("bore").hints)
         session.apply(Action.Reset)
-        assertEquals("", session.type("bo're").let { session.candidates(0, 1).single().hint })
+        session.type("bo're")
+        assertEquals(Choice("般若"), session.candidates(0, 1).single())
         // 简拼, or a syllable half typed: no misreading
         for (keys in listOf("br", "banr", "bor")) {
             session.apply(Action.Reset)
             session.type(keys)
-            assertEquals(keys, "", session.candidates(0, 5).firstOrNull { it.text == "般若" }?.hint.orEmpty())
+            assertEquals(keys, Choice("般若"), session.candidates(0, 5).firstOrNull { it.text == "般若" })
         }
     }
 
