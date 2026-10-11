@@ -20,6 +20,7 @@ import org.fcitx.fcitx5.android.core.lifeCycleScope
 import org.fcitx.fcitx5.android.core.whenReady
 import org.fcitx.fcitx5.android.daemon.FcitxDaemon.connect
 import org.fcitx.fcitx5.android.daemon.FcitxDaemon.disconnect
+import org.fcitx.fcitx5.android.data.punctuation.PunctuationManager
 import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.notificationManager
 import timber.log.Timber
@@ -43,7 +44,7 @@ object FcitxDaemon {
     private val realFcitx by lazy { Fcitx(appContext) }
 
     // don't leak fcitx instance
-    private val fcitxImpl by lazy { object : FcitxAPI by realFcitx {} }
+    private val fcitxImpl by lazy { PunctuationManager.forgettingOnReload(realFcitx) }
 
     private fun mkConnection(name: String) = object : FcitxConnection {
 
@@ -80,6 +81,11 @@ object FcitxDaemon {
 
     private val clients = mutableMapOf<String, FcitxConnection>()
 
+    // fcitx reads its punctuation tables as it starts: FcitxDataProvider lets the user edit them meanwhile
+    private fun start() {
+        PunctuationManager.starting(realFcitx::start)
+    }
+
     /**
      * Create a connection
      */
@@ -88,7 +94,7 @@ object FcitxDaemon {
             return@withLock clients.getValue(name)
         if (realFcitx.lifecycle.currentState == FcitxLifecycle.State.STOPPED) {
             Timber.d("FcitxDaemon start fcitx")
-            realFcitx.start()
+            start()
         }
         val new = mkConnection(name)
         clients[name] = new
@@ -122,7 +128,7 @@ object FcitxDaemon {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build().let { appContext.notificationManager.notify(id, it) }
         realFcitx.stop()
-        realFcitx.start()
+        start()
         FcitxApplication.getInstance().coroutineScope.launch {
             // cancel notification on ready
             realFcitx.lifecycle.whenReady {
@@ -147,7 +153,7 @@ object FcitxDaemon {
      * Should only be used when it has been stopped **AND** user data importing failed.
      */
     fun startFcitx() {
-        realFcitx.start()
+        start()
     }
 
     init {
@@ -166,9 +172,10 @@ object FcitxDaemon {
     }
 
     /**
-     * Reuse a connection for remote service
+     * A client's connection, or null if none: for what reaches fcitx only while it runs (a broadcast,
+     * a settings page), without starting it as [connect] would
      */
-    fun getFirstConnectionOrNull() = clients.firstNotNullOfOrNull { it.value }
+    fun getFirstConnectionOrNull() = lock.withLock { clients.firstNotNullOfOrNull { it.value } }
 
 
     private const val CHANNEL_ID = "fcitx-daemon"

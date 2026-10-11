@@ -13,7 +13,7 @@ import org.junit.Test
 /**
  * Of a key's cards, the first is what the key types. A card whose key was changed used to become
  * that first one without being asked to, and a key of several characters was saved though fcitx
- * drops it.
+ * drops it. The page's edits of its list of cards were written inline in it, untested.
  */
 class PunctuationEditorFragmentTest {
 
@@ -81,5 +81,64 @@ class PunctuationEditorFragmentTest {
         // which the period still types
         val others = listOf(comma2, period)
         assertEquals(2, punctuationCardPosition(others, ".", at = 0, first = entries.firstBoxChecked(0, ".")))
+    }
+
+    @Test
+    fun theFirstBoxShowsOnlyForAKeyWithOtherCards() {
+        val entries = listOf(comma1, period, comma2)
+        assertTrue(entries.hasOtherCards(0, ","))
+        assertFalse("a key's only card", entries.hasOtherCards(1, "."))
+        assertTrue("changed to a key with cards, read trimmed", entries.hasOtherCards(1, " , "))
+        assertTrue("a new card", entries.hasOtherCards(null, "."))
+        assertFalse("a new card of a key without cards", entries.hasOtherCards(null, ";"))
+    }
+
+    @Test
+    fun aCardIsAddedOrEditedInPlaceUnlessAskedToBeFirst() {
+        val added = mutableListOf(comma1, period)
+        assertEquals(2, added.putCard(null, comma2, first = false))
+        assertEquals(listOf(comma1, period, comma2), added)
+
+        val addedFirst = mutableListOf(comma1, period)
+        assertEquals(0, addedFirst.putCard(null, comma2, first = true))
+        assertEquals(listOf(comma2, comma1, period), addedFirst)
+
+        val edited = card(",", "；")
+        val entries = mutableListOf(period, comma1, comma2)
+        assertEquals("same key, not first", 2, entries.putCard(2, edited, first = false))
+        assertEquals(listOf(period, comma1, edited), entries)
+    }
+
+    @Test
+    fun aCardMovesFirstOrHandsTheFirstPlaceOnAsTheBoxSays() {
+        val moved = mutableListOf(comma1, period, comma2)
+        assertEquals(0, moved.putCard(2, comma2, first = true))
+        assertEquals(listOf(comma2, comma1, period), moved)
+
+        val already = mutableListOf(period, comma1, comma2)
+        assertEquals("first already", 1, already.putCard(1, comma1, first = true))
+        assertEquals(listOf(period, comma1, comma2), already)
+
+        val unchecked = mutableListOf(comma1, comma2, period)
+        assertEquals(1, unchecked.putCard(0, comma1, first = false))
+        assertEquals(listOf(comma2, comma1, period), unchecked)
+
+        // the first comma card changed to the period, its box left alone: after the period's card
+        val rekeyed = card(".", "，")
+        val changed = mutableListOf(comma1, comma2, period)
+        assertEquals(2, changed.putCard(0, rekeyed, first = false))
+        assertEquals(listOf(comma2, period, rekeyed), changed)
+    }
+
+    @Test
+    fun aDeletedCardIsPutBackWhereItWas() {
+        val entries = mutableListOf(comma1, period, comma2)
+        val removed = entries.removeAt(1)
+        assertEquals(1, entries.restoreCard(1, removed))
+        assertEquals(listOf(comma1, period, comma2), entries)
+
+        val fewer = mutableListOf(comma1)
+        assertEquals("fewer cards left: at the end", 1, fewer.restoreCard(2, period))
+        assertEquals(listOf(comma1, period), fewer)
     }
 }

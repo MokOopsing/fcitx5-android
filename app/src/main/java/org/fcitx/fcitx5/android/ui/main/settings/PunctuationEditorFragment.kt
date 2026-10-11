@@ -10,13 +10,12 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
 import androidx.core.view.updateLayoutParams
 import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.GridLayoutManager
@@ -24,11 +23,11 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.checkbox.MaterialCheckBox
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.R as MaterialR
 import org.fcitx.fcitx5.android.FcitxApplication
 import org.fcitx.fcitx5.android.R
-import org.fcitx.fcitx5.android.core.getPunctuationConfig
-import org.fcitx.fcitx5.android.data.punctuation.PunctuationManager
+import org.fcitx.fcitx5.android.daemon.FcitxDaemon
 import org.fcitx.fcitx5.android.data.punctuation.PunctuationMapEntry
 import org.fcitx.fcitx5.android.ui.main.MainViewModel.ButtonMode
 import org.fcitx.fcitx5.android.utils.appContext
@@ -40,6 +39,12 @@ import org.fcitx.fcitx5.android.utils.styledColor
 import org.fcitx.fcitx5.android.utils.toast
 import splitties.dimensions.dp
 import splitties.resources.drawable
+import splitties.views.dsl.core.add
+import splitties.views.dsl.core.horizontalLayout
+import splitties.views.dsl.core.lParams
+import splitties.views.dsl.core.matchParent
+import splitties.views.dsl.core.verticalLayout
+import splitties.views.dsl.core.wrapContent
 import timber.log.Timber
 
 /**
@@ -55,23 +60,21 @@ class PunctuationEditorFragment : ProgressFragment() {
 
     private val entries = mutableListOf<PunctuationMapEntry>()
 
+    // how many cards each key has, counted at each change rather than at each card's bind
+    private var cardsOfKey = emptyMap<String, Int>()
+
     private lateinit var adapter: Adapter
 
     private lateinit var list: RecyclerView
 
-    // one save at a time, the newest last, on the app's scope: separate saves waiting for fcitx
-    // could land in any order, and fcitx's own scope drops what waits on it when it stops
-    private val saves = LatestWriter(FcitxApplication.getInstance().coroutineScope) {
-        Timber.w(it, "punctuation")
-        // the fragment may be gone by now
-        appContext.toast(it)
-    }
+    private var undo: Snackbar? = null
 
     override suspend fun initialize(): View {
         lang = args.lang ?: DEFAULT_LANG
-        val raw = fcitx.runOnReady { getPunctuationConfig(lang) }
+        val loaded = saves.load(fcitx, lang)
         entries.clear()
-        entries.addAll(PunctuationManager.parseRawConfig(raw))
+        entries.addAll(loaded)
+        countCards()
         viewModel.toolbarButton.value = ButtonMode.NONE
         val ctx = requireContext()
         adapter = Adapter()
@@ -95,9 +98,9 @@ class PunctuationEditorFragment : ProgressFragment() {
         }
         return FrameLayout(ctx).apply {
             setBackgroundColor(ctx.styledColor(android.R.attr.colorBackground))
-            addView(list, FrameLayout.LayoutParams(-1, -1))
+            add(list, lParams(matchParent, matchParent))
             val margin = ctx.dp(16)
-            addView(fab, FrameLayout.LayoutParams(-2, -2, Gravity.END or Gravity.BOTTOM).apply {
+            add(fab, lParams(wrapContent, wrapContent, Gravity.END or Gravity.BOTTOM) {
                 setMargins(margin, margin, margin, margin)
             })
             ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
@@ -110,10 +113,11 @@ class PunctuationEditorFragment : ProgressFragment() {
     }
 
     private fun save() {
-        val snapshot = entries.toList()
-        val connection = fcitx
-        val language = lang
-        saves.submit { connection.runOnReady { PunctuationManager.save(this, language, snapshot) } }
+        saves.save(lang, entries.toList())
+    }
+
+    private fun countCards() {
+        cardsOfKey = entries.groupingBy { it.key }.eachCount()
     }
 
     @SuppressLint("NotifyDataSetChanged")
@@ -135,30 +139,27 @@ class PunctuationEditorFragment : ProgressFragment() {
             setText(R.string.punctuation_first)
             // checked for the card that is first already, so that unchecking it hands the place on
             isChecked = entries.firstBoxChecked(index, keyField.str)
+            // a key's only card is its first, with no other to come before
+            isVisible = entries.hasOtherCards(index, keyField.str)
         }
         // the place it holds is its own key's: a changed key, the box left alone, does not give it the new one's
         var firstSetByHand = false
         first.setOnClickListener { firstSetByHand = true }
         keyField.doAfterTextChanged {
             if (!firstSetByHand) first.isChecked = entries.firstBoxChecked(index, keyField.str)
+            first.isVisible = entries.hasOtherCards(index, keyField.str)
         }
-        val layout = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
+        val layout = ctx.verticalLayout {
             setPadding(ctx.dp(20), ctx.dp(10), ctx.dp(20), 0)
-            listOf(keyLayout, mappingLayout, altLayout, first).forEach { addView(it, LinearLayout.LayoutParams(-1, -2)) }
+            listOf(keyLayout, mappingLayout, altLayout, first).forEach { add(it, lParams(matchParent)) }
         }
         val builder = AlertDialog.Builder(ctx)
-            .setTitle(if (entry == null) getString(R.string.punctuation_add) else args.title)
+            .setTitle(entry?.key ?: getString(R.string.punctuation_add))
             .setView(layout)
             .setPositiveButton(android.R.string.ok, null)
             .setNegativeButton(android.R.string.cancel, null)
         if (index != null) {
-            builder.setNeutralButton(R.string.delete) { _, _ ->
-                entries.removeAt(index)
-                adapter.notifyItemRemoved(index + 1)
-                adapter.notifyItemRangeChanged(1, entries.size)
-                save()
-            }
+            builder.setNeutralButton(R.string.delete) { _, _ -> delete(index) }
         }
         // what was typed is not lost to a tap beside the dialog
         builder.show().apply { setCanceledOnTouchOutside(false) }.onPositiveButtonClick onClick@{
@@ -180,93 +181,117 @@ class PunctuationEditorFragment : ProgressFragment() {
                 return@onClick false
             }
             // a key may have several cards: typing it offers their marks as candidates
-            val new = PunctuationMapEntry(key, mapping, altField.str)
-            if (index != null) entries.removeAt(index)
-            val at = punctuationCardPosition(entries, key, index ?: entries.size, first.isChecked)
-            entries.add(at, new)
+            val at = entries.putCard(index, PunctuationMapEntry(key, mapping, altField.str), first.isChecked)
+            countCards()
             // whether a key has choices shows on each of its cards, and cards may have moved
             adapter.notifyDataSetChanged()
-            list.scrollToPosition(at + 1)
+            list.scrollToPosition(at + OFFSET)
             save()
             true
         }
     }
 
+    private fun delete(index: Int) {
+        val removed = entries.removeAt(index)
+        countCards()
+        adapter.notifyItemRemoved(index + OFFSET)
+        adapter.notifyItemRangeChanged(OFFSET, entries.size)
+        save()
+        // one tap takes a card, maybe one of the defaults, which nothing else on the page puts back
+        undo = Snackbar.make(list, getString(R.string.removed_x, "${removed.key} → ${removed.marks}"), Snackbar.LENGTH_LONG)
+            .setAction(R.string.undo) { restore(index, removed) }
+            .also { it.show() }
+    }
+
+    private fun restore(index: Int, card: PunctuationMapEntry) {
+        val at = entries.restoreCard(index, card)
+        countCards()
+        adapter.notifyItemInserted(at + OFFSET)
+        adapter.notifyItemRangeChanged(OFFSET, entries.size)
+        list.scrollToPosition(at + OFFSET)
+        save()
+    }
+
+    private class CardHolder(card: View, val key: TextView, val mapping: TextView, val caption: TextView) :
+        RecyclerView.ViewHolder(card)
+
     private inner class Adapter : RecyclerView.Adapter<RecyclerView.ViewHolder>() {
 
-        override fun getItemCount() = entries.size + 1
+        override fun getItemCount() = entries.size + OFFSET
 
         override fun getItemViewType(position: Int) = if (position == 0) HEADER else CARD
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
             val ctx = parent.context
-            val view = if (viewType == HEADER) TextView(ctx).apply {
+            if (viewType == CARD) return card(ctx)
+            val header = TextView(ctx).apply {
                 setText(R.string.punctuation_page_hint)
                 textSize = 14f
                 setTextColor(ctx.styledColor(MaterialR.attr.colorOnSurfaceVariant))
                 setPadding(ctx.dp(4), 0, ctx.dp(4), ctx.dp(12))
-            } else card(ctx)
-            return object : RecyclerView.ViewHolder(view) {}
+            }
+            return object : RecyclerView.ViewHolder(header) {}
         }
 
         override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
-            if (position == 0) return
-            val entry = entries[position - 1]
-            val card = holder.itemView as MaterialCardView
-            card.findViewById<TextView>(R.id.punctuation_key).text = entry.key
-            card.findViewById<TextView>(R.id.punctuation_mapping).text =
-                if (entry.altMapping.isEmpty()) entry.mapping else "${entry.mapping} ${entry.altMapping}"
+            if (holder !is CardHolder) return
+            val entry = entries[position - OFFSET]
+            holder.key.text = entry.key
+            holder.mapping.text = entry.marks
             val caption = when {
-                entries.count { it.key == entry.key } > 1 -> R.string.punctuation_choice
+                (cardsOfKey[entry.key] ?: 0) > 1 -> R.string.punctuation_choice
                 entry.altMapping.isNotEmpty() -> R.string.punctuation_pair
                 else -> 0
             }
-            card.findViewById<TextView>(R.id.punctuation_pair).apply {
+            holder.caption.apply {
                 visibility = if (caption == 0) View.GONE else View.VISIBLE
                 if (caption != 0) setText(caption)
             }
-            card.setOnClickListener { holder.bindingAdapterPosition.takeIf { it > 0 }?.let { edit(it - 1) } }
+            holder.itemView.setOnClickListener {
+                holder.bindingAdapterPosition.takeIf { it >= OFFSET }?.let { edit(it - OFFSET) }
+            }
         }
 
-        private fun card(ctx: Context) = MaterialCardView(ctx).apply {
-            radius = ctx.dp(12).toFloat()
-            cardElevation = 0f
-            strokeWidth = ctx.dp(1)
-            strokeColor = ctx.styledColor(MaterialR.attr.colorOutlineVariant)
-            setCardBackgroundColor(ctx.styledColor(MaterialR.attr.colorSurfaceContainerLow))
-            layoutParams = ViewGroup.MarginLayoutParams(-1, ctx.dp(72)).apply {
-                val m = ctx.dp(4)
-                setMargins(m, m, m, m)
+        private fun card(ctx: Context): CardHolder {
+            val key = KeyCaps.label(ctx, "").apply { background = KeyCaps.background(ctx, radius = 6) }
+            val mapping = TextView(ctx).apply {
+                textSize = 22f
+                maxLines = 1
+                setTextColor(ctx.styledColor(MaterialR.attr.colorOnSurface))
             }
-            // the key, the arrow and the mark on one line whatever the caption: it sits in the
-            // corner, out of the line, which it pushed up when under the mark
-            addView(LinearLayout(ctx).apply {
-                gravity = Gravity.CENTER
-                addView(KeyCaps.label(ctx, "").apply {
-                    id = R.id.punctuation_key
-                    background = KeyCaps.background(ctx, radius = 6)
-                }, LinearLayout.LayoutParams(ctx.dp(36), ctx.dp(36)))
-                addView(TextView(ctx).apply {
-                    text = "→"
-                    setTextColor(ctx.styledColor(MaterialR.attr.colorOnSurfaceVariant))
-                }, LinearLayout.LayoutParams(-2, -2).apply {
-                    marginStart = ctx.dp(8)
-                    marginEnd = ctx.dp(8)
-                })
-                addView(TextView(ctx).apply {
-                    id = R.id.punctuation_mapping
-                    textSize = 22f
-                    maxLines = 1
-                    setTextColor(ctx.styledColor(MaterialR.attr.colorOnSurface))
-                })
-            }, FrameLayout.LayoutParams(-1, -1))
-            addView(TextView(ctx).apply {
-                id = R.id.punctuation_pair
+            val caption = TextView(ctx).apply {
                 textSize = 10f
                 setTextColor(ctx.styledColor(android.R.attr.colorPrimary))
-            }, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.END).apply {
-                setMargins(0, 0, ctx.dp(8), ctx.dp(4))
-            })
+            }
+            val card = MaterialCardView(ctx).apply {
+                radius = ctx.dp(12).toFloat()
+                cardElevation = 0f
+                strokeWidth = ctx.dp(1)
+                strokeColor = ctx.styledColor(MaterialR.attr.colorOutlineVariant)
+                setCardBackgroundColor(ctx.styledColor(MaterialR.attr.colorSurfaceContainerLow))
+                layoutParams = ViewGroup.MarginLayoutParams(matchParent, ctx.dp(72)).apply {
+                    val m = ctx.dp(4)
+                    setMargins(m, m, m, m)
+                }
+                // the key, the arrow and the mark on one line whatever the caption: it sits in the
+                // corner, out of the line, which it pushed up when under the mark
+                add(ctx.horizontalLayout {
+                    gravity = Gravity.CENTER
+                    add(key, lParams(ctx.dp(36), ctx.dp(36)))
+                    add(TextView(ctx).apply {
+                        text = "→"
+                        setTextColor(ctx.styledColor(MaterialR.attr.colorOnSurfaceVariant))
+                    }, lParams(wrapContent, wrapContent) {
+                        marginStart = ctx.dp(8)
+                        marginEnd = ctx.dp(8)
+                    })
+                    add(mapping, lParams())
+                }, lParams(matchParent, matchParent))
+                add(caption, lParams(wrapContent, wrapContent, Gravity.BOTTOM or Gravity.END) {
+                    setMargins(0, 0, ctx.dp(8), ctx.dp(4))
+                })
+            }
+            return CardHolder(card, key, mapping, caption)
         }
     }
 
@@ -275,15 +300,35 @@ class PunctuationEditorFragment : ProgressFragment() {
         viewModel.setToolbarTitle(args.title)
     }
 
-    override fun onDestroy() {
-        saves.close()
-        super.onDestroy()
+    override fun onDestroyView() {
+        // its undo puts a card back on this page
+        undo?.dismiss()
+        undo = null
+        super.onDestroyView()
     }
 
     companion object {
         const val DEFAULT_LANG = "zh_CN"
         private const val HEADER = 0
         private const val CARD = 1
+        // the cards come after the page's hint
+        private const val OFFSET = 1
+
+        // one save at a time, the newest last, on the app's scope: separate saves waiting for fcitx
+        // could land in any order, and fcitx's own scope drops what waits on it when it stops; one
+        // queue for all instances of the page, so that one made anew (a rotation) comes after the last
+        private val saves by lazy {
+            val name = PunctuationSaves::class.java.name
+            PunctuationSaves(
+                FcitxApplication.getInstance().coroutineScope,
+                connect = { FcitxDaemon.connect(name) },
+                disconnect = { FcitxDaemon.disconnect(name) }
+            ) {
+                Timber.w(it, "punctuation")
+                // the fragment may be gone by now
+                appContext.toast(it)
+            }
+        }
     }
 }
 
@@ -305,6 +350,15 @@ internal fun List<PunctuationMapEntry>.firstBoxChecked(index: Int?, typed: Strin
     index != null && isFirstOfSeveral(index) && typed.trim() == this[index].key
 
 /**
+ * Whether the key [typed] has cards besides the one at [index] (null for a new one): only then is
+ * there a first place among them to give or hand on.
+ */
+internal fun List<PunctuationMapEntry>.hasOtherCards(index: Int?, typed: String): Boolean {
+    val key = typed.trim()
+    return withIndex().any { (i, card) -> i != index && card.key == key }
+}
+
+/**
  * Where a card for [key] goes among [others], the cards without it, [at] being where it was (the
  * end for a new one). It goes first of its key only when [first] asks for it; left where it was
  * ahead of the key's other cards (a changed key can put it there), it goes after them instead.
@@ -318,3 +372,19 @@ internal fun punctuationCardPosition(others: List<PunctuationMapEntry>, key: Str
         else -> at
     }
 }
+
+/**
+ * Puts [card] in place of the card at [index] (null for a new one), where
+ * [punctuationCardPosition] says, and returns where it went.
+ */
+internal fun MutableList<PunctuationMapEntry>.putCard(index: Int?, card: PunctuationMapEntry, first: Boolean): Int {
+    if (index != null) removeAt(index)
+    return punctuationCardPosition(this, card.key, index ?: size, first).also { add(it, card) }
+}
+
+/** Puts back [card], deleted from [index], and returns where it went: the end if fewer cards are left. */
+internal fun MutableList<PunctuationMapEntry>.restoreCard(index: Int, card: PunctuationMapEntry): Int =
+    minOf(index, size).also { add(it, card) }
+
+private val PunctuationMapEntry.marks
+    get() = if (altMapping.isEmpty()) mapping else "$mapping $altMapping"

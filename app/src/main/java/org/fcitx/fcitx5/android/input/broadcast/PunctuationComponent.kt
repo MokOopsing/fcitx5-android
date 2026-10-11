@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.input.broadcast
 
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.fcitx.fcitx5.android.core.Action
 import org.fcitx.fcitx5.android.data.punctuation.PunctuationManager
@@ -24,6 +25,9 @@ class PunctuationComponent :
 
     private var mapping: Map<String, String> = emptyMap()
 
+    // an older update still loading would otherwise overwrite a newer one's mapping
+    private var update: Job? = null
+
     var enabled: Boolean = false
         private set
 
@@ -34,7 +38,8 @@ class PunctuationComponent :
             // TODO: A better way to check if punctuation mapping is enabled
             it.name == "punctuation" && it.icon == "fcitx-punc-active"
         }
-        imeScope.launch {
+        update?.cancel()
+        update = imeScope.launch {
             mapping = if (enabled) {
                 fcitx.runOnReady {
                     val items = PunctuationManager.load(this, inputMethodEntryCached.languageCode)

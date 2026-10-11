@@ -40,9 +40,6 @@ class ReturnKeyDrawableComponent :
     UniqueComponent<ReturnKeyDrawableComponent>(), Dependent, ManagedHandler by managedHandler() {
 
     companion object {
-        @DrawableRes
-        val DEFAULT_DRAWABLE = ReturnKeyAppearance.Enter.icon
-
         private fun appearanceOfAction(action: Int): ReturnKeyAppearance? = when (action) {
             EditorInfo.IME_ACTION_GO ->
                 ReturnKeyAppearance(R.drawable.ic_baseline_arrow_forward_24, R.string.a11y_key_action_go)

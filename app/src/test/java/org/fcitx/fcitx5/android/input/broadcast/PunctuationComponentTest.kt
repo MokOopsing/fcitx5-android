@@ -4,15 +4,16 @@
  */
 package org.fcitx.fcitx5.android.input.broadcast
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.fcitx.fcitx5.android.core.Action
 import org.fcitx.fcitx5.android.core.FakeFcitxConnection
+import org.fcitx.fcitx5.android.core.FcitxAPI
 import org.fcitx.fcitx5.android.core.InputMethodEntry
 import org.fcitx.fcitx5.android.core.RawConfig
 import org.fcitx.fcitx5.android.daemon.FcitxConnection
@@ -20,6 +21,7 @@ import org.fcitx.fcitx5.android.data.punctuation.PunctuationManager
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.mechdancer.dependency.DynamicScope
 import org.mechdancer.dependency.UniqueComponent
@@ -40,14 +42,31 @@ class PunctuationComponentTest {
         }
     }
 
+    /** [runOnReady] waits, while [hold] is on, till [release], as the real one waits for fcitx. */
+    private class HeldConnection(private val fake: FakeFcitxConnection) : FcitxConnection by fake {
+        var hold = false
+        private val waiting = mutableListOf<CompletableDeferred<Unit>>()
+
+        fun release() {
+            waiting.forEach { it.complete(Unit) }
+            waiting.clear()
+        }
+
+        override suspend fun <T> runOnReady(block: suspend FcitxAPI.() -> T): T {
+            if (hold) CompletableDeferred<Unit>().also { waiting += it }.await()
+            return fake.runOnReady(block)
+        }
+    }
+
     private class Fixture(testScope: TestScope) {
         val fcitx = FakeFcitxConnection(testScope)
+        val held = HeldConnection(fcitx)
         val recorder = Recorder()
         val punctuation = PunctuationComponent()
 
         init {
             val scope = DynamicScope()
-            val connection: FcitxConnection = fcitx
+            val connection: FcitxConnection = held
             val coroutines: CoroutineScope = testScope
             scope += connection.wrapToUniqueComponent()
             scope += coroutines.wrapToUniqueComponent()
@@ -72,7 +91,7 @@ class PunctuationComponentTest {
         )
     )
 
-    private fun Fixture.configure(lang: String, vararg entries: RawConfig) = runBlockingUnit {
+    private suspend fun Fixture.configure(lang: String, vararg entries: RawConfig) {
         fcitx.api.inputMethodEntryCached = InputMethodEntry("pinyin").copy(languageCode = lang)
         fcitx.api.setAddonSubConfig(
             "punctuation", "punctuationmap/$lang",
@@ -80,7 +99,11 @@ class PunctuationComponentTest {
         )
     }
 
-    private fun runBlockingUnit(block: suspend () -> Unit) = runBlocking { block() }
+    // PunctuationManager keeps the tables it read for the whole process: each test's fake has its own
+    @Before
+    fun forgetTheKeptTables() {
+        PunctuationManager.forget()
+    }
 
     @Test
     fun anActivePunctuationActionLoadsTheLanguagesMappingAndBroadcastsIt() = runTest(StandardTestDispatcher()) {
@@ -114,6 +137,25 @@ class PunctuationComponentTest {
         f.configure("zh_CN", entry(0, ",", "，"))
 
         f.punctuation.updatePunctuationMapping(arrayOf(punctuationAction(active = false)))
+        advanceUntilIdle()
+
+        assertFalse(f.punctuation.enabled)
+        assertEquals(",", f.punctuation.transform(","))
+        assertEquals(listOf(emptyMap<String, String>()), f.recorder.updates)
+    }
+
+    @Test
+    fun anOlderUpdateStillLoadingDoesNotOverwriteANewerOne() = runTest(StandardTestDispatcher()) {
+        val f = Fixture(this)
+        f.configure("zh_CN", entry(0, ",", "，"))
+        f.held.hold = true
+
+        f.punctuation.updatePunctuationMapping(arrayOf(punctuationAction(active = true)))
+        advanceUntilIdle()
+        f.punctuation.updatePunctuationMapping(arrayOf(punctuationAction(active = false)))
+        advanceUntilIdle()
+        // the on update's load finishes last
+        f.held.release()
         advanceUntilIdle()
 
         assertFalse(f.punctuation.enabled)
