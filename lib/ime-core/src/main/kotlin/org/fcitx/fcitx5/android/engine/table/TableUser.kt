@@ -10,6 +10,8 @@ import java.io.Closeable
 import java.io.DataInputStream
 import java.io.File
 import java.io.IOException
+import java.util.TreeMap
+import java.util.concurrent.Executor
 
 /**
  * What the user taught a table input method: how often each candidate was picked, the phrases
@@ -22,13 +24,17 @@ import java.io.IOException
  */
 class TableUser(private val table: TableDictionary) {
 
+    /** A phrase learned: its code and its text. */
+    private data class Phrase(val code: String, val text: String)
+
     // picks of table entries by index, of saved phrases by code and text
-    private val picks = HashMap<Int, Int>()
-    private val savedPicks = HashMap<String, Int>()
-    private val saved = LinkedHashMap<String, MutableList<String>>()
+    private val picks = IndexCounts()
+    private val savedPicks = HashMap<Phrase, Int>()
+    // in code order, so that the codes a prefix starts are a range of them
+    private val saved = TreeMap<String, MutableList<String>>()
     // the most recently seen last
-    private val autoPhrases = object : LinkedHashMap<String, Int>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Int>?) = size > MAX_AUTO_PHRASES
+    private val autoPhrases = object : LinkedHashMap<Phrase, Int>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Phrase, Int>?) = size > MAX_AUTO_PHRASES
     }
 
     /** Hears each record of what was learned, as it is learned. */
@@ -38,28 +44,30 @@ class TableUser(private val table: TableDictionary) {
     var onSaved: ((String) -> Unit)? = null
 
     /** How often the table's entry at [index] was picked. */
-    fun picks(index: Int): Int = picks[index] ?: 0
+    fun picks(index: Int): Int = picks[index]
 
     /** The phrases saved, each once. */
     fun savedTexts(): Set<String> = saved.values.flatMapTo(LinkedHashSet()) { it }
 
     /** How often the saved phrase [text] under [code] was picked. */
-    fun picks(code: String, text: String): Int = savedPicks[key(code, text)] ?: 0
+    fun picks(code: String, text: String): Int = savedPicks[Phrase(code, text)] ?: 0
 
     fun isSaved(code: String, text: String): Boolean = saved[code]?.contains(text) == true
 
-    /** The saved phrases whose code starts with [prefix], as code and text. */
+    /** The saved phrases whose code starts with [prefix], as code and text, in code order. */
     fun saved(prefix: String): List<Pair<String, String>> =
-        saved.flatMap { (code, texts) -> if (code.startsWith(prefix)) texts.map { code to it } else emptyList() }
+        savedUnder(prefix).flatMap { (code, texts) -> texts.map { code to it } }
 
     /** The phrases seen but not saved whose code starts with [prefix], the most recently seen first. */
-    fun seen(prefix: String): List<Pair<String, String>> = autoPhrases.keys.filter { it.startsWith(prefix) }.asReversed().map {
-        val at = it.indexOf(SEPARATOR)
-        it.substring(0, at) to it.substring(at + 1)
-    }
+    fun seen(prefix: String): List<Pair<String, String>> =
+        autoPhrases.keys.filter { it.code.startsWith(prefix) }.asReversed().map { it.code to it.text }
 
     /** Whether some saved or seen phrase has a code starting with [prefix]. */
-    fun leadsAnywhere(prefix: String) = saved.keys.any { it.startsWith(prefix) } || autoPhrases.keys.any { it.startsWith(prefix) }
+    fun leadsAnywhere(prefix: String) = savedUnder(prefix).isNotEmpty() || autoPhrases.keys.any { it.code.startsWith(prefix) }
+
+    // seen phrases are at most MAX_AUTO_PHRASES to go over; saved ones are as many as the user made
+    private fun savedUnder(prefix: String): Map<String, List<String>> =
+        if (prefix.isEmpty()) saved else saved.subMap(prefix, true, prefix + Char.MAX_VALUE, false)
 
     /**
      * [text] under [code] was picked. Counted for the table's first entry of that code and text,
@@ -83,11 +91,12 @@ class TableUser(private val table: TableDictionary) {
      */
     fun sighted(code: String, text: String, saveAfter: Int) {
         if (isSaved(code, text)) return
-        val seen = (autoPhrases[key(code, text)] ?: 0) + 1
+        val phrase = Phrase(code, text)
+        val seen = (autoPhrases[phrase] ?: 0) + 1
         if (saveAfter in 1..seen) {
             save(code, text)
         } else {
-            autoPhrases[key(code, text)] = seen
+            autoPhrases[phrase] = seen
             journal?.invoke(TableLog.seen(code, text, 1))
         }
     }
@@ -105,17 +114,22 @@ class TableUser(private val table: TableDictionary) {
      * [forget] of [text] under whatever code it was saved, seen or picked as a phrase: a word of
      * the other input methods picked here is kept as its pick alone, and read back it is saved.
      */
-    fun forgetText(text: String) {
-        val tail = "$SEPARATOR$text"
-        val codes = saved.filterValues { text in it }.keys +
-            (autoPhrases.keys + savedPicks.keys).filter { it.endsWith(tail) }.map { it.substringBefore(SEPARATOR) }
-        codes.toSet().forEach { forget(it, text) }
+    fun forgetText(text: String) = forgetTexts(setOf(text))
+
+    /** [forgetText] of each of [texts], going over what was learned once however many they are. */
+    fun forgetTexts(texts: Set<String>) {
+        if (texts.isEmpty()) return
+        val learned = LinkedHashSet<Phrase>()
+        for ((code, list) in saved) for (text in list) if (text in texts) learned += Phrase(code, text)
+        autoPhrases.keys.filterTo(learned) { it.text in texts }
+        savedPicks.keys.filterTo(learned) { it.text in texts }
+        for (phrase in learned) forget(phrase.code, phrase.text)
     }
 
     private fun drop(code: String, text: String): Boolean {
-        val key = key(code, text)
+        val phrase = Phrase(code, text)
         val index = table.indexOf(code, text)
-        var dropped = (index >= 0 && picks.remove(index) != null) or (savedPicks.remove(key) != null) or (autoPhrases.remove(key) != null)
+        var dropped = (index >= 0 && picks.remove(index)) or (savedPicks.remove(phrase) != null) or (autoPhrases.remove(phrase) != null)
         saved[code]?.let { texts ->
             dropped = texts.remove(text) or dropped
             if (texts.isEmpty()) saved.remove(code)
@@ -124,11 +138,16 @@ class TableUser(private val table: TableDictionary) {
     }
 
     private fun count(index: Int, code: String, text: String, n: Int) {
-        if (index >= 0) picks[index] = (picks[index] ?: 0) + n else savedPicks[key(code, text)] = (savedPicks[key(code, text)] ?: 0) + n
+        if (index >= 0) {
+            picks.add(index, n)
+        } else {
+            val phrase = Phrase(code, text)
+            savedPicks[phrase] = (savedPicks[phrase] ?: 0) + n
+        }
     }
 
     private fun keep(code: String, text: String): Boolean {
-        autoPhrases.remove(key(code, text))
+        autoPhrases.remove(Phrase(code, text))
         val texts = saved.getOrPut(code) { ArrayList() }
         if (text in texts) return false
         texts += text
@@ -139,15 +158,9 @@ class TableUser(private val table: TableDictionary) {
     fun forEachRecord(write: (ByteArray) -> Unit) {
         for ((code, texts) in saved) for (text in texts) write(TableLog.saved(code, text))
         // eldest first, to be seen in the same order again
-        for ((key, n) in autoPhrases) {
-            val at = key.indexOf(SEPARATOR)
-            write(TableLog.seen(key.substring(0, at), key.substring(at + 1), n))
-        }
-        for ((index, n) in picks) write(TableLog.picked(table.code(index), table.text(index), n))
-        for ((key, n) in savedPicks) {
-            val at = key.indexOf(SEPARATOR)
-            write(TableLog.picked(key.substring(0, at), key.substring(at + 1), n))
-        }
+        for ((phrase, n) in autoPhrases) write(TableLog.seen(phrase.code, phrase.text, n))
+        picks.forEach { index, n -> write(TableLog.picked(table.code(index), table.text(index), n)) }
+        for ((phrase, n) in savedPicks) write(TableLog.picked(phrase.code, phrase.text, n))
     }
 
     /** What the user taught a table as a [RecordFormat] log. */
@@ -180,8 +193,8 @@ class TableUser(private val table: TableDictionary) {
                 SAVED -> if (index < 0) user.keep(code, text)
                 FORGOT -> user.drop(code, text)
                 else -> if (index < 0 && !user.isSaved(code, text)) {
-                    val key = key(code, text)
-                    user.autoPhrases[key] = (user.autoPhrases[key] ?: 0) + input.readInt()
+                    val phrase = Phrase(code, text)
+                    user.autoPhrases[phrase] = (user.autoPhrases[phrase] ?: 0) + input.readInt()
                 }
             }
         }
@@ -196,8 +209,10 @@ class TableUser(private val table: TableDictionary) {
         private val user: TableUser,
         onError: (IOException) -> Unit = {},
         compactAt: Long = RecordStore.DEFAULT_COMPACT_AT,
+        /** Writes a compaction an append made due, if given: see [RecordStore]. */
+        background: Executor? = null,
     ) : Closeable {
-        private val store = RecordStore(file, TableLog.FORMAT, compactAt, onError)
+        private val store = RecordStore(file, TableLog.FORMAT, compactAt, onError, background)
 
         fun open() {
             store.open(replay = { type, input -> TableLog.replay(type, input, user) }, counts = user::forEachRecord)
@@ -211,10 +226,7 @@ class TableUser(private val table: TableDictionary) {
     }
 
     companion object {
-        private const val SEPARATOR = '\t'
         // how many phrases seen but not yet saved are remembered
         private const val MAX_AUTO_PHRASES = 1024
-
-        private fun key(code: String, text: String) = "$code$SEPARATOR$text"
     }
 }

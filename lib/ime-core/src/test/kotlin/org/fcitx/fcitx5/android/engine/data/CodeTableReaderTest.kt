@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.engine.data
 
+import org.fcitx.fcitx5.android.core.FcitxUtils
 import org.fcitx.fcitx5.android.engine.table.TableText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -205,7 +206,7 @@ class CodeTableReaderTest {
     }
 
     @Test
-    fun eachFullCodeIsArrangedByUseTheRareWordsGoingButNoCharacterNorNewWord() {
+    fun eachFullCodeIsArrangedByUseNoneOfTheTablesOwnNorANewWordGoing() {
         val reader = read(
             """
             键码=abcdefgh
@@ -229,11 +230,11 @@ class CodeTableReaderTest {
         val added = TableText.addWords(reader, listOf("工作", "内卷"), { score[it] ?: Float.NEGATIVE_INFINITY }) { it == "内卷" }
         assertEquals(1, added.fresh)
         assertEquals(1, added.others)
-        // 攻错 a thirtieth of 工作: gone; 恭, a character, stays, as does 𠃌 (outside the BMP) and ——,
-        // which no count is of, the never seen last
-        assertEquals(1, added.dropped)
+        // 攻错, the table's own, stays though a thirtieth of 工作, as do 恭, a character, 𠃌 (outside the BMP)
+        // and ——, which no count is of, the never seen last
+        assertEquals(0, added.dropped)
         val table = reader.table()
-        assertEquals(listOf("工作", "恭", "𠃌", "——"), table.texts("abcd"))
+        assertEquals(listOf("工作", "攻错", "恭", "𠃌", "——"), table.texts("abcd"))
         // fresh, 内卷 counts ten times: before 内眷, which stays, alone beside the new word
         assertEquals(listOf("内卷", "内眷"), table.texts("efgh"))
         // a shorter code as it was
@@ -257,6 +258,14 @@ class CodeTableReaderTest {
         assertSourceError(0, "in e2") {
             TableText.check("键码=a\n码长=4\n[组词规则]\ne2=p11+\n[数据]\na 工\n[词组]\n工工\n".reader().buffered(), "table")
         }
+        // a header over the 64 KiB a table's meta section takes, or under it by 19 bytes, fewer than
+        // the stamp the engine keeps a table it built under takes
+        val note = "键码=a\n码长=4\n说明="
+        assertSourceError(0, "meta section") { TableText.check((note + "x".repeat(70_000) + "\n[数据]\na 工\n").reader().buffered(), "table") }
+        val near = note + "x".repeat(65_470) + "\n[数据]\na 工\n"
+        // built as it is, with no stamp, it fits: what refuses it is the room check leaves for one
+        TableText.build(CodeTableReader().apply { read(near.reader().buffered(), "table") }, "table")
+        assertSourceError(0, "meta section") { TableText.check(near.reader().buffered(), "table") }
     }
 
     @Test
@@ -271,6 +280,26 @@ class CodeTableReaderTest {
         assertEquals("\"a\"b\"", unescapeValue("\"a\"b\""))
         assertEquals("\"a\\\"", unescapeValue("\"a\\\""))
         assertEquals("", unescapeValue("\"\""))
+    }
+
+    /** Quick phrases read values with fcitx's own, the rest with [unescapeValue]: alike, but what fcitx calls no value is kept as written. */
+    @Test
+    fun valuesUnescapeAlikeForQuickPhrasesAndTheEngine() {
+        listOf(
+            "abc" to "abc",
+            "\"a b\"" to "a b",
+            "\"\"" to "",
+            "\"\\q\"" to "q",
+            "\"" to "\"",
+            "\"a\\\"" to "\"a\\\"",
+            "\"a\"b\"" to null,
+            "\"a\" b\"" to null,
+        ).forEach { (raw, fcitx) ->
+            assertEquals(raw, fcitx, FcitxUtils.unescapeForValue(raw))
+            assertEquals(raw, fcitx ?: raw, unescapeValue(raw))
+            // alone on a line, a value fcitx reads is split off as it reads it
+            if (fcitx != null) assertEquals(raw, listOf(fcitx), splitValues(raw))
+        }
     }
 
     @Test

@@ -13,6 +13,7 @@ put before a curator again.
 | `reject.tsv` | `word  kind  date  note`: never goes in |
 | `remove.tsv` | `word  kind  date  note`: a word of libime's dictionary (the base layer) that should not be there; left out when pinyin.data is compiled |
 | `readings.tsv` | `word  reading  date  note`: a word of libime's dictionary it reads wrongly; compiled under the readings listed here (a line each) instead |
+| `misreadings.tsv` | `word  reading  misreadings`: a word often read wrongly (般若, bō rě, read ban'ruo), its reading with tones (a space between syllables) and its misreadings as typed (`,` between them); compiled under both, a tenth as likely under a misreading, so either types it, and typed by a misreading its candidate shows the reading, tones and all |
 | `latin.words` | a word pack (`word  R'E'A'D'I'N'G  log10P`, layer `latin`): the Latin words typed inside Chinese, made by `tools/latin.py` from `tools/latin_counts.py`'s counts of FineWeb-2 (ODC-By 1.0) — not by hand; its junk goes in `reject.tsv` |
 
 Tab-separated, `#` starts a comment. A reading is `pin'yin`, a syllable a character, `v` for ü.
@@ -81,17 +82,24 @@ phrase shows as one. apply.py writes the unsure ones to `batch-NNN.unsure.txt`, 
 Every release's code tables (五笔, 二笔, 自然码 ...) take the words of pinyin.data, base dictionary and new-word
 pack alike, coded by each table's 组词规则 (`table --words --pinyin`, `TableText.addWords`); and so whenever new
 words are added or a pack is settled into the base dictionary, the tables are compiled again by the same rule,
-decided 2026-10-06 on measurements of 五笔 86 (share of words typed, weighted by use):
+decided 2026-10-06 on measurements of 五笔 86 (share of words typed, weighted by use) and since changed to keep
+every word the table ships:
 
 - Under each code of the longest length, the commonest first (the model's unigram, or the pack's score), so
-  space commits what is most likely meant: 61% of words typed first with the table alone, 74% now.
-- A word less than a tenth as common as the commonest of its code's others (characters, words not new) goes, the
-  table's own too (it is still typed character by character; one the user picked before stays theirs): a code
-  left with one candidate commits it by itself (唯一自动上屏). Punctuation and sayings with a comma stay: the
-  model counts none of them.
+  space commits what is most likely meant. `lib/ime-eval`'s `table <wbx.data> data/pinyin.tsv --preset wubi`
+  measured keeping the table's own rare words against the rule as first decided, which left them out (the same
+  set and tool build for both): 83.5% of the text's words are typed first (21.9% committed by themselves, 16.2% by
+  the next key), against 84.0% (24.6%, 15.1%); of the table's entries, 49.5% are first and 93.9% on page one,
+  against 49.4% and 93.6%.
+- An entry the table ships never goes, only moves by use: under 五笔's `wqvb`, 您好, added, comes before the
+  table's 你好. A code with two candidates or more does not commit by itself; one with a single candidate does
+  (唯一自动上屏).
+- A word added less than a tenth as common as the commonest of its code's others (characters, words not new)
+  goes; one the user picked before stays theirs.
 - A new word (the pack's) never goes and counts ten times its use: it is new, not rare; its count lags.
 - A character never goes. Codes shorter than the longest, the table's 简码, are left as they are, and a word goes
   in only where no key that led nowhere (顶屏) would lead on.
 
-Measured alternatives, for the record: new words before everything 59% first; no new words 61%; by use alone,
-new words unprotected, 78% first but the newest words lost.
+Measured alternatives, for the record, in the measurements of 2026-10-06 (an older set and tool build than the
+numbers above, where the rule as first decided typed 74% of words first): new words before everything 59% first;
+no new words 61%; by use alone, new words unprotected, 78% first but the newest words lost.

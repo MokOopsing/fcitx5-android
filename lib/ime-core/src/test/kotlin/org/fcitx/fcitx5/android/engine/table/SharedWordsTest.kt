@@ -4,25 +4,15 @@
  */
 package org.fcitx.fcitx5.android.engine.table
 
-import org.fcitx.fcitx5.android.engine.data.CodeTable
 import org.fcitx.fcitx5.android.engine.session.Action.Block
 import org.fcitx.fcitx5.android.engine.session.Action.Forget
-import org.fcitx.fcitx5.android.engine.session.Action.Key
 import org.fcitx.fcitx5.android.engine.session.Offer
-import org.fcitx.fcitx5.android.engine.session.Snapshot
 import org.junit.Assert.assertEquals
 import org.junit.Test
-import java.nio.ByteBuffer
 
 class SharedWordsTest {
 
-    private val wubi = CodeTable.Builder()
-        .header("键码", "abcdefghijklmnopqrstuvwxy")
-        .header("码长", "4")
-        .rule("e2", "p11+p12+p21+p22")
-        .apply { listOf("wqiy 你", "vbg 好", "wqvb 你好", "trnt 我", "wu 们", "wuyy 门", "wqwu 你们").forEach { e -> e.split(' ').let { entry(it[0], it[1]) } } }
-        .build().toByteArray()
-        .let { TableDictionary(CodeTable.load(ByteBuffer.wrap(it))) }
+    private val wubi = dictionary("wqiy 你", "vbg 好", "wqvb 你好", "trnt 我", "wu 们", "wuyy 门", "wqwu 你们")
 
     /** The other input methods as a test sees them: [words] shared, what was blocked and forgotten recorded. */
     private class Fake(table: TableDictionary, words: List<String>) : SharedWords {
@@ -39,12 +29,10 @@ class SharedWordsTest {
         }
     }
 
-    private fun TableSession.type(keys: String): Snapshot = keys.map { apply(Key(it)) }.last()
-
     @Test
     fun theUsersWordsAreCodedByTheRulesNoneTheTableHasSo() {
-        // 你好 the table's own; 我们 trwu; 们 alone a character; 好好 coded by a character with no
-        // second key? vbvb
+        // 你好 the table's own; 我们 trwu, listed twice, coded once; 们 a character; 好你 vbwq; x has
+        // no code
         val coded = CodedWords(wubi, listOf("你好", "我们", "们", "好你", "我们", "x你"))
         assertEquals(listOf("trwu" to "我们"), coded.words("tr"))
         assertEquals(listOf("vbwq" to "好你"), coded.words("vbw"))
@@ -58,7 +46,7 @@ class SharedWordsTest {
         val shared = Fake(wubi, listOf("你门", "你们"))
         val session = TableSession(wubi, TableOptions.WUBI, user = TableUser(wubi), shared = shared)
         // 你门 is wqwu as 你们 is: the table's first
-        assertEquals(listOf("你们", "你门"), session.type("wqwu").candidates)
+        assertEquals(listOf("你们", "你门"), session.type("wqwu").second.candidates)
         assertEquals(setOf(Offer.FORGET, Offer.BLOCK), session.offers(1))
         assertEquals(listOf("你们"), session.apply(Block(1)).candidates)
         assertEquals(setOf("你门"), shared.blocked)

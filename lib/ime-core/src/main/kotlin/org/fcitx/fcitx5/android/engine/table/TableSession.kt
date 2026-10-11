@@ -27,7 +27,8 @@ import org.fcitx.fcitx5.android.engine.session.Snapshot
  * candidates show their code here: the way to type a character whose code one does not know.
  * A table with pinyin entries of its own ([TableDictionary.pinyinMarker], 五笔拼音) mixes them in
  * instead, as libime does: any letter is typed, a code has no length limit, and the entries it
- * spells come after the table's codes, never first, showing their code.
+ * spells are sorted with the codes past those that come first, after a code as long and never
+ * first, showing their code. One left alone waits to be picked.
  *
  * A key of [TableOptions.endKeys] ends a code: the next key commits it. A key of
  * [TableOptions.selectionKeys] picks while there are candidates, a code key too, as in fcitx.
@@ -140,7 +141,7 @@ class TableSession(
             input.append(c)
             return snapshot(commit = commit)
         }
-        // a key no code starts is the app's, as fcitx hands it on: 晚风's , and . are its
+        // a key no code starts is the app's, as fcitx hands it on: a table's , and . may be its
         // punctuation, typed after a code as well as alone
         if (input.isEmpty() && !leadsAnywhere(c.toString())) {
             recent.clear()
@@ -164,8 +165,9 @@ class TableSession(
 
     /** Whether [item], the only candidate, is committed without asking. */
     private fun commitsItself(item: Item): Boolean {
-        // an auto phrase waits to be picked; so does a code found through the matching key
-        if (!options.autoSelect || item.auto) return false
+        // an auto phrase waits to be picked, and a pinyin entry, shown for the code to learn; so
+        // does a code found through the matching key
+        if (!options.autoSelect || item.auto || item.pinyin) return false
         return item.code == input.toString() && input.length <= table.maxLength && reaches(options.autoSelectLength)
     }
 
@@ -195,8 +197,9 @@ class TableSession(
         }
         // space on a code with no candidate drops it
         if (ranking[0] == null) return snapshot(commit = take(null))
-        val item = ranking[page * options.pageSize + index]
-        if (item == null || index !in 0 until options.pageSize) return snapshot()
+        // first: a selection key past the page would have candidates decoded beyond it
+        if (index !in 0 until options.pageSize) return snapshot()
+        val item = ranking[page * options.pageSize + index] ?: return snapshot()
         return snapshot(commit = take(item))
     }
 

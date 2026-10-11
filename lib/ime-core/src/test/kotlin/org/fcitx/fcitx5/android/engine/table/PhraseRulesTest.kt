@@ -50,6 +50,12 @@ class PhraseRulesTest {
     }
 
     @Test
+    fun aKeyNamedTwiceFromTheFrontIsTakenTwiceAsLibimeTakesIt() {
+        // 们 is the second character and the last: its first key for p21 and for n11
+        assertEquals("www", encode(PhraseRules(mapOf("e2" to "p11+p21+n11")), "你们"))
+    }
+
+    @Test
     fun theFirstRuleThatAppliesWins() {
         val rules = PhraseRules(linkedMapOf("a2" to "p11+n11", "e2" to "p11+p12+p21+p22"))
         assertEquals("ww", encode(rules, "你们"))

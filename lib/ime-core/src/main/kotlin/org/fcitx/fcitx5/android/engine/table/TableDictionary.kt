@@ -35,8 +35,9 @@ class TableDictionary(private val table: CodeTable) {
     /** Each character's longest code, and its 构词 code if the table gives one. */
     private class Reverse(val codes: Map<String, String>, val construct: Map<String, String>)
 
-    // Built on first use, as only phrases and pinyin lookups need it: a pass over the whole table,
-    // keeping characters alone (a phrase's code comes from the rules), as libime does.
+    // Built on first use: a pass over the whole table, keeping characters alone (a phrase's code
+    // comes from the rules), as libime does. With rules, that is a session's first key once the
+    // user has words: CodedWords codes them.
     private val reverse by lazy(LazyThreadSafetyMode.NONE) {
         val codes = HashMap<String, String>()
         val constructCodes = HashMap<String, String>()

@@ -26,10 +26,11 @@ package org.fcitx.fcitx5.android.engine.table
  *   longest code), become phrases typed by their 组词规则 code; 0 turns them off
  * @property saveAutoPhraseAfter an auto phrase typed this many times, character by character, or
  *   picked once, joins the table's own entries; 0 or less: only once picked
- * @property endKeys keys that end a code (a `.conf`'s EndKey, as 晚风's `,./;`): the next key starts another, the first
- *   candidate committed (fcitx's EndKey)
+ * @property endKeys keys that end a code (a `.conf`'s EndKey, punctuation such as `,./;`): the next
+ *   key starts another, the first candidate committed (fcitx's EndKey)
  * @property selectionKeys keys that pick a candidate while something is typed, the first key the
- *   first on the page: for a table whose codes are digits (a `.conf`'s Selection, as 电报码's `qwertyuiop`)
+ *   first on the page: for a table whose codes are digits (a `.conf`'s Selection, letters such
+ *   as `qwertyuiop`)
  */
 data class TableOptions(
     val autoSelect: Boolean = true,

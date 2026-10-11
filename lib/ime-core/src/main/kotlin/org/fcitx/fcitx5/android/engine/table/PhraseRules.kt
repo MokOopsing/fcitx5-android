@@ -37,17 +37,22 @@ class PhraseRules(rules: Map<String, String>) {
 
     private fun apply(rule: Rule, chars: List<String>, codeOf: (String) -> String?): String? {
         val out = StringBuilder()
-        val used = HashSet<Pair<Int, Int>>()
+        // each key taken: character, key, and whether counted from the code's end
+        val taken = HashSet<Triple<Int, Int, Boolean>>()
         // p00: a placeholder, some tables pad their rules with it
         for (part in rule.parts.filter { it.char != 0 }) {
             if (part.char > chars.size) return null
             val index = if (part.fromEnd) chars.size - part.char else part.char - 1
             val code = codeOf(chars[index]) ?: return null
             val at = if (part.key > 0) part.key - 1 else code.length + part.key
-            // a code shorter than the rule reaches is fine: 五笔's 工 is just a; and p11 and p1z
-            // name the same key of a one-key code, taken once (libime takes it twice; no shipped
-            // table's rules name keys from the end)
-            if (at in code.indices && used.add(index to at)) out.append(code[at])
+            val keyFromEnd = part.key < 0
+            // a code shorter than the rule reaches is fine: 五笔's 工 is just a; and a key named from
+            // the front and from the end, as p11 and p1z of a one-key code, is taken once (libime
+            // takes it twice; no shipped table's rules name keys from the end)
+            if (at in code.indices && Triple(index, at, !keyFromEnd) !in taken) {
+                out.append(code[at])
+                taken += Triple(index, at, keyFromEnd)
+            }
         }
         return if (out.isEmpty()) null else out.toString()
     }
