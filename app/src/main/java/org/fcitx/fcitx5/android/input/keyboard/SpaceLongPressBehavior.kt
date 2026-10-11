@@ -13,6 +13,10 @@ enum class SpaceLongPressBehavior(override val stringRes: Int) : ManagedPreferen
     ToggleActivate(R.string.space_behavior_activate),
     ShowPicker(R.string.space_behavior_picker),
 
-    /** a voice build's default; a text build lists it not, and does nothing for it */
+    /** the default in a voice build; a text build does not list it, and holding the space then does nothing */
     Voice(R.string.voice_input);
+
+    /** Whether holding the space talks; never in a password field, as a password is not to be said aloud. */
+    fun talks(voiceAvailable: Boolean, inPasswordField: Boolean): Boolean =
+        this == Voice && voiceAvailable && !inPasswordField
 }

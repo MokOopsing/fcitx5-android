@@ -199,6 +199,7 @@ class AutoScaleTextView @JvmOverloads constructor(
     }
 
     override fun getBaseline(): Int {
-        return paddingTop + baselineY.roundToInt()
+        // baselineY is measured from the view's top, padding included
+        return baselineY.roundToInt()
     }
 }

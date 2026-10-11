@@ -17,7 +17,7 @@ import org.junit.Test
  */
 class KeyGestureRecognizerTest {
 
-    /** A key 100x50, slop 8, swipe thresholds 24, everything enabled unless a test says otherwise. */
+    /** A key 100x50, slop 8, swipe thresholds 24, swipe enabled, everything else off unless a test says otherwise. */
     private fun recognizer(
         swipe: Boolean = true,
         longPress: Boolean = false,
@@ -348,19 +348,19 @@ class KeyGestureRecognizerTest {
     }
 
     /**
-     * Pins an upstream quirk: the consumed flag is only cleared between touches on keys that
-     * swipe, so on any other key a consumed gesture blocks the click on every later tap. The
-     * gesture listeners only consume on swiping keys today, which is why it does not bite.
+     * The consumed flag is cleared between touches on every key, not only on keys that swipe:
+     * else a gesture a listener consumed on any other key would block the click on every later tap.
      */
     @Test
-    fun onAKeyThatDoesNotSwipeAConsumedGestureOutlivesTheTouch() {
+    fun onAKeyThatDoesNotSwipeTheConsumedFlagIsClearedForTheNextTouch() {
         val r = recognizer(swipe = false)
         r.onDown(50f, 25f)
         r.markGestureConsumed()
-        r.onUp(1000L, false, false)
+        assertFalse(r.onUp(1000L, longPressTriggered = false, repeatStarted = false).performClick)
         r.resetForNextTouch()
+        assertFalse(r.gestureConsumed)
         r.onDown(50f, 25f)
-        assertFalse(r.onUp(2000L, false, false).performClick)
+        assertTrue(r.onUp(2000L, longPressTriggered = false, repeatStarted = false).performClick)
     }
 
     @Test
@@ -368,10 +368,10 @@ class KeyGestureRecognizerTest {
         val r = recognizer(swipe = true)
         r.onDown(50f, 25f)
         r.markGestureConsumed()
-        r.onUp(1000L, false, false)
+        r.onUp(1000L, longPressTriggered = false, repeatStarted = false)
         r.resetForNextTouch()
         r.onDown(50f, 25f)
-        assertTrue(r.onUp(2000L, false, false).performClick)
+        assertTrue(r.onUp(2000L, longPressTriggered = false, repeatStarted = false).performClick)
     }
 
     /** A swipe the listener ignored still leaves the tap eligible to be a click. */
@@ -391,55 +391,69 @@ class KeyGestureRecognizerTest {
     fun twoTapsInsideTheWindowAreADoubleTap() {
         val r = recognizer(doubleTap = true)
         r.onDown(50f, 25f)
-        val first = r.onUp(1000L, false, false)
+        val first = r.onUp(1000L, longPressTriggered = false, repeatStarted = false)
         assertTrue(first.performClick)
         assertFalse("the first tap is an ordinary click", first.isDoubleTap)
         r.resetForNextTouch()
 
         r.onDown(50f, 25f)
-        val second = r.onUp(1200L, false, false)
+        val second = r.onUp(1200L, longPressTriggered = false, repeatStarted = false)
         assertTrue(second.isDoubleTap)
     }
 
     @Test
     fun theWindowIsInclusiveAtItsEdge() {
         val r = recognizer(doubleTap = true)
-        r.onDown(50f, 25f); r.onUp(1000L, false, false); r.resetForNextTouch()
         r.onDown(50f, 25f)
-        assertTrue("exactly at the timeout still counts", r.onUp(1300L, false, false).isDoubleTap)
+        r.onUp(1000L, longPressTriggered = false, repeatStarted = false)
+        r.resetForNextTouch()
+        r.onDown(50f, 25f)
+        assertTrue("exactly at the timeout still counts", r.onUp(1300L, longPressTriggered = false, repeatStarted = false).isDoubleTap)
     }
 
     @Test
     fun twoTapsTooFarApartAreTwoSingleTaps() {
         val r = recognizer(doubleTap = true)
-        r.onDown(50f, 25f); r.onUp(1000L, false, false); r.resetForNextTouch()
         r.onDown(50f, 25f)
-        assertFalse(r.onUp(1301L, false, false).isDoubleTap)
+        r.onUp(1000L, longPressTriggered = false, repeatStarted = false)
+        r.resetForNextTouch()
+        r.onDown(50f, 25f)
+        assertFalse(r.onUp(1301L, longPressTriggered = false, repeatStarted = false).isDoubleTap)
     }
 
     /**
-     * Pins an upstream quirk: a touch that is not a click (here one that wandered off the key)
-     * does not disarm a pending double tap, so tap, wander, tap within the window still counts
-     * as a double tap. Change deliberately if this is ever judged wrong.
+     * A touch that is not a click (here one that wandered off the key) disarms a pending double
+     * tap: on shift, tap, wander, tap within the window must not lock caps.
      */
     @Test
-    fun aNonClickBetweenTwoTapsDoesNotDisarmTheDoubleTap() {
+    fun aNonClickBetweenTwoTapsDisarmsTheDoubleTap() {
         val r = recognizer(doubleTap = true)
-        r.onDown(50f, 25f); r.onUp(1000L, false, false); r.resetForNextTouch()
-        r.onDown(50f, 25f); r.move(500f, 25f)
-        assertFalse("the wander is no click", r.onUp(1100L, false, false).performClick)
+        r.onDown(50f, 25f)
+        r.onUp(1000L, longPressTriggered = false, repeatStarted = false)
         r.resetForNextTouch()
         r.onDown(50f, 25f)
-        assertTrue(r.onUp(1200L, false, false).isDoubleTap)
+        r.move(500f, 25f)
+        assertFalse("the wander is no click", r.onUp(1100L, longPressTriggered = false, repeatStarted = false).performClick)
+        r.resetForNextTouch()
+        r.onDown(50f, 25f)
+        assertFalse("a tap again, not the second of a double tap", r.onUp(1200L, longPressTriggered = false, repeatStarted = false).isDoubleTap)
+        r.resetForNextTouch()
+        r.onDown(50f, 25f)
+        assertTrue("which it starts", r.onUp(1300L, longPressTriggered = false, repeatStarted = false).isDoubleTap)
     }
 
     /** Three quick taps are one double tap then a fresh single, not two overlapping doubles. */
     @Test
     fun threeQuickTapsDoNotProduceTwoDoubleTaps() {
         val r = recognizer(doubleTap = true)
-        r.onDown(50f, 25f); assertFalse(r.onUp(1000L, false, false).isDoubleTap); r.resetForNextTouch()
-        r.onDown(50f, 25f); assertTrue(r.onUp(1100L, false, false).isDoubleTap); r.resetForNextTouch()
-        r.onDown(50f, 25f); assertFalse(r.onUp(1200L, false, false).isDoubleTap)
+        r.onDown(50f, 25f)
+        assertFalse(r.onUp(1000L, longPressTriggered = false, repeatStarted = false).isDoubleTap)
+        r.resetForNextTouch()
+        r.onDown(50f, 25f)
+        assertTrue(r.onUp(1100L, longPressTriggered = false, repeatStarted = false).isDoubleTap)
+        r.resetForNextTouch()
+        r.onDown(50f, 25f)
+        assertFalse(r.onUp(1200L, longPressTriggered = false, repeatStarted = false).isDoubleTap)
     }
 
     @Test
@@ -447,19 +461,21 @@ class KeyGestureRecognizerTest {
         val r = recognizer(doubleTap = true)
         r.onDown(50f, 25f)
         r.move(200f, 25f)
-        assertFalse(r.onUp(1000L, false, false).performClick)
+        assertFalse(r.onUp(1000L, longPressTriggered = false, repeatStarted = false).performClick)
         r.resetForNextTouch()
 
         r.onDown(50f, 25f)
-        assertFalse("the discarded tap does not arm the double tap", r.onUp(1100L, false, false).isDoubleTap)
+        assertFalse("the discarded tap does not arm the double tap", r.onUp(1100L, longPressTriggered = false, repeatStarted = false).isDoubleTap)
     }
 
     @Test
     fun doubleTapIsNeverReportedWhenDisabled() {
         val r = recognizer(doubleTap = false)
-        r.onDown(50f, 25f); r.onUp(1000L, false, false); r.resetForNextTouch()
         r.onDown(50f, 25f)
-        val outcome = r.onUp(1100L, false, false)
+        r.onUp(1000L, longPressTriggered = false, repeatStarted = false)
+        r.resetForNextTouch()
+        r.onDown(50f, 25f)
+        val outcome = r.onUp(1100L, longPressTriggered = false, repeatStarted = false)
         assertTrue(outcome.performClick)
         assertFalse(outcome.isDoubleTap)
     }
@@ -475,7 +491,7 @@ class KeyGestureRecognizerTest {
         r.move(48f, 24f)
         r.move(200f, 25f)
         r.markGestureConsumed()
-        r.onUp(1000L, false, false)
+        r.onUp(1000L, longPressTriggered = false, repeatStarted = false)
 
         r.resetForNextTouch()
         assertFalse(r.touchMovedOutside)
@@ -489,23 +505,23 @@ class KeyGestureRecognizerTest {
     fun resetKeepsTheDoubleTapArmed() {
         val r = recognizer(doubleTap = true)
         r.onDown(50f, 25f)
-        assertTrue("a clean tap arms the double tap", r.onUp(1000L, false, false).performClick)
+        assertTrue("a clean tap arms the double tap", r.onUp(1000L, longPressTriggered = false, repeatStarted = false).performClick)
 
         r.resetForNextTouch()
 
         r.onDown(50f, 25f)
-        assertTrue("the armed double tap survived the reset", r.onUp(1100L, false, false).isDoubleTap)
+        assertTrue("the armed double tap survived the reset", r.onUp(1100L, longPressTriggered = false, repeatStarted = false).isDoubleTap)
     }
 
     @Test
     fun cancelAlsoForgetsTheArmedDoubleTap() {
         val r = recognizer(doubleTap = true)
         r.onDown(50f, 25f)
-        r.onUp(1000L, false, false)
+        r.onUp(1000L, longPressTriggered = false, repeatStarted = false)
         r.cancel()
 
         r.onDown(50f, 25f)
-        assertFalse(r.onUp(1100L, false, false).isDoubleTap)
+        assertFalse(r.onUp(1100L, longPressTriggered = false, repeatStarted = false).isDoubleTap)
     }
 
     @Test
@@ -539,7 +555,7 @@ class KeyGestureRecognizerTest {
         r.onDown(50f, 40f)
         val outcome = r.move(50f, -8f)
         assertEquals(-2, outcome.countY)
-        assertFalse(r.onUp(1000L, false, false).performClick)
+        assertFalse(r.onUp(1000L, longPressTriggered = false, repeatStarted = false).performClick)
     }
 
     /** Tap and drag slightly, staying within threshold: still an ordinary click. */
@@ -549,7 +565,7 @@ class KeyGestureRecognizerTest {
         r.onDown(50f, 25f)
         r.move(53f, 27f)
         r.move(51f, 24f)
-        assertTrue(r.onUp(1000L, false, false).performClick)
+        assertTrue(r.onUp(1000L, longPressTriggered = false, repeatStarted = false).performClick)
         assertEquals(0, r.swipeTotalX)
     }
 
@@ -572,11 +588,11 @@ class KeyGestureRecognizerTest {
         val r = recognizer(swipe = true)
         r.onDown(50f, 50f)
         r.swipeThresholdX = 48f
-        assertEquals(2, r.onMove(50f + 48f, 50f, false, false).countX)
+        assertEquals(2, r.onMove(50f + 48f, 50f, longPressTriggered = false, repeatStarted = false).countX)
         r.onUp(0L, longPressTriggered = false, repeatStarted = false)
         r.resetForNextTouch()
         r.onDown(50f, 50f)
-        assertEquals(1, r.onMove(50f + 48f, 50f, false, false).countX)
+        assertEquals(1, r.onMove(50f + 48f, 50f, longPressTriggered = false, repeatStarted = false).countX)
     }
 
     @Test
@@ -584,11 +600,11 @@ class KeyGestureRecognizerTest {
         val r = recognizer(swipe = false)
         r.onDown(50f, 50f)
         r.swipeEnabled = true
-        assertFalse(r.onMove(50f + 3 * 24f, 50f, false, false).dispatchMove)
-        r.onUp(0L, false, false)
+        assertFalse(r.onMove(50f + 3 * 24f, 50f, longPressTriggered = false, repeatStarted = false).dispatchMove)
+        r.onUp(0L, longPressTriggered = false, repeatStarted = false)
         r.resetForNextTouch()
         r.onDown(50f, 50f)
-        assertEquals(3, r.onMove(50f + 3 * 24f, 50f, false, false).countX)
+        assertEquals(3, r.onMove(50f + 3 * 24f, 50f, longPressTriggered = false, repeatStarted = false).countX)
     }
 
     /** The long-press timer was started at DOWN; leaving the key must still cancel it. */
@@ -597,7 +613,7 @@ class KeyGestureRecognizerTest {
         val r = recognizer(swipe = false, longPress = true)
         r.onDown(50f, 25f)
         r.longPressEnabled = false
-        assertTrue(r.onMove(500f, 25f, false, false).cancelLongPress)
+        assertTrue(r.onMove(500f, 25f, longPressTriggered = false, repeatStarted = false).cancelLongPress)
     }
 
     @Test
@@ -605,7 +621,7 @@ class KeyGestureRecognizerTest {
         val r = recognizer(swipe = false, repeat = true)
         r.onDown(50f, 25f)
         r.repeatEnabled = false
-        assertTrue(r.onMove(500f, 25f, false, false).cancelRepeat)
+        assertTrue(r.onMove(500f, 25f, longPressTriggered = false, repeatStarted = false).cancelRepeat)
     }
 
     @Test
@@ -613,40 +629,46 @@ class KeyGestureRecognizerTest {
         val r = recognizer(swipe = true, swipeRepeat = true)
         r.onDown(50f, 25f)
         r.swipeRepeatEnabled = false
-        r.onMove(50f + 24f, 25f, false, false)
+        r.onMove(50f + 24f, 25f, longPressTriggered = false, repeatStarted = false)
         assertTrue(r.swipeRepeatTriggered)
-        assertFalse("a swipe is not a click", r.onUp(0L, false, false).performClick)
+        assertFalse("a swipe is not a click", r.onUp(0L, longPressTriggered = false, repeatStarted = false).performClick)
     }
 
     @Test
     fun theDoubleTapWindowIsTheOneTheTouchBeganWith() {
         val r = recognizer(swipe = false, doubleTap = true).apply { doubleTapTimeoutMs = 300 }
-        r.onDown(50f, 25f); r.onUp(1000L, false, false); r.resetForNextTouch()
+        r.onDown(50f, 25f)
+        r.onUp(1000L, longPressTriggered = false, repeatStarted = false)
+        r.resetForNextTouch()
         r.onDown(50f, 25f)
         r.doubleTapTimeoutMs = 100
-        assertTrue(r.onUp(1250L, false, false).isDoubleTap)
+        assertTrue(r.onUp(1250L, longPressTriggered = false, repeatStarted = false).isDoubleTap)
     }
 
     @Test
     fun turningDoubleTapOffMidTouchStillCompletesTheDoubleTap() {
         val r = recognizer(swipe = false, doubleTap = true).apply { doubleTapTimeoutMs = 300 }
-        r.onDown(50f, 25f); r.onUp(1000L, false, false); r.resetForNextTouch()
+        r.onDown(50f, 25f)
+        r.onUp(1000L, longPressTriggered = false, repeatStarted = false)
+        r.resetForNextTouch()
         r.onDown(50f, 25f)
         r.doubleTapEnabled = false
-        assertTrue(r.onUp(1100L, false, false).isDoubleTap)
+        assertTrue(r.onUp(1100L, longPressTriggered = false, repeatStarted = false).isDoubleTap)
     }
 
     /** A cancel mid-touch forgets the armed double tap even if double tap was turned off meanwhile. */
     @Test
     fun aCancelUsesTheTouchsSettingsToo() {
         val r = recognizer(swipe = false, doubleTap = true).apply { doubleTapTimeoutMs = 300 }
-        r.onDown(50f, 25f); r.onUp(1000L, false, false); r.resetForNextTouch()
+        r.onDown(50f, 25f)
+        r.onUp(1000L, longPressTriggered = false, repeatStarted = false)
+        r.resetForNextTouch()
         r.onDown(50f, 25f)
         r.doubleTapEnabled = false
         r.cancel()
         r.doubleTapEnabled = true
         r.onDown(50f, 25f)
-        assertFalse(r.onUp(1100L, false, false).isDoubleTap)
+        assertFalse(r.onUp(1100L, longPressTriggered = false, repeatStarted = false).isDoubleTap)
     }
 
     /** The touch that swiped is cleaned up as a swiping touch, even if swipe is off by then. */
@@ -654,9 +676,9 @@ class KeyGestureRecognizerTest {
     fun aSwipeCutShortBySettingsStillLeavesNoTotalsBehind() {
         val r = recognizer(swipe = true)
         r.onDown(50f, 50f)
-        r.onMove(50f + 2 * 24f, 50f, false, false)
+        r.onMove(50f + 2 * 24f, 50f, longPressTriggered = false, repeatStarted = false)
         r.swipeEnabled = false
-        r.onUp(0L, false, false)
+        r.onUp(0L, longPressTriggered = false, repeatStarted = false)
         r.resetForNextTouch()
         assertEquals(0, r.swipeTotalX)
     }

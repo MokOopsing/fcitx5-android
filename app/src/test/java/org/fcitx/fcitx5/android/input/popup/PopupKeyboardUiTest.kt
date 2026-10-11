@@ -90,21 +90,24 @@ class PopupKeyboardUiTest {
     @Test
     fun aCentredPopupTypesTheKeyUnderTheFinger() {
         val centre = Rect(480, 500, 520, 550)
-        for (count in 1..23) assertTypedWhereDrawn(count, centre)
+        // the user's own list (PopupOverrides) can be any length
+        for (count in 1..30) assertTypedWhereDrawn(count, centre)
     }
 
     @Test
     fun aPopupAtAnEdgeTypesTheKeyUnderTheFinger() {
-        assertTypedWhereDrawn(13, Rect(0, 500, 40, 550))
-        assertTypedWhereDrawn(13, Rect(960, 500, 1000, 550))
+        // a short top row: one empty slot (7), two (13, 18), three (17)
+        for (count in listOf(7, 13, 17, 18)) {
+            assertTypedWhereDrawn(count, Rect(0, 500, 40, 550))
+            assertTypedWhereDrawn(count, Rect(960, 500, 1000, 550))
+        }
     }
 
     @Test
     fun theTopRowKeepsItsEmptySlots() {
-        val root = popup(13, Rect(480, 500, 520, 550)).root
-        for (r in 0 until root.childCount) {
-            assertEquals("row $r has a slot per column", 5, (root.getChildAt(r) as ViewGroup).childCount)
-        }
+        // 13 keys, 5 columns: the top row's 3 are drawn in the middle columns, not packed to one side
+        val keys = drawn(popup(13, Rect(480, 500, 520, 550)))
+        assertEquals(setOf(1, 2, 3), keys.values.filter { it.first == 2 }.map { it.second }.toSet())
     }
 
     /** The long press and a letter's swipe (its first) type a pick the same way. */
@@ -117,5 +120,7 @@ class PopupKeyboardUiTest {
         assertEquals(KeyAction.CommitAction("Émile"), PopupKeyboardUi.keyAction("Émile"))
         // spells a key name, still text
         assertEquals(KeyAction.CommitAction("Tab"), PopupKeyboardUi.keyAction("Tab"))
+        // one letter to the eye (Yiddish ײַ), two code points: text
+        assertEquals(KeyAction.CommitAction("\u05F2\u05B7"), PopupKeyboardUi.keyAction("\u05F2\u05B7"))
     }
 }

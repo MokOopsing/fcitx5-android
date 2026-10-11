@@ -25,7 +25,6 @@ import org.junit.Test
  */
 class KawaiiBarStateMachineTest {
 
-
     private val seen = mutableListOf<State>()
 
     /** Builds a machine parked in [state] with the given flags, listener history cleared. */

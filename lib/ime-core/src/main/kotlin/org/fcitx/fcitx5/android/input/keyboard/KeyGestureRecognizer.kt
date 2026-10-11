@@ -22,8 +22,6 @@ package org.fcitx.fcitx5.android.input.keyboard
  */
 class KeyGestureRecognizer {
 
-    enum class SwipeAxis { X, Y }
-
     /** Which pending timers this sample invalidates. */
     data class MoveOutcome(
         /** The finger has just left the key's (slop-expanded) bounds on this sample. */
@@ -105,16 +103,36 @@ class KeyGestureRecognizer {
     var swipeRepeatTriggered: Boolean = false
         private set
 
-    var swipeTotalX: Int = 0
-        private set
+    /** One axis of a swipe: where the finger last was, what is carried toward the next step, and the steps so far. */
+    private class SwipeAxis {
+        var last = -1f
+        var unconsumed = 0f
+        var total = 0
 
-    var swipeTotalY: Int = 0
-        private set
+        /**
+         * How many whole [threshold]s the finger crossed since the last sample, carrying the
+         * remainder forward so a slow drag still accumulates.
+         */
+        fun consume(current: Float, threshold: Float): Int {
+            val moved = current - last + unconsumed
+            unconsumed = moved % threshold
+            val count = (moved / threshold).toInt()
+            total += count
+            return count
+        }
 
-    private var swipeLastX = -1f
-    private var swipeLastY = -1f
-    private var swipeXUnconsumed = 0f
-    private var swipeYUnconsumed = 0f
+        fun reset() {
+            unconsumed = 0f
+            total = 0
+        }
+    }
+
+    private val swipeX = SwipeAxis()
+    private val swipeY = SwipeAxis()
+
+    val swipeTotalX: Int get() = swipeX.total
+
+    val swipeTotalY: Int get() = swipeY.total
 
     private var maybeDoubleTap = false
     private var lastClickTime = 0L
@@ -129,8 +147,8 @@ class KeyGestureRecognizer {
     fun onDown(x: Float, y: Float) {
         frozen = live()
         if (settings.swipe) {
-            swipeLastX = x
-            swipeLastY = y
+            swipeX.last = x
+            swipeY.last = y
         }
     }
 
@@ -171,15 +189,15 @@ class KeyGestureRecognizer {
         }
 
         // both axes read the *previous* anchor, so consume before moving it
-        val countX = consumeSwipe(x, SwipeAxis.X, settings)
-        val countY = consumeSwipe(y, SwipeAxis.Y, settings)
+        val countX = swipeX.consume(x, settings.swipeThresholdX)
+        val countY = swipeY.consume(y, settings.swipeThresholdY)
         if (countX != 0 || countY != 0) {
             if (settings.swipeRepeat) swipeRepeatTriggered = true
             if (settings.longPress && !longPressTriggered) cancelLongPress = true
             if (settings.repeat && !repeatStarted) cancelRepeat = true
         }
-        swipeLastX = x
-        swipeLastY = y
+        swipeX.last = x
+        swipeY.last = y
 
         return MoveOutcome(
             movedOutsideNow = movedOutsideNow,
@@ -196,7 +214,8 @@ class KeyGestureRecognizer {
      * Decides what a finger lift means. Call before [resetForNextTouch]: the decision depends
      * on state this touch accumulated.
      *
-     * @param nowMs wall-clock milliseconds, used only for the double-tap window
+     * @param nowMs the lift's time on a clock that does not jump (the touch's eventTime), used
+     * only for the double-tap window
      */
     fun onUp(nowMs: Long, longPressTriggered: Boolean, repeatStarted: Boolean): UpOutcome {
         val shouldPerformClick = !(touchMovedOutside ||
@@ -204,7 +223,11 @@ class KeyGestureRecognizer {
                 repeatStarted ||
                 swipeRepeatTriggered ||
                 gestureConsumed)
-        if (!shouldPerformClick) return UpOutcome(performClick = false, isDoubleTap = false)
+        if (!shouldPerformClick) {
+            // a touch that was no click ends a pending double tap: tap, slide off, tap does not lock caps
+            maybeDoubleTap = false
+            return UpOutcome(performClick = false, isDoubleTap = false)
+        }
         if (!settings.doubleTap) return UpOutcome(performClick = true, isDoubleTap = false)
 
         val isDoubleTap = maybeDoubleTap && nowMs - lastClickTime <= settings.doubleTapTimeoutMs
@@ -223,12 +246,11 @@ class KeyGestureRecognizer {
         touchMovedOutside = false
         if (settings.swipe) {
             if (settings.swipeRepeat) swipeRepeatTriggered = false
-            swipeXUnconsumed = 0f
-            swipeYUnconsumed = 0f
-            swipeTotalX = 0
-            swipeTotalY = 0
-            gestureConsumed = false
+            swipeX.reset()
+            swipeY.reset()
         }
+        // on any key: a listener may consume a gesture on one that does not swipe
+        gestureConsumed = false
     }
 
     /** A cancelled gesture also forgets the pending double tap. */
@@ -239,37 +261,5 @@ class KeyGestureRecognizer {
             maybeDoubleTap = false
             lastClickTime = 0
         }
-    }
-
-    /**
-     * How many whole thresholds the finger crossed on [axis] since the last sample, carrying
-     * the remainder forward so a slow drag still accumulates.
-     */
-    private fun consumeSwipe(current: Float, axis: SwipeAxis, settings: Settings): Int {
-        val unconsumed: Float
-        val threshold: Float
-        when (axis) {
-            SwipeAxis.X -> {
-                unconsumed = current - swipeLastX + swipeXUnconsumed
-                threshold = settings.swipeThresholdX
-            }
-            SwipeAxis.Y -> {
-                unconsumed = current - swipeLastY + swipeYUnconsumed
-                threshold = settings.swipeThresholdY
-            }
-        }
-        val remains = unconsumed % threshold
-        val count = (unconsumed / threshold).toInt()
-        when (axis) {
-            SwipeAxis.X -> {
-                swipeXUnconsumed = remains
-                swipeTotalX += count
-            }
-            SwipeAxis.Y -> {
-                swipeYUnconsumed = remains
-                swipeTotalY += count
-            }
-        }
-        return count
     }
 }

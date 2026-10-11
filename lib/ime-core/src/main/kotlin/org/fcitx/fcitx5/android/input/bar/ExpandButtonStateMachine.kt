@@ -12,7 +12,6 @@ import org.fcitx.fcitx5.android.utils.BuildTransitionEvent
 import org.fcitx.fcitx5.android.utils.EventStateMachine
 import org.fcitx.fcitx5.android.utils.TransitionBuildBlock
 
-
 object ExpandButtonStateMachine {
     enum class State {
         ClickToAttachWindow,
@@ -41,7 +40,7 @@ object ExpandButtonStateMachine {
 
     fun new(block: (State) -> Unit) =
         EventStateMachine<State, TransitionEvent, BooleanKey>(
-            initialState =  Hidden,
+            initialState = Hidden,
             externalBooleanStates = mutableMapOf(
                 ExpandedCandidatesEmpty to true
             )
@@ -49,4 +48,3 @@ object ExpandButtonStateMachine {
             onNewStateListener = block
         }
 }
-

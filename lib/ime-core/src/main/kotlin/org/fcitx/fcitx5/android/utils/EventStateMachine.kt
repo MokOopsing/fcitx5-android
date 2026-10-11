@@ -74,6 +74,9 @@ class TransitionEventBuilder<State : Any, B : EventStateMachine.BooleanStateKey>
     inner class Builder(val source: State) {
         lateinit var target: State
         var pred: ((B) -> Boolean?) -> Boolean = { _ -> true }
+
+        // what the verbose log shows of a rule; a rule without a target must not make it throw
+        override fun toString() = "$source -> ${if (::target.isInitialized) target else "?"}"
     }
 
     infix fun Builder.transitTo(state: State) = apply {

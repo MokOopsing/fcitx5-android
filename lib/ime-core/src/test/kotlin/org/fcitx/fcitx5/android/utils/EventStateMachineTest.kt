@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.utils
 
+import org.fcitx.fcitx5.android.core.CoreLog
 import org.fcitx.fcitx5.android.utils.EventStateMachineTest.Key.Flag
 import org.fcitx.fcitx5.android.utils.EventStateMachineTest.Key.Other
 import org.fcitx.fcitx5.android.utils.EventStateMachineTest.S.A
@@ -245,6 +246,26 @@ class EventStateMachineTest {
         }
         val m = machine().apply { push(event) }
         assertEquals(B, m.currentState)
+    }
+
+    /** The verbose log names the rules that matched, not the objects that hold them. */
+    @Test
+    fun severalMatchingRulesAreLoggedAsTheirTransitions() {
+        val logged = ArrayList<String>()
+        CoreLog.sink = { logged += it }
+        CoreLog.verbose = true
+        try {
+            machine().push(
+                dsl {
+                    from(A) transitTo B
+                    from(A) transitTo C
+                }
+            )
+        } finally {
+            CoreLog.sink = null
+            CoreLog.verbose = false
+        }
+        assertTrue(logged.toString(), logged.any { "A -> B, A -> C" in it })
     }
 
     @Test

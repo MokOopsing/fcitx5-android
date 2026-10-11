@@ -38,13 +38,13 @@ object IdleUiPolicy {
      * The last step is an XOR: the toolbar is on by default when [Inputs.expandToolbarByDefault]
      * and toggling flips it either way.
      */
-    fun decide(i: Inputs): Display = when {
-        i.numberRowMode == NumberRowMode.ForceShow -> Display.NumberRow
-        i.isClipboardFresh -> Display.Clipboard
-        i.isInlineSuggestionPresent -> Display.InlineSuggestion
-        i.isPasswordField && !i.isNumberLayout && i.numberRowMode != NumberRowMode.ForceHide ->
+    fun decide(inputs: Inputs): Display = when {
+        inputs.numberRowMode == NumberRowMode.ForceShow -> Display.NumberRow
+        inputs.isClipboardFresh -> Display.Clipboard
+        inputs.isInlineSuggestionPresent -> Display.InlineSuggestion
+        inputs.isPasswordField && !inputs.isNumberLayout && inputs.numberRowMode != NumberRowMode.ForceHide ->
             Display.NumberRow
-        i.expandToolbarByDefault == i.isToolbarManuallyToggled -> Display.Empty
+        inputs.expandToolbarByDefault == inputs.isToolbarManuallyToggled -> Display.Empty
         else -> Display.Toolbar
     }
 }

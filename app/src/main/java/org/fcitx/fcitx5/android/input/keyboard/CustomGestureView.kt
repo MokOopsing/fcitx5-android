@@ -19,7 +19,6 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.fcitx.fcitx5.android.data.InputFeedbacks
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
-import org.fcitx.fcitx5.android.input.BaseInputView
 
 open class CustomGestureView(ctx: Context) : FrameLayout(ctx) {
 
@@ -59,7 +58,10 @@ open class CustomGestureView(ctx: Context) : FrameLayout(ctx) {
 
     @Volatile
     private var longPressTriggered = false
-    private var touchPointer = MotionEvent.INVALID_POINTER_ID
+
+    /** the finger on this key, by the id the keyboard's touch gives it */
+    var touchPointer = MotionEvent.INVALID_POINTER_ID
+        private set
     var longPressEnabled
         get() = recognizer.longPressEnabled
         set(value) {
@@ -180,9 +182,6 @@ open class CustomGestureView(ctx: Context) : FrameLayout(ctx) {
                         if (longPressFeedbackEnabled) {
                             InputFeedbacks.hapticFeedback(this@CustomGestureView, true)
                         }
-                        // the finger a hold to talk this long press may start is to follow
-                        generateSequence(parent) { it.parent }.filterIsInstance<BaseInputView>().firstOrNull()
-                            ?.longPressPointer = touchPointer
                         longPressTriggered = performLongClick()
                     }
                 }
@@ -207,7 +206,7 @@ open class CustomGestureView(ctx: Context) : FrameLayout(ctx) {
                 InputFeedbacks.hapticFeedback(this, longPress = true, keyUp = true)
                 dispatchGestureEvent(GestureType.Up, event.x, event.y)
                 val outcome = recognizer.onUp(
-                    nowMs = System.currentTimeMillis(),
+                    nowMs = event.eventTime,
                     longPressTriggered = longPressTriggered,
                     repeatStarted = repeatStarted,
                 )

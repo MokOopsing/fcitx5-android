@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.input.keyboard
 
+import android.view.MotionEvent
 import org.fcitx.fcitx5.android.core.KeyStates
 import org.fcitx.fcitx5.android.core.KeySym
 import org.fcitx.fcitx5.android.core.ScancodeMapping
@@ -42,7 +43,8 @@ sealed class KeyAction {
 
     data class PickerSwitchAction(val key: PickerWindow.Key? = null) : KeyAction()
 
-    data object SpaceLongPressAction : KeyAction()
+    /** [pointer]: the finger holding the key, which hold to talk follows */
+    data class SpaceLongPressAction(val pointer: Int = MotionEvent.INVALID_POINTER_ID) : KeyAction()
 
     /** The symbol panel's 返回: the keyboard it was opened from. */
     data object PanelBackAction : KeyAction()

@@ -16,6 +16,9 @@ class SingleDividerDecoration(val drawable: Drawable, val index: Int) : Recycler
 
     private val dividerHeight = max(drawable.intrinsicHeight, 1)
 
+    /** The list's start and end item padding, looked up on the first draw, not on every frame. */
+    private var insets: Pair<Int, Int>? = null
+
     override fun getItemOffsets(
         outRect: Rect,
         view: View,
@@ -32,9 +35,11 @@ class SingleDividerDecoration(val drawable: Drawable, val index: Int) : Recycler
 
     override fun onDraw(c: Canvas, parent: RecyclerView, state: RecyclerView.State) {
         val view = parent.findViewHolderForAdapterPosition(index)?.itemView ?: return
+        val (l, r) = insets ?: Pair(
+            parent.styledDimenPxSize(android.R.attr.listPreferredItemPaddingStart),
+            parent.styledDimenPxSize(android.R.attr.listPreferredItemPaddingEnd)
+        ).also { insets = it }
         drawable.apply {
-            val l = parent.styledDimenPxSize(android.R.attr.listPreferredItemPaddingStart)
-            val r = parent.styledDimenPxSize(android.R.attr.listPreferredItemPaddingEnd)
             setBounds(view.left + l, view.top - dividerHeight, view.right - r, view.top)
             draw(c)
         }

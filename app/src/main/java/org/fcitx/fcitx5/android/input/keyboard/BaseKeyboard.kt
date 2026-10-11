@@ -18,6 +18,8 @@ import kotlin.math.roundToInt
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.FcitxKeyMapping
 import org.fcitx.fcitx5.android.core.InputMethodEntry
+import org.fcitx.fcitx5.android.core.InputMethodNames
+import org.fcitx.fcitx5.android.core.InputMethodSubMode
 import org.fcitx.fcitx5.android.core.KeyStates
 import org.fcitx.fcitx5.android.core.KeySym
 import org.fcitx.fcitx5.android.data.InputFeedbacks
@@ -96,7 +98,7 @@ abstract class BaseKeyboard(
     // a rather large threshold effectively disables swipe of the direction
     private val disabledSwipeThreshold = dp(800f)
 
-    private val keyRows: List<ConstraintLayout>
+    protected val keyRows: List<ConstraintLayout>
 
     init {
         isMotionEventSplittingEnabled = true
@@ -162,13 +164,48 @@ abstract class BaseKeyboard(
 
     // holding the space to talk: a microphone on every keyboard's space says so, or no one would know
     private fun updateSpaceBadges(behavior: SpaceLongPressBehavior) {
-        val voice = behavior == SpaceLongPressBehavior.Voice && VoiceFeature.AVAILABLE && !inPasswordField
+        val voice = behavior.talks(VoiceFeature.AVAILABLE, inPasswordField)
         val icon = if (voice) R.drawable.ic_baseline_keyboard_voice_24 else null
         spaceKeys.forEach { (it as? TextKeyView)?.showBadge(icon) }
     }
 
-    /** What swiping [view] types where the user chose it ([TextKeyboard]): null for what its key says, "" for nothing. */
-    protected open fun swipeText(view: KeyView): String? = null
+    /** What swiping a key types: its own swipe, nothing, or what the user chose ([swipeText]). */
+    sealed interface SwipeChoice {
+        /** The key's own [KeyDef.Behavior.Swipe], previewed as [KeyDef.Popup.AltPreview.alternative]. */
+        data object BuiltIn : SwipeChoice
+
+        /** Nothing: the user left the key nothing to swipe to (its long press is off). */
+        data object None : SwipeChoice
+
+        /** The first of the long press, typed as the long press types it. */
+        data class Text(val text: String) : SwipeChoice
+
+        /** What the swipe's Up types, and from where: null for [None]. */
+        fun typed(builtIn: KeyAction): Pair<KeyAction, KeyActionListener.Source>? = when (this) {
+            BuiltIn -> builtIn to KeyActionListener.Source.Keyboard
+            None -> null
+            is Text -> PopupKeyboardUi.keyAction(text) to KeyActionListener.Source.Popup
+        }
+
+        /** What the preview shows once the finger has swiped: nothing for [None], as nothing is typed. */
+        fun preview(alternative: String): String = when (this) {
+            BuiltIn -> alternative
+            None -> ""
+            is Text -> text
+        }
+
+        companion object {
+            /** What [TextKeyboard] found for a key (swipeOf): null for [BuiltIn], "" for [None]. */
+            fun of(text: String?): SwipeChoice = when {
+                text == null -> BuiltIn
+                text.isEmpty() -> None
+                else -> Text(text)
+            }
+        }
+    }
+
+    /** What swiping [view] types where the user chose it ([TextKeyboard]): [SwipeChoice.BuiltIn] for what its key says. */
+    protected open fun swipeText(view: KeyView): SwipeChoice = SwipeChoice.BuiltIn
 
     private fun createKeyView(def: KeyDef): KeyView {
         return when (def.appearance) {
@@ -245,8 +282,10 @@ abstract class BaseKeyboard(
                         }
                     }
                     is KeyDef.Behavior.LongPress -> {
-                        setOnLongClickListener { _ ->
-                            onAction(it.action)
+                        // hold to talk follows the finger that holds the space
+                        setOnLongClickListener { view ->
+                            val action = it.action
+                            onAction(if (action is KeyAction.SpaceLongPressAction) action.copy(pointer = (view as CustomGestureView).touchPointer) else action)
                             true
                         }
                     }
@@ -265,16 +304,9 @@ abstract class BaseKeyboard(
                         onGestureListener = OnGestureListener { view, event ->
                             when (event.type) {
                                 GestureType.Up -> {
-                                    if (!event.consumed && !event.cancelled && swipeSymbolDirection.checkY(event.totalY)) {
-                                        val chosen = swipeText(view as KeyView)
-                                        when {
-                                            chosen == null -> onAction(it.action)
-                                            // the user left the key nothing to swipe to: consumed all the same,
-                                            // or a swipe that stayed on the key would type it as a tap
-                                            chosen.isEmpty() -> {}
-                                            // the first of the long press, typed as the long press types it
-                                            else -> onAction(PopupKeyboardUi.keyAction(chosen), KeyActionListener.Source.Popup)
-                                        }
+                                    if (event.isSwipe(swipeSymbolDirection)) {
+                                        swipeText(view as KeyView).typed(it.action)?.let { (action, source) -> onAction(action, source) }
+                                        // consumed when it types nothing too, or a swipe that stayed on the key would type it as a tap
                                         true
                                     } else {
                                         false
@@ -292,13 +324,13 @@ abstract class BaseKeyboard(
                     }
                 }
             }
-            def.popup?.forEach {
-                when (it) {
+            def.popup?.forEach { popup ->
+                when (popup) {
                     // TODO: gesture processing middleware
                     is KeyDef.Popup.Menu -> {
                         setOnLongClickListener { view ->
                             view as KeyView
-                            onPopupAction(PopupAction.ShowMenuAction(view.id, it, view.bounds))
+                            onPopupAction(PopupAction.ShowMenuAction(view.id, popup, view.bounds))
                             // do not consume this LongClick gesture
                             false
                         }
@@ -320,7 +352,7 @@ abstract class BaseKeyboard(
                     is KeyDef.Popup.Keyboard -> {
                         setOnLongClickListener { view ->
                             view as KeyView
-                            onPopupAction(PopupAction.ShowKeyboardAction(view.id, it, view.bounds))
+                            onPopupAction(PopupAction.ShowKeyboardAction(view.id, popup, view.bounds))
                             // do not consume this LongClick gesture
                             false
                         }
@@ -346,11 +378,11 @@ abstract class BaseKeyboard(
                             if (popupOnKeyPress) {
                                 when (event.type) {
                                     GestureType.Down -> onPopupAction(
-                                        PopupAction.PreviewAction(view.id, it.content, view.bounds)
+                                        PopupAction.PreviewAction(view.id, popup.content, view.bounds)
                                     )
                                     GestureType.Move -> {
                                         val triggered = swipeSymbolDirection.checkY(event.totalY)
-                                        val text = if (triggered) swipeText(view)?.ifEmpty { it.content } ?: it.alternative else it.content
+                                        val text = if (triggered) swipeText(view).preview(popup.alternative) else popup.content
                                         onPopupAction(
                                             PopupAction.PreviewUpdateAction(view.id, text)
                                         )
@@ -371,7 +403,7 @@ abstract class BaseKeyboard(
                             if (popupOnKeyPress) {
                                 when (event.type) {
                                     GestureType.Down -> onPopupAction(
-                                        PopupAction.PreviewAction(view.id, it.content, view.bounds)
+                                        PopupAction.PreviewAction(view.id, popup.content, view.bounds)
                                     )
                                     GestureType.Up -> {
                                         onPopupAction(PopupAction.DismissAction(view.id))
@@ -424,13 +456,24 @@ abstract class BaseKeyboard(
         return TouchTarget(key, keyHitRect)
     }
 
+    /** Gives finger [pointerIndex] of [event] to [target] for the rest of its touch. */
+    private fun dispatchDown(event: MotionEvent, pointerIndex: Int, target: TouchTarget) {
+        // a disabled key takes no touch, as on the system's dispatch: CustomGestureView refuses its Down, not its Up
+        if (!target.view.isEnabled) return
+        touchTargets[event.getPointerId(pointerIndex)] = target
+        dispatchMotionEventToTarget(event, MotionEvent.ACTION_DOWN, pointerIndex, target)
+    }
+
     private fun dispatchMotionEventToTarget(
         event: MotionEvent,
         action: Int,
         pointerIndex: Int,
         target: TouchTarget
     ) {
-        target.view.dispatchTouchEvent(event.forKey(action, pointerIndex, target.hitRect))
+        val keyEvent = event.forKey(action, pointerIndex, target.hitRect)
+        target.view.dispatchTouchEvent(keyEvent)
+        // the key reads it in place and keeps none of it: back to the pool, not left to the finalizer
+        keyEvent.recycle()
     }
 
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
@@ -444,18 +487,15 @@ abstract class BaseKeyboard(
             when (event.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     releaseAllTouchTargets()
-                    val pid = event.getPointerId(0)
+                    // on no key the touch is not the keyboard's; on a disabled one it is, for a finger after it
                     val target = findTouchTarget(event, 0) ?: return false
-                    touchTargets[pid] = target
-                    dispatchMotionEventToTarget(event, MotionEvent.ACTION_DOWN, 0, target)
+                    dispatchDown(event, 0, target)
                     return true
                 }
                 MotionEvent.ACTION_POINTER_DOWN -> {
                     val i = event.actionIndex
-                    val pid = event.getPointerId(i)
                     val target = findTouchTarget(event, i) ?: return true
-                    touchTargets[pid] = target
-                    dispatchMotionEventToTarget(event, MotionEvent.ACTION_DOWN, i, target)
+                    dispatchDown(event, i, target)
                     return true
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -528,6 +568,35 @@ abstract class BaseKeyboard(
         return true
     }
 
+    /** The input method name last shown on the Space key; null until the first update. */
+    private var shownImeName: String? = null
+
+    /** Shows [ime] on [space]: its name, and its sub-mode's ([spaceLabel]). */
+    protected fun showInputMethodName(space: TextKeyView, ime: InputMethodEntry) {
+        val imeName = spaceLabel(InputMethodNames.of(context, ime), ime.subMode)
+        // A change of input method (or of its sub-mode, e.g. an ASCII toggle) is otherwise
+        // silent: the name is only on the Space key, which the user is not touching. The first
+        // update is the keyboard appearing, which TalkBack announces itself. A change made while
+        // another layout was showing is announced on returning to this one.
+        if (shownImeName != null && shownImeName != imeName) announce(imeName)
+        shownImeName = imeName
+        space.mainText.text = imeName
+        // TalkBack reads the key's description instead of the text drawn on it, so the name
+        // has to be in the description too
+        space.contentDescription = context.getString(R.string.a11y_key_space_with_ime, imeName)
+    }
+
+    /**
+     * `announceForAccessibility` is deprecated from API 36 in favour of describing the UI
+     * (state descriptions, live regions). Neither fits the input method name: it is on the
+     * Space key, which the user is not touching, and a live region there would speak every
+     * time the keyboard is rebuilt.
+     */
+    @Suppress("DEPRECATION")
+    private fun announce(text: CharSequence?) {
+        if (!text.isNullOrEmpty()) announceForAccessibility(text)
+    }
+
     open fun onAttach() {
         // do nothing by default
     }
@@ -555,15 +624,31 @@ abstract class BaseKeyboard(
  * Its id stays the finger's: hold to talk follows that id in the real events (VoiceHoldOverlay).
  */
 internal fun MotionEvent.forKey(action: Int, pointerIndex: Int, hitRect: Rect): MotionEvent {
-    val properties = MotionEvent.PointerProperties().apply { id = getPointerId(pointerIndex) }
-    val coords = MotionEvent.PointerCoords().apply {
+    KeyPointer.properties[0].id = getPointerId(pointerIndex)
+    KeyPointer.coords[0].apply {
         x = getX(pointerIndex) - hitRect.left
         y = getY(pointerIndex) - hitRect.top
         pressure = getPressure(pointerIndex)
         size = getSize(pointerIndex)
     }
     return MotionEvent.obtain(
-        downTime, eventTime, action, 1, arrayOf(properties), arrayOf(coords),
+        downTime, eventTime, action, 1, KeyPointer.properties, KeyPointer.coords,
         metaState, 0, xPrecision, yPrecision, deviceId, edgeFlags, InputDevice.SOURCE_UNKNOWN, 0
     )
+}
+
+// one of each, refilled for every event: obtain copies them, and touches come on the main thread alone
+private object KeyPointer {
+    val properties = arrayOf(MotionEvent.PointerProperties())
+    val coords = arrayOf(MotionEvent.PointerCoords())
+}
+
+/** Whether this Up ends a swipe [direction] types on: not one taken already (by a long press, say), nor cancelled. */
+internal fun CustomGestureView.Event.isSwipe(direction: SwipeSymbolDirection) =
+    !consumed && !cancelled && direction.checkY(totalY)
+
+/** What the Space key shows of an input method: its [name], and [subMode]'s label (or else its name) in brackets. */
+internal fun spaceLabel(name: String, subMode: InputMethodSubMode): String {
+    val mode = subMode.label.ifEmpty { subMode.name }
+    return if (mode.isEmpty()) name else "$name ($mode)"
 }

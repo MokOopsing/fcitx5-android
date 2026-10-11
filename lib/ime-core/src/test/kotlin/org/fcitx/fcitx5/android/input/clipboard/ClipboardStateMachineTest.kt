@@ -26,7 +26,6 @@ import org.junit.Test
  */
 class ClipboardStateMachineTest {
 
-
     private val seen = mutableListOf<State>()
 
     private fun machine(initial: State, empty: Boolean, listening: Boolean) =

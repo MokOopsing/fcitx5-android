@@ -24,7 +24,6 @@ import org.junit.Test
  */
 class ExpandButtonStateMachineTest {
 
-
     private val seen = mutableListOf<State>()
 
     private fun machine(state: State, expandedEmpty: Boolean) =

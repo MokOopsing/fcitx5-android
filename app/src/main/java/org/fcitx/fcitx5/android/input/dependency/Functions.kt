@@ -37,6 +37,9 @@ fun DependencyManager.inputMethodService() =
  * Components that only need somewhere to launch view-scoped work should take this rather
  * than the whole [FcitxInputMethodService]: it is the difference between depending on a
  * concrete `InputMethodService` and depending on a `CoroutineScope`.
+ *
+ * Found by the wrapped type, exactly [CoroutineScope]: the scope has to be registered as that
+ * type, not a subtype, and a second scope registered so would be refused as a duplicate.
  */
 fun DependencyManager.imeScope() =
     mustWrapped<UniqueComponentWrapper<CoroutineScope>, CoroutineScope>()

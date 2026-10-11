@@ -23,5 +23,5 @@ object VoiceFeature {
     fun credits(context: Context): List<Credit> = emptyList()
 
     @Suppress("UnusedParameter")
-    fun hold(inputView: InputView, overlay: FrameLayout, commit: (String) -> Unit) = Unit
+    fun hold(inputView: InputView, overlay: FrameLayout, pointer: Int, commit: (String) -> Unit) = Unit
 }

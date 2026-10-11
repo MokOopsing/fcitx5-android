@@ -163,7 +163,7 @@ class CommonKeyActionListener :
                     }
                 }
                 is SpaceLongPressAction -> {
-                    when (spaceKeyLongPressBehavior) {
+                    when (val behavior = spaceKeyLongPressBehavior) {
                         SpaceLongPressBehavior.None -> {}
                         SpaceLongPressBehavior.Enumerate -> service.postFcitxJob {
                             enumerateIme()
@@ -173,8 +173,8 @@ class CommonKeyActionListener :
                         }
                         SpaceLongPressBehavior.ShowPicker -> showInputMethodPicker()
                         // hold to talk: the keyboard stays, the key's finger followed till it lifts
-                        SpaceLongPressBehavior.Voice -> if (!service.inPasswordField) {
-                            VoiceFeature.hold(inputView, popup.root) { text ->
+                        SpaceLongPressBehavior.Voice -> if (behavior.talks(VoiceFeature.AVAILABLE, service.inPasswordField)) {
+                            VoiceFeature.hold(inputView, popup.root, action.pointer) { text ->
                                 listener.onKeyAction(KeyAction.CommitAction(text), KeyActionListener.Source.Keyboard)
                             }
                         }

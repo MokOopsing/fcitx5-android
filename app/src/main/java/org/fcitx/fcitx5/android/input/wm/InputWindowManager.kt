@@ -112,8 +112,9 @@ class InputWindowManager : UniqueViewComponent<InputWindowManager, FrameLayout>(
      * [attachWindow] includes the operation done by [addEssentialWindow].
      */
     fun attachWindow(window: InputWindow) {
+        // not skipped: InputView.startInput re-attaches KeyboardWindow to reset it
         if (window === currentWindow)
-            Timber.d("Skip attaching $window")
+            Timber.d("Re-attaching $window")
         val newView = if (window is EssentialWindow) {
             // keep the view for essential windows
             essentialWindows[window.key]?.second ?: window.onCreateView()

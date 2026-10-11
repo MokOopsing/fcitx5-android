@@ -125,5 +125,7 @@ class PopupOverridesTest {
     @Test
     fun shiftDoesNotShowTheSameCandidateTwice() {
         assertArrayEquals(arrayOf("1", "Q", "É"), PopupOverrides.parse("q 1 Q é").resolve("Q", preset))
+        // q and Q both upper-case to Q
+        assertArrayEquals(arrayOf("Q", "1"), PopupOverrides.parse("q q Q 1").resolve("Q", preset))
     }
 }

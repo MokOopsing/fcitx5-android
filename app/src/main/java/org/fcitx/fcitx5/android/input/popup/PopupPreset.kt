@@ -68,7 +68,7 @@ val PopupPreset: Map<String, Array<String>> = hashMapOf(
     "N" to arrayOf("~", "n", "Ñ", "Ń"),
     "M" to arrayOf("\\", "m"),
     //
-    // Upper case Cyrillic
+    // Cyrillic
     //
     "г" to arrayOf("ғ"),
     "е" to arrayOf("ё"),      // this in fact NOT the same E as before
@@ -80,7 +80,7 @@ val PopupPreset: Map<String, Array<String>> = hashMapOf(
     "ч" to arrayOf("ҷ", "ҹ"),
     "ь" to arrayOf("ъ"),
     //
-    // Cyrillic
+    // Upper case Cyrillic
     //
     "Г" to arrayOf("Ғ"),
     "Е" to arrayOf("Ё"),      // This In Fact Not The Same E As Before
@@ -102,20 +102,18 @@ val PopupPreset: Map<String, Array<String>> = hashMapOf(
     "ف" to arrayOf("ڤ"),
     "ك" to arrayOf("گ"),
     "ل" to arrayOf("لا"),
-    "ه" to arrayOf("ه"),
     "و" to arrayOf("ؤ"),
     //
     // Hebrew
     //
     // Likewise, this will render oddly, but is still valid code.
+    // one line per key: a map keeps only the last of a repeated one (upstream lists י and ח twice)
     "ג" to arrayOf("ג׳"),
     "ז" to arrayOf("ז׳"),
-    "ח" to arrayOf("ח׳"),
-    "צ׳" to arrayOf("צ׳"),
+    "ח" to arrayOf("ח׳", "ױ"),
+    "צ" to arrayOf("צ׳"),
     "ת" to arrayOf("ת׳"),
-    "י" to arrayOf("ײַ"),
-    "י" to arrayOf("ײ"),
-    "ח" to arrayOf("ױ"),
+    "י" to arrayOf("ײַ", "ײ"),
     "ו" to arrayOf("װ"),
     //
     // Numbers

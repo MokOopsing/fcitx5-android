@@ -12,7 +12,6 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.allViews
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.InputMethodEntry
-import org.fcitx.fcitx5.android.core.InputMethodNames
 import org.fcitx.fcitx5.android.core.KeyState
 import org.fcitx.fcitx5.android.core.KeyStates
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
@@ -22,6 +21,7 @@ import org.fcitx.fcitx5.android.input.broadcast.ReturnKeyAppearance
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.fcitx.fcitx5.android.input.popup.PopupAction
 import org.fcitx.fcitx5.android.input.popup.PopupOverrides
+import org.fcitx.fcitx5.android.input.popup.PopupOverridesCache
 import org.fcitx.fcitx5.android.input.popup.PopupPreset
 import splitties.views.imageResource
 
@@ -103,11 +103,9 @@ class TextKeyboard(
 
     // what the user made of the long press: a letter's first is its swipe and its corner too
     private val popupOverridesPref = AppPrefs.getInstance().internal.popupOverrides
-    private var popupOverrides = PopupOverrides.parse(popupOverridesPref.getValue())
 
     @Keep
-    private val popupOverridesListener = ManagedPreference.OnChangeListener<String> { _, v ->
-        popupOverrides = PopupOverrides.parse(v)
+    private val popupOverridesListener = ManagedPreference.OnChangeListener<String> { _, _ ->
         updatePunctuationKeys()
     }
 
@@ -188,20 +186,7 @@ class TextKeyboard(
     }
 
     override fun onInputMethodUpdate(ime: InputMethodEntry) {
-        val imeName = buildString {
-            append(InputMethodNames.of(context, ime))
-            ime.subMode.run { label.ifEmpty { name.ifEmpty { null } } }?.let { append(" ($it)") }
-        }
-        // A change of input method (or of its sub-mode, e.g. an ASCII toggle) is otherwise
-        // silent: the name is only on the Space key, which the user is not touching. The first
-        // update is the keyboard appearing, which TalkBack announces itself. A change made while
-        // another layout was showing is announced on returning to this one.
-        if (shownImeName != null && shownImeName != imeName) announce(imeName)
-        shownImeName = imeName
-        space.mainText.text = imeName
-        // TalkBack reads the key's description instead of the text drawn on it, so the name
-        // has to be in the description too
-        space.contentDescription = context.getString(R.string.a11y_key_space_with_ime, imeName)
+        showInputMethodName(space, ime)
         if (capsState != CapsState.None) {
             switchCapsState()
         }
@@ -252,20 +237,6 @@ class TextKeyboard(
         updateAlphabetKeys()
         // a letter's corner is its swipe, which follows Shift (swipeOverride)
         updatePunctuationKeys()
-    }
-
-    /** The input method name last shown on the Space key; null until the first update. */
-    private var shownImeName: String? = null
-
-    /**
-     * `announceForAccessibility` is deprecated from API 36 in favour of describing the UI
-     * (state descriptions, live regions). Neither fits the input method name: it is on the
-     * Space key, which the user is not touching, and a live region there would speak every
-     * time the keyboard is rebuilt.
-     */
-    @Suppress("DEPRECATION")
-    private fun announce(text: CharSequence?) {
-        if (!text.isNullOrEmpty()) announceForAccessibility(text)
     }
 
     private fun updateCapsButtonIcon() {
@@ -322,22 +293,25 @@ class TextKeyboard(
     // a letter's swipe is the first of its long press, as built in (q: 1, then Q) and as the user
     // changed it: one thing, drawn in its corner too (updatePunctuationKeys); none when the user
     // turned its long press off
-    override fun swipeText(view: KeyView): String? =
-        ((view as? AltTextKeyView)?.def as? KeyDef.Appearance.AltText)?.let(::swipeOverride)
+    override fun swipeText(view: KeyView): SwipeChoice =
+        SwipeChoice.of(((view as? AltTextKeyView)?.def as? KeyDef.Appearance.AltText)?.let(::swipeOverride))
 
     private fun swipeOverride(def: KeyDef.Appearance.AltText): String? {
         val letter = def.displayText.takeIf { it.length == 1 && it[0].isLetter() }?.lowercase() ?: return null
         // under Shift the long press shows the upper-case label's list (onPopupAction): so does the swipe
-        return popupOverrides.swipeOf(letter, transformAlphabet(letter))
+        return PopupOverridesCache.user.current.swipeOf(letter, transformAlphabet(letter))
     }
 
 }
 
+/** What [label]'s long press offers: the user's list, else the built-in one; null where it is off. */
+internal fun PopupOverrides.longPressOf(label: String): Array<String>? = resolve(label, PopupPreset[label])
+
 /**
- * The first of [label]'s long press as the user changed it, [label] being [letter] as Shift shows it:
- * null where the user changed neither (the built-in swipe), "" where that long press is off.
+ * The first of [label]'s long press ([longPressOf]) as the user changed it, [label] being [letter] as
+ * Shift shows it: null where the user changed neither (the built-in swipe), "" where that long press is off.
  */
 internal fun PopupOverrides.swipeOf(letter: String, label: String): String? {
     if (this[letter] == null && this[label] == null) return null
-    return resolve(label, PopupPreset[label])?.firstOrNull().orEmpty()
+    return longPressOf(label)?.firstOrNull().orEmpty()
 }

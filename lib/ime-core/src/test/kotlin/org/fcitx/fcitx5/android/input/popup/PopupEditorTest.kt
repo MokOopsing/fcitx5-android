@@ -52,7 +52,7 @@ class PopupEditorTest {
     }
 
     @Test
-    fun deleteSelectsTheNextOrNone() {
+    fun deleteSelectsWhatTookItsPlaceOrThePreviousOrNone() {
         val e = editor()
         e.tap(1)
         e.delete()

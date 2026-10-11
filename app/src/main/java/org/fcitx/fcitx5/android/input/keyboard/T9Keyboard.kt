@@ -11,10 +11,12 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.StateListDrawable
 import android.view.Gravity
 import android.view.MotionEvent
+import android.view.View
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.annotation.Keep
+import androidx.core.view.isVisible
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -25,10 +27,11 @@ import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.EngineBridge
 import org.fcitx.fcitx5.android.core.FcitxKeyMapping
 import org.fcitx.fcitx5.android.core.InputMethodEntry
-import org.fcitx.fcitx5.android.core.InputMethodNames
 import org.fcitx.fcitx5.android.core.KeyStates
 import org.fcitx.fcitx5.android.core.KeySym
 import org.fcitx.fcitx5.android.data.InputFeedbacks
+import org.fcitx.fcitx5.android.data.prefs.AppPrefs
+import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
 import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.data.theme.ThemeManager
 import org.fcitx.fcitx5.android.engine.host.Keyboard
@@ -70,6 +73,22 @@ class T9Keyboard(
         /** How many items of the column show at once. */
         private const val SHOWN = 4
 
+        // nothing typed, or nothing of it left to take: the column offers punctuation
+        private fun EngineBridge.T9State.offersSyllables() = composing && syllables.isNotEmpty()
+
+        /** The column's items for [state]: its syllables while typing, else punctuation. */
+        internal fun labels(state: EngineBridge.T9State): List<String> =
+            if (state.offersSyllables()) state.syllables else PUNCTUATION
+
+        /** What picking item [i] of [state]'s column types. */
+        internal fun pick(state: EngineBridge.T9State, i: Int): KeyAction =
+            if (state.offersSyllables()) {
+                // with the list's id: shown before a key typed since replaced it, the pick is dropped
+                KeyAction.SymAction(KeySym(UNICODE + Keyboard.syllableKey(i, state.id).code), KeyStates.Virtual)
+            } else {
+                KeyAction.CommitAction(PUNCTUATION[i])
+            }
+
         private fun digitKey(digit: Char, letters: String) = KeyDef(
             KeyDef.Appearance.AltText(displayText = letters, altText = digit.toString(), textSize = 20f, percentWidth = DIGIT),
             setOf(
@@ -79,7 +98,7 @@ class T9Keyboard(
             arrayOf(KeyDef.Popup.AltPreview(letters, digit.toString())),
         )
 
-        // under the column, never touched: it covers them
+        // the column is drawn over these placeholders, so they are never touched
         private fun spacer() = KeyDef(
             KeyDef.Appearance.Text("", 16f, percentWidth = SIDE, border = KeyDef.Appearance.Border.Off, margin = false),
             emptySet(),
@@ -131,6 +150,14 @@ class T9Keyboard(
 
     private val space: TextKeyView by lazy { findViewById(R.id.button_space) }
     private val `return`: ImageKeyView by lazy { findViewById(R.id.button_return) }
+    private val lang: ImageKeyView by lazy { findViewById(R.id.button_lang) }
+
+    private val showLangSwitchKey = AppPrefs.getInstance().keyboard.showLangSwitchKey
+
+    @Keep
+    private val showLangSwitchKeyListener = ManagedPreference.OnChangeListener<Boolean> { _, v ->
+        lang.isVisible = v
+    }
 
     private val items = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
 
@@ -154,16 +181,27 @@ class T9Keyboard(
 
     private var itemHeight = 0
 
+    /** What the column shows, read by its items when picked. */
+    private var columnState = EngineBridge.T9State()
+
     init {
         add(column, lParams {
-            val rows = (0 until childCount).map { getChildAt(it) }.filterIsInstance<ConstraintLayout>()
-            topToTop = rows[0].existingOrNewId
-            bottomToBottom = rows[2].existingOrNewId
+            topToTop = keyRows[0].existingOrNewId
+            bottomToBottom = keyRows[2].existingOrNewId
             leftOfParent()
             width = 0
             height = 0
             matchConstraintPercentWidth = SIDE
         })
+        // under the column, out of reach: TalkBack would stop on them, a second finger under the vivo workaround hit them
+        keyRows.take(3).forEach { row ->
+            row.getChildAt(0).apply {
+                isEnabled = false
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }
+        }
+        lang.isVisible = showLangSwitchKey.getValue()
+        showLangSwitchKey.registerOnChangeListener(showLangSwitchKeyListener)
         show(EngineBridge.T9State())
     }
 
@@ -191,27 +229,27 @@ class T9Keyboard(
         return super.onInterceptTouchEvent(ev)
     }
 
-    /** The column for [state]: its syllables while typing, else punctuation. */
-    private fun show(state: EngineBridge.T9State) {
-        items.removeAllViews()
-        val syllables = state.composing && state.syllables.isNotEmpty()
-        val labels = if (syllables) state.syllables else PUNCTUATION
-        labels.forEachIndexed { i, label ->
-            items.addView(item(label) {
-                val action = if (syllables) {
-                    // with the list's id: shown before a key typed since replaced it, the pick is dropped
-                    KeyAction.SymAction(KeySym(UNICODE + Keyboard.syllableKey(i, state.id).code), KeyStates.Virtual)
-                } else {
-                    KeyAction.CommitAction(label)
-                }
-                onAction(action)
-            })
+    /** The column for [state]: its syllables while typing, else punctuation; its items kept, made only when more are needed. */
+    internal fun show(state: EngineBridge.T9State) {
+        // a press on the list replaced is cancelled, as removing its items did: its pick would take what now sits there
+        MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_CANCEL, 0f, 0f, 0).also {
+            items.dispatchTouchEvent(it)
+            it.recycle()
+        }
+        // and so is a click released but not run yet (View posts it on ACTION_UP), as a removed item's was
+        items.cancelPendingInputEvents()
+        columnState = state
+        val labels = labels(state)
+        while (items.childCount < labels.size) items.addView(item(items.childCount))
+        for (i in 0 until items.childCount) {
+            val view = items.getChildAt(i) as TextView
+            view.isVisible = i < labels.size
+            if (view.isVisible) view.text = labels[i]
         }
         column.scrollTo(0, 0)
     }
 
-    private fun item(label: String, onClick: () -> Unit) = TextView(context).apply {
-        text = label
+    private fun item(i: Int) = TextView(context).apply {
         textSize = 16f
         gravity = Gravity.CENTER
         setTextColor(theme.altKeyTextColor)
@@ -221,7 +259,7 @@ class T9Keyboard(
         setOnClickListener {
             InputFeedbacks.hapticFeedback(this)
             InputFeedbacks.soundEffect(InputFeedbacks.SoundEffect.Standard)
-            onClick()
+            onAction(pick(columnState, i))
         }
     }
 
@@ -234,9 +272,7 @@ class T9Keyboard(
     }
 
     override fun onInputMethodUpdate(ime: InputMethodEntry) {
-        val name = InputMethodNames.of(context, ime)
-        space.mainText.text = name
-        space.contentDescription = context.getString(R.string.a11y_key_space_with_ime, name)
+        showInputMethodName(space, ime)
     }
 }
 

@@ -18,6 +18,7 @@ import android.widget.ViewAnimator
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.theme.Theme
+import org.fcitx.fcitx5.android.input.bar.IdleUiPolicy.Display
 import org.fcitx.fcitx5.android.input.bar.KawaiiBarComponent
 import org.fcitx.fcitx5.android.input.bar.ui.idle.ButtonsBarUi
 import org.fcitx.fcitx5.android.input.bar.ui.idle.ClipboardSuggestionUi
@@ -51,11 +52,7 @@ class IdleUi(
     private val commonKeyActionListener: CommonKeyActionListener
 ) : Ui {
 
-    enum class State {
-        Empty, Toolbar, Clipboard, NumberRow, InlineSuggestion
-    }
-
-    var currentState = State.Empty
+    var currentState = Display.Empty
         private set
 
     private val disableAnimation by AppPrefs.getInstance().advanced.disableAnimation
@@ -69,7 +66,7 @@ class IdleUi(
     private val menuButtonRotation
         get() = when {
             inPrivate -> 0f
-            currentState == State.Toolbar -> 90f * translateDirection
+            currentState == Display.Toolbar -> 90f * translateDirection
             else -> -90f * translateDirection
         }
 
@@ -188,7 +185,7 @@ class IdleUi(
     private fun updateMenuButtonContentDescription() {
         menuButton.contentDescription = when {
             inPrivate -> ctx.getString(R.string.private_mode)
-            currentState == State.Toolbar -> ctx.getString(R.string.hide_toolbar)
+            currentState == Display.Toolbar -> ctx.getString(R.string.hide_toolbar)
             else -> ctx.getString(R.string.expand_toolbar)
         }
     }
@@ -229,26 +226,26 @@ class IdleUi(
         TransitionManager.beginDelayedTransition(root, set)
     }
 
-    fun updateState(state: State, fromUser: Boolean = false) {
+    private fun skipsAnimation(state: Display, fromUser: Boolean) =
+        !fromUser || disableAnimation || state.isUnanimated() || currentState.isUnanimated()
+
+    private fun Display.isUnanimated() = this == Display.InlineSuggestion || this == Display.NumberRow
+
+    fun updateState(state: Display, fromUser: Boolean = false) {
         Timber.d("Switch idle ui to $state")
-        if (
-            !fromUser ||
-            disableAnimation ||
-            (state == State.InlineSuggestion || currentState == State.InlineSuggestion) ||
-            (state == State.NumberRow || currentState == State.NumberRow)
-        ) {
+        if (skipsAnimation(state, fromUser)) {
             clearAnimation()
         } else {
             setAnimation()
         }
         when (state) {
-            State.Empty -> animator.displayedChild = 0
-            State.Toolbar -> animator.displayedChild = 1
-            State.Clipboard -> animator.displayedChild = 2
-            State.NumberRow -> {}
-            State.InlineSuggestion -> animator.displayedChild = 3
+            Display.Empty -> animator.displayedChild = 0
+            Display.Toolbar -> animator.displayedChild = 1
+            Display.Clipboard -> animator.displayedChild = 2
+            Display.NumberRow -> {}
+            Display.InlineSuggestion -> animator.displayedChild = 3
         }
-        if (state == State.NumberRow) {
+        if (state == Display.NumberRow) {
             numberRow.keyActionListener = commonKeyActionListener.listener
             numberRow.popupActionListener = popup.listener
             if (fromUser && !disableAnimation) {
@@ -256,7 +253,7 @@ class IdleUi(
             }
             numberRow.visibility = View.VISIBLE
             idleBody.visibility = View.GONE
-        } else if (currentState == State.NumberRow) {
+        } else if (currentState == Display.NumberRow) {
             if (fromUser && !disableAnimation) {
                 enableSlideTransition(idleBody, numberRow, Gravity.START, Gravity.END)
             }

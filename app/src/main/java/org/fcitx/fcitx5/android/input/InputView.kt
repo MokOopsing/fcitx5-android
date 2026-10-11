@@ -121,8 +121,9 @@ class InputView(
      * Work that belongs to this view: a child of the service's scope, cancelled when this view is
      * detached -- replaced by a new one after a theme or layout setting change -- rather than
      * left running, holding on to this view's components, until the service is destroyed.
+     * Declared as exactly [CoroutineScope]: that is the type `imeScope()` finds it by.
      */
-    private val viewScope = CoroutineScope(
+    private val viewScope: CoroutineScope = CoroutineScope(
         service.lifecycleScope.coroutineContext.let { it + SupervisorJob(it[Job]) }
     )
 

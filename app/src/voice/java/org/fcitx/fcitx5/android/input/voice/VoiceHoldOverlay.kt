@@ -9,7 +9,6 @@ import android.animation.ValueAnimator
 import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.Looper
-import android.text.TextUtils
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
@@ -33,14 +32,14 @@ import splitties.dimensions.dp
 class VoiceHoldOverlay(
     private val inputView: InputView,
     private val overlay: FrameLayout,
+    // the finger the long press was for
+    private val pointer: Int,
     commit: (String) -> Unit,
 ) : BaseInputView.Hold, VoiceHoldSession.Ui {
     private val theme = inputView.theme
     private val ctx = inputView.context
     private val keyboard = inputView.keyboardView
 
-    // the finger the long press was for
-    private val pointer = inputView.longPressPointer
     private val downY = inputView.downY(pointer)
 
     private val session = VoiceHoldSession(inputView.service, inputView.fcitx, VoiceHold(keyboard.height * CANCEL_SHARE), this, commit)
@@ -55,9 +54,7 @@ class VoiceHoldOverlay(
     private val heard = TextView(ctx).apply {
         textSize = 18f
         gravity = Gravity.CENTER or Gravity.BOTTOM
-        maxLines = 2
-        // the end of a long one is what was just said
-        ellipsize = TextUtils.TruncateAt.START
+        VoiceStyle.heard(this)
         setTextColor(theme.keyTextColor)
     }
     private val wave = VoiceWaveView(ctx).apply {
@@ -119,8 +116,8 @@ class VoiceHoldOverlay(
         card.alpha = 0f
         pill.scaleX = APPEAR_SCALE
         pill.scaleY = APPEAR_SCALE
-        card.animate().alpha(1f).setDuration(APPEAR_MS).start()
-        pill.animate().scaleX(1f).scaleY(1f).setDuration(APPEAR_MS * 2).start()
+        card.animate().alpha(1f).setDuration(VoiceStyle.ANIMATE_MS).start()
+        pill.animate().scaleX(1f).scaleY(1f).setDuration(VoiceStyle.ANIMATE_MS * 2).start()
         inputView.hold = this
         session.begin()
     }
@@ -158,8 +155,8 @@ class VoiceHoldOverlay(
         wave.color = if (cancel) CANCEL_TEXT else theme.accentKeyBackgroundColor
         (pill.background as GradientDrawable).setColor(if (cancel) CANCEL_PILL else pillColor)
         colorAnimator?.cancel()
-        colorAnimator = ValueAnimator.ofObject(ArgbEvaluator(), currentColor, if (cancel) CANCEL_RED else talkColor).apply {
-            duration = APPEAR_MS
+        colorAnimator = ValueAnimator.ofObject(ArgbEvaluator(), currentColor, if (cancel) VoiceStyle.CANCEL_RED else talkColor).apply {
+            duration = VoiceStyle.ANIMATE_MS
             addUpdateListener {
                 currentColor = it.animatedValue as Int
                 background.setColor(currentColor)
@@ -180,7 +177,7 @@ class VoiceHoldOverlay(
         gone = true
         message?.let { status.setText(it) }
         main.postDelayed({
-            card.animate().alpha(0f).setDuration(APPEAR_MS).withEndAction { overlay.removeView(card) }.start()
+            card.animate().alpha(0f).setDuration(VoiceStyle.ANIMATE_MS).withEndAction { overlay.removeView(card) }.start()
         }, if (message != null) VoiceHoldSession.MESSAGE_MS else 0L)
     }
 
@@ -190,7 +187,6 @@ class VoiceHoldOverlay(
 
         // how far above the point it touches a finger still covers, in dp
         private const val FINGER = 32
-        private const val CANCEL_RED = 0xFFC62828.toInt()
         private const val CANCEL_PILL = 0x33FFFFFF
         private const val CANCEL_TEXT = 0xFFFFFFFF.toInt()
         private const val PILL_ALPHA = 0x29
@@ -199,6 +195,5 @@ class VoiceHoldOverlay(
         private const val WAVE_WIDTH = 104
         private const val WAVE_HEIGHT = 32
         private const val APPEAR_SCALE = 0.85f
-        private const val APPEAR_MS = 150L
     }
 }

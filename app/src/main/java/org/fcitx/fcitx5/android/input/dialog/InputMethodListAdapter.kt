@@ -9,7 +9,7 @@ import androidx.recyclerview.widget.RecyclerView
 
 class InputMethodListAdapter(
     val entries: List<InputMethodData>,
-    private var enabledIndex: Int,
+    private val enabledIndex: Int,
     private val onEntryClick: (InputMethodData) -> Unit
 ) : RecyclerView.Adapter<InputMethodListAdapter.Holder>() {
 
@@ -27,12 +27,5 @@ class InputMethodListAdapter(
             text = ime.name
             setOnClickListener { onEntryClick(ime) }
         }
-    }
-
-    fun setEnabled(position: Int) {
-        if (position == enabledIndex) return
-        notifyItemChanged(enabledIndex)
-        enabledIndex = position
-        notifyItemChanged(position)
     }
 }

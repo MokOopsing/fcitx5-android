@@ -5,17 +5,24 @@
 package org.fcitx.fcitx5.android.input.keyboard
 
 import org.fcitx.fcitx5.android.input.popup.PopupOverrides
-import org.fcitx.fcitx5.android.input.popup.PopupPreset
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 /**
- * A letter's swipe is the first of its long press ([swipeOf]). Under Shift the long press shows
- * the upper-case label's list, the user's edit upper-cased; the swipe resolved the lower-case
- * one, so with Shift on it typed é where the long press offered É.
+ * A letter's swipe is the first of its long press ([swipeOf], through [longPressOf]). Under Shift
+ * the long press shows the upper-case label's list, the user's edit upper-cased; the swipe resolved
+ * the lower-case one, so with Shift on it typed é where the long press offered É.
  */
 class TextKeyboardTest {
+
+    @Test
+    fun theLongPressOffersTheUsersListOrTheBuiltInOne() {
+        assertArrayEquals(arrayOf("1", "Q"), PopupOverrides.Empty.longPressOf("q"))
+        assertArrayEquals(arrayOf("é", "è"), PopupOverrides.parse("e é è").longPressOf("e"))
+        assertNull(PopupOverrides.parse("q").longPressOf("q"))
+    }
 
     @Test
     fun noEditKeepsTheBuiltInSwipe() {
@@ -32,7 +39,7 @@ class TextKeyboardTest {
     fun underShiftTheSwipeIsWhatTheLongPressOffersFirst() {
         val overrides = PopupOverrides.parse("e é è")
         assertEquals("É", overrides.swipeOf("e", "E"))
-        assertEquals(overrides.resolve("E", PopupPreset["E"])?.first(), overrides.swipeOf("e", "E"))
+        assertArrayEquals(arrayOf("É", "È"), overrides.longPressOf("E"))
         assertEquals("QU", PopupOverrides.parse("q qu").swipeOf("q", "Q"))
     }
 

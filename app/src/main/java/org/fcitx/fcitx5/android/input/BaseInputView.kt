@@ -156,9 +156,6 @@ abstract class BaseInputView(
 
     var hold: Hold? = null
 
-    /** the finger of the key whose long press fired last ([CustomGestureView]) */
-    var longPressPointer = MotionEvent.INVALID_POINTER_ID
-
     // where each finger down went down, in this view
     private val downYs = SparseArray<Float>()
 

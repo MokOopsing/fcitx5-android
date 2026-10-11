@@ -20,7 +20,6 @@ import org.fcitx.fcitx5.android.input.bar.KawaiiBarComponent
 import org.fcitx.fcitx5.android.input.broadcast.InputBroadcastReceiver
 import org.fcitx.fcitx5.android.input.broadcast.ReturnKeyAppearance
 import org.fcitx.fcitx5.android.input.broadcast.ReturnKeyDrawableComponent
-import org.fcitx.fcitx5.android.input.dependency.fcitx
 import org.fcitx.fcitx5.android.input.dependency.inputMethodService
 import org.fcitx.fcitx5.android.input.dependency.theme
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
@@ -38,7 +37,6 @@ import splitties.views.dsl.core.matchParent
 class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), EssentialWindow,
     InputBroadcastReceiver {
 
-    private val fcitx by manager.fcitx()
     private val theme by manager.theme()
     private val commonKeyActionListener: CommonKeyActionListener by manager.must()
     private val windowManager: InputWindowManager by manager.must()
@@ -66,20 +64,23 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
 
     private lateinit var keyboardView: FrameLayout
 
-    private val keyboards: HashMap<String, BaseKeyboard> by lazy {
-        hashMapOf(
-            TextKeyboard.Name to TextKeyboard(context, theme),
-            T9Keyboard.Name to T9Keyboard(context, theme),
-            NumberKeyboard.Name to NumberKeyboard(context, theme)
-        )
-    }
+    // each made when first shown: every new input view made 九键 too, which most never use
+    private val makers: Map<String, () -> BaseKeyboard> = mapOf(
+        TextKeyboard.Name to { TextKeyboard(context, theme) },
+        T9Keyboard.Name to { T9Keyboard(context, theme) },
+        NumberKeyboard.Name to { NumberKeyboard(context, theme) },
+    )
+    private val keyboards = hashMapOf<String, BaseKeyboard>()
     private var currentKeyboardName = ""
     private var lastSymbolType: String by AppPrefs.getInstance().internal.lastSymbolLayout
 
     // the space's badge asks what the hold to talk asks (CommonKeyActionListener), a shown password too
     private val service by manager.inputMethodService()
 
-    private val currentKeyboard: BaseKeyboard? get() = keyboards[currentKeyboardName]
+    private val currentKeyboard: BaseKeyboard?
+        get() = makers[currentKeyboardName]?.let { keyboards.getOrPut(currentKeyboardName, it) }
+
+    private val spaceKeys = SpaceKeyInputMethod()
 
     private val keyActionListener = KeyActionListener { it, source ->
         if (it is KeyAction.LayoutSwitchAction) {
@@ -115,37 +116,35 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
             it.keyActionListener = keyActionListener
             it.popupActionListener = popupActionListener
             it.inPasswordField = service.inPasswordField
-            keyboardView.apply { add(it, lParams(matchParent, matchParent)) }
-            it.onAttach()
-            it.onReturnDrawableUpdate(returnKeyDrawable.appearance)
-            it.onInputMethodUpdate(fcitx.runImmediately { inputMethodEntryCached })
+            spaceKeys.attach(it) {
+                keyboardView.apply { add(it, lParams(matchParent, matchParent)) }
+                it.onAttach()
+                it.onReturnDrawableUpdate(returnKeyDrawable.appearance)
+            }
         }
     }
 
-    private val layoutSwitchPolicy by lazy {
-        LayoutSwitchPolicy(keyboards.keys, TextKeyboard.Name, PickerWindow.Key.Symbol.name)
+    private fun showLayout(target: String) {
+        detachCurrentLayout()
+        attachLayout(target)
+        if (windowManager.isAttached(this)) {
+            notifyBarLayoutChanged()
+        }
     }
 
-    // the letters' keyboard of the input method: 九键 for its own
-    private var textLayout = TextKeyboard.Name
+    private val lettersLayout by lazy {
+        LettersLayout(makers.keys, TextKeyboard.Name, PickerWindow.Key.Symbol.name)
+    }
 
     fun switchLayout(to: String, remember: Boolean = true) {
         // read now, as before: the memory is what it was when the key was pressed
         val lastSymbol = lastSymbolType
         ContextCompat.getMainExecutor(context).execute {
-            // the policy knows the letters' keyboard as Text, whichever it is
-            val current = if (currentKeyboardName == textLayout) TextKeyboard.Name else currentKeyboardName
-            val outcome = layoutSwitchPolicy.switchTo(to, lastSymbol, current, remember)
+            val outcome = lettersLayout.switchTo(to, lastSymbol, currentKeyboardName, remember)
             outcome.remember?.let { lastSymbolType = it }
             when (val target = outcome.target) {
                 LayoutSwitchPolicy.Target.Unchanged -> {}
-                is LayoutSwitchPolicy.Target.Keyboard -> {
-                    detachCurrentLayout()
-                    attachLayout(if (target.name == TextKeyboard.Name) textLayout else target.name)
-                    if (windowManager.isAttached(this)) {
-                        notifyBarLayoutChanged()
-                    }
-                }
+                is LayoutSwitchPolicy.Target.Keyboard -> showLayout(target.name)
                 LayoutSwitchPolicy.Target.SymbolPicker ->
                     windowManager.attachWindow(PickerWindow.Key.Symbol)
             }
@@ -164,17 +163,11 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     }
 
     override fun onImeUpdate(ime: InputMethodEntry) {
-        val layout = if (ime.uniqueName == Engines.T9) T9Keyboard.Name else TextKeyboard.Name
-        if (layout != textLayout) {
-            val showing = currentKeyboardName == textLayout
-            textLayout = layout
-            if (showing) {
-                detachCurrentLayout()
-                attachLayout(layout)
-                if (windowManager.isAttached(this)) notifyBarLayoutChanged()
-            }
-        }
-        currentKeyboard?.onInputMethodUpdate(ime)
+        spaceKeys.current = ime
+        val letters = if (ime.uniqueName == Engines.T9) T9Keyboard.Name else TextKeyboard.Name
+        val shown = lettersLayout.inputMethodChanged(letters, currentKeyboardName)
+        // a layout shown anew is told the input method as it is attached
+        if (shown != null) showLayout(shown) else currentKeyboard?.let(spaceKeys::show)
     }
 
     override fun onPunctuationUpdate(mapping: Map<String, String>) {
@@ -208,5 +201,35 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     // 2) currently keyboard window is attached and switchLayout was used
     private fun notifyBarLayoutChanged() {
         bar.onKeyboardLayoutSwitched(currentKeyboardName == NumberKeyboard.Name)
+    }
+}
+
+/**
+ * The input method on the layouts' space keys. A layout announces a change of it only from the name
+ * it showed itself (BaseKeyboard.showInputMethodName), and the user may last have seen another
+ * layout's: one being shown is first told that one, before it has a parent, as
+ * View.announceForAccessibility says nothing then. The change is announced once, on the layout
+ * shown, and never the input method being left, nor a window's first.
+ */
+internal class SpaceKeyInputMethod {
+
+    // as onImeUpdate last told it: asking fcitx would block the main thread on the fcitx one
+    var current: InputMethodEntry? = null
+
+    // what the user last saw on a space key (NumberKeyboard has none)
+    private var seen: InputMethodEntry? = null
+
+    /** Shows [keyboard], which [adding] puts in the window, the [current] input method. */
+    fun attach(keyboard: BaseKeyboard, adding: () -> Unit) {
+        seen?.let(keyboard::onInputMethodUpdate)
+        adding()
+        show(keyboard)
+    }
+
+    /** Shows [keyboard], in the window, the [current] input method. */
+    fun show(keyboard: BaseKeyboard) {
+        val ime = current ?: return
+        keyboard.onInputMethodUpdate(ime)
+        if (keyboard !is NumberKeyboard) seen = ime
     }
 }

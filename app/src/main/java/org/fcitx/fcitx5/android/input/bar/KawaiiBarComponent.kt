@@ -128,7 +128,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
                     idleUi.clipboardUi.text.text = if (it.sensitive && clipboardMaskSensitive) {
                         ClipboardEntry.BULLET.repeat(min(42, it.text.length))
                     } else {
-                        it.text.take(42)
+                        clipboardPreview(it.text)
                     }
                     isClipboardFresh = true
                     launchClipboardTimeoutJob()
@@ -152,7 +152,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     private val onClipboardTimeoutUpdateListener =
         ManagedPreference.OnChangeListener<Int> { _, _ ->
             when (idleUi.currentState) {
-                IdleUi.State.Clipboard -> {
+                IdleUiPolicy.Display.Clipboard -> {
                     // renew timeout when clipboard suggestion is present
                     launchClipboardTimeoutJob()
                 }
@@ -174,25 +174,17 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     }
 
     private fun evalIdleUiState(fromUser: Boolean = false) {
-        val newState = when (
-            IdleUiPolicy.decide(
-                IdleUiPolicy.Inputs(
-                    numberRowMode = numberRowMode,
-                    isClipboardFresh = isClipboardFresh,
-                    isInlineSuggestionPresent = isInlineSuggestionPresent,
-                    isPasswordField = isCapabilityFlagsPassword,
-                    isNumberLayout = isKeyboardLayoutNumber,
-                    expandToolbarByDefault = expandToolbarByDefault,
-                    isToolbarManuallyToggled = isToolbarManuallyToggled,
-                )
+        val newState = IdleUiPolicy.decide(
+            IdleUiPolicy.Inputs(
+                numberRowMode = numberRowMode,
+                isClipboardFresh = isClipboardFresh,
+                isInlineSuggestionPresent = isInlineSuggestionPresent,
+                isPasswordField = isCapabilityFlagsPassword,
+                isNumberLayout = isKeyboardLayoutNumber,
+                expandToolbarByDefault = expandToolbarByDefault,
+                isToolbarManuallyToggled = isToolbarManuallyToggled,
             )
-        ) {
-            IdleUiPolicy.Display.Empty -> IdleUi.State.Empty
-            IdleUiPolicy.Display.Toolbar -> IdleUi.State.Toolbar
-            IdleUiPolicy.Display.Clipboard -> IdleUi.State.Clipboard
-            IdleUiPolicy.Display.NumberRow -> IdleUi.State.NumberRow
-            IdleUiPolicy.Display.InlineSuggestion -> IdleUi.State.InlineSuggestion
-        }
+        )
         if (newState == idleUi.currentState) return
         idleUi.updateState(newState, fromUser)
     }
@@ -208,9 +200,9 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
         } else false
     }
 
-    // Combined gesture: determine primary direction by comparing totalX and totalY.
-    // - If horizontal is dominant and left, show number row (when allowed).
-    // - If vertical is dominant and down, hide keyboard.
+    // Combined gesture. Where the number row is allowed, the direction is the angle from the
+    // button's centre: within 45° of down hides the keyboard, any other (left, right or up) shows
+    // the number row. Elsewhere a swipe mostly down hides the keyboard.
     private val swipeHideKeyboardCallback = CustomGestureView.OnGestureListener { v, e ->
         require(v is ToolButton)
         val numberRowAvailable = isCapabilityFlagsPassword && !isKeyboardLayoutNumber
@@ -233,11 +225,11 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
                 }
                 CustomGestureView.GestureType.Up -> {
                     val handled = !e.cancelled && when (angle) {
-                        in -45f..45f if distance > v.swipeThresholdX -> {
+                        in -45f..45f if distance > v.swipeThresholdY -> {
                             service.requestHideSelf(0)
                             true
                         }
-                        !in -45f..45f if distance > v.swipeThresholdY -> {
+                        !in -45f..45f if distance > v.swipeThresholdX -> {
                             v.iconRotation = 90f * dir
                             numberRowMode = IdleUiPolicy.NumberRowMode.ForceShow
                             evalIdleUiState(fromUser = true)
@@ -263,17 +255,17 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
         IdleUi(context, theme, popup, commonKeyActionListener).apply {
             menuButton.setOnClickListener {
                 when (idleUi.currentState) {
-                    IdleUi.State.Empty -> {
+                    IdleUiPolicy.Display.Empty -> {
                         isToolbarManuallyToggled = !expandToolbarByDefault
                         evalIdleUiState(fromUser = true)
                     }
-                    IdleUi.State.Toolbar -> {
+                    IdleUiPolicy.Display.Toolbar -> {
                         isToolbarManuallyToggled = expandToolbarByDefault
                         evalIdleUiState(fromUser = true)
                     }
                     else -> {
                         isToolbarManuallyToggled = !expandToolbarByDefault
-                        idleUi.updateState(IdleUi.State.Toolbar, fromUser = true)
+                        idleUi.updateState(IdleUiPolicy.Display.Toolbar, fromUser = true)
                     }
                 }
                 // reset timeout timer (if present) when user switch layout
@@ -546,3 +538,7 @@ class KawaiiBarComponent : UniqueViewComponent<KawaiiBarComponent, FrameLayout>(
     }
 
 }
+
+/** The clipboard suggestion's first 42 characters, an emoji never cut in two. */
+internal fun clipboardPreview(text: String): String =
+    text.substring(0, text.offsetByCodePoints(0, min(42, text.codePointCount(0, text.length))))
