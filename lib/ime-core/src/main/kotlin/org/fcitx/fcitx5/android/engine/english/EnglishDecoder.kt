@@ -40,7 +40,12 @@ data class TypingCosts(
  * no more than the completion limit, and more cheaply than its parent's) offers the words it
  * starts, and is searched no further: those words cost no less below it.
  */
-class EnglishDecoder(private val data: EnglishData, private val costs: TypingCosts = TypingCosts()) {
+class EnglishDecoder(
+    private val data: EnglishData,
+    private val costs: TypingCosts = TypingCosts(),
+    // a word's score after a context: the model's, or with what the user typed added
+    private val score: (context: Long, word: Int) -> Float = data.model::scoreAfter,
+) {
 
     /**
      * A word offered: its id, its model score after the context, what typing it so cost, and
@@ -165,7 +170,7 @@ class EnglishDecoder(private val data: EnglishData, private val costs: TypingCos
         private fun add(word: Int, cost: Float, completes: Boolean) {
             val old = found[word]
             if (old != null && old.cost <= cost) return
-            found[word] = Suggestion(word, data.model.scoreAfter(context, word), cost, completes)
+            found[word] = Suggestion(word, score(context, word), cost, completes)
         }
 
         // the end of the run from [from] whose keys have [c] at [depth]: the run is sorted, and every key in it is longer than depth

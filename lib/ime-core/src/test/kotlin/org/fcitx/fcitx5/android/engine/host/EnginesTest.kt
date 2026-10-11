@@ -54,6 +54,19 @@ class EnginesTest : EnginesFixture() {
         assertEquals("你", engines.onEvent(Engines.PINYIN, EngineEvent.CHAR, ' '.code).commit)
     }
 
+    // in its own log under the user directory, read again as English is next typed
+    @Test
+    fun theEnglishWordsLearnedAreKeptAcrossAStart() {
+        val first = Engines(::load, folder.root)
+        first.type(Engines.ENGLISH, "youmo")
+        assertEquals("youmo ", first.onEvent(Engines.ENGLISH, EngineEvent.CHAR, ' '.code).commit)
+        first.close()
+        assertTrue(File(folder.root, Engines.USER_ENGLISH).length() > 0)
+        val again = Engines(::load, folder.root)
+        assertTrue("youmo" in again.type(Engines.ENGLISH, "you").candidates)
+        again.close()
+    }
+
     @Test
     fun theRestOfTheCandidatesAreFetchedFromTheSession() {
         val engines = Engines(::load, null)

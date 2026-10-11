@@ -6,6 +6,8 @@ package org.fcitx.fcitx5.android.engine.host
 
 import org.fcitx.fcitx5.android.engine.data.CodeTable
 import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
+import org.fcitx.fcitx5.android.engine.english.EnglishDataBuilder
+import org.fcitx.fcitx5.android.engine.english.EnglishText
 import org.fcitx.fcitx5.android.engine.pinyin.Syllables
 import org.fcitx.fcitx5.android.engine.rerank.TinyModel
 import org.fcitx.fcitx5.android.engine.stroke.Strokes
@@ -37,6 +39,14 @@ open class EnginesFixture {
         .build()
         .toByteArray()
 
+    private val english = EnglishDataBuilder()
+        .unigram("<unk>", -7f, 0f)
+        .unigram(EnglishText.START, -9f, -0.5f)
+        .unigram("the", -1.3f, 0f)
+        .unigram("you", -1.8f, 0f)
+        .build()
+        .toByteArray()
+
     private var model: ByteArray? = TinyModel().bytes()
     private var refining: ByteArray? = TinyModel().bytes()
 
@@ -53,6 +63,7 @@ open class EnginesFixture {
             Engines.SENTENCE_MODEL -> model
             Engines.REFINING_MODEL -> refining
             Engines.STROKE_DATA -> strokes
+            Engines.ENGLISH_DATA -> english
             else -> throw IllegalArgumentException(path)
         }
         // as the app's assets do of a file it has not got

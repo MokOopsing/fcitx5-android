@@ -6,6 +6,8 @@ package org.fcitx.fcitx5.android.engine.host
 
 import org.fcitx.fcitx5.android.engine.data.CodeTableReader
 import org.fcitx.fcitx5.android.engine.english.EnglishSession
+import org.fcitx.fcitx5.android.engine.english.EnglishUser
+import org.fcitx.fcitx5.android.engine.english.EnglishUserStore
 import org.fcitx.fcitx5.android.engine.phrase.CustomPhrases
 import org.fcitx.fcitx5.android.engine.phrase.PhraseBook
 import org.fcitx.fcitx5.android.engine.pinyin.PinyinSegmenter
@@ -236,7 +238,7 @@ class Engines(
                 // its keys and word index, some hundreds of milliseconds on a phone, built before the
                 // first key wants them; a key that comes sooner waits for them, as it would anyway
                 if (data != null) Thread(data::warmUp, "english-warm-up").apply { isDaemon = true }.start()
-                EnglishSession(data, pageSize = s.pageSize)
+                EnglishSession(data, pageSize = s.pageSize, user = englishUser())
             }
             // 简拼 only where the digits read nothing else: as common on the evaluation set, and faster
             T9 -> ForgetsInTables(pinyinSession(T9Segmenter(s.fuzzy, abbreviations = false), spell = true))
@@ -296,9 +298,29 @@ class Engines(
         lexicon.reloadDictionaries(before)
     }
 
+    private var englishUser: EnglishUser? = null
+    private var englishStore: EnglishUserStore? = null
+
+    // the English words learned, kept in their own log beside pinyin's; read once, as English is first typed
+    private fun englishUser(): EnglishUser = englishUser ?: EnglishUser().also { user ->
+        englishUser = user
+        if (userDir != null) {
+            userDir.mkdirs()
+            // a log that cannot be read or moved aside: learn in memory rather than not type
+            englishStore = try {
+                EnglishUserStore(File(userDir, USER_ENGLISH), user, onError, compactions).apply { open() }
+            } catch (e: IOException) {
+                onError(e)
+                null
+            }
+        }
+    }
+
     override fun close() {
         // each on its own: one that fails to close must not leave the others open
-        (listOfNotNull(lexicon.store) + tables.stores()).forEach { closeQuietly(it, onError) }
+        (listOfNotNull(lexicon.store, englishStore) + tables.stores()).forEach { closeQuietly(it, onError) }
+        englishStore = null
+        englishUser = null
         // used after all the same: each reads its log again, and appends to it
         lexicon.closed()
         tables.closed()
@@ -332,6 +354,7 @@ class Engines(
         const val REFINING_MODEL = "engine/sentence-model-large.safetensors"
         const val TABLE_DIR = "engine/table"
         const val USER_PINYIN = "pinyin.user"
+        const val USER_ENGLISH = "english.user"
 
         /** Beside a table's log: its phrases saved before were told to pinyin (see shared). */
         const val TOLD = ".told"
