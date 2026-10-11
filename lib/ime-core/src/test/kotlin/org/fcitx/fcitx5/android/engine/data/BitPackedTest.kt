@@ -21,7 +21,7 @@ class BitPackedTest {
         val random = Random(42)
         for (width in 1..BitPacked.MAX_WIDTH) {
             val max = if (width == 31) Int.MAX_VALUE else (1 shl width) - 1
-            // 67 values: the width never divides 64 evenly for long, so some straddle two words
+            // 67 values leave the last word part full; at a width that does not divide 64, some straddle two words
             val values = IntArray(67) { if (it == 0) max else random.nextInt(max) }
             val packed = read(BitPacked.encode(values))
             assertEquals("width", width, packed.width)
@@ -36,6 +36,15 @@ class BitPackedTest {
         assertEquals(2, BitPacked.widthFor(2))
         assertEquals(19, BitPacked.widthFor(270_713))
         assertEquals(31, BitPacked.widthFor(Int.MAX_VALUE))
+    }
+
+    @Test
+    fun aBufferIsReadLittleEndianWhateverItsOrder() {
+        val buffer = ByteBuffer.wrap(BitPacked.encode(intArrayOf(5, 6, 7)))
+        val packed = BitPacked(buffer)
+        assertEquals(3, packed.width)
+        assertEquals(listOf(5, 6, 7), (0 until packed.size).map { packed[it] })
+        assertEquals(ByteOrder.BIG_ENDIAN, buffer.order())
     }
 
     @Test

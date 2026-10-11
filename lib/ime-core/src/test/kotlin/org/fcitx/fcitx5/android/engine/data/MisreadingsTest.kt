@@ -6,6 +6,7 @@ package org.fcitx.fcitx5.android.engine.data
 
 import org.fcitx.fcitx5.android.engine.pinyin.Syllables
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -29,7 +30,7 @@ class MisreadingsTest {
         val back = Misreadings.fromMeta("恫吓", Misreadings.meta(entry))!!
         assertEquals(entry.reading, back.reading)
         assertEquals(entry.misread, back.misread)
-        assertEquals(null, Misreadings.fromMeta("恫吓", "dòng hè"))
+        assertNull(Misreadings.fromMeta("恫吓", "dòng hè"))
     }
 
     @Test
@@ -41,10 +42,17 @@ class MisreadingsTest {
 
     @Test
     fun aLineThatIsNoneSaysWhichAndWhy() {
-        fun error(line: String) = assertThrows(SourceException::class.java) { Misreadings.parse(sequenceOf("#", line), "list") }
-        assertEquals(2, error("般若\tbō rě").line)
-        assertTrue(error("般若\tbō\tban'ruo").message!!.contains("a syllable a character"))
-        assertTrue(error("般若\tbō rě\tban'ruo,bo're").message!!.contains("is the reading"))
+        fun rejection(line: String) = assertThrows(SourceException::class.java) { Misreadings.parse(sequenceOf("#", line), "list") }
+        assertEquals(2, rejection("般若\tbō rě").line)
+        assertTrue(rejection("般若\tbō\tban'ruo").message!!.contains("a syllable a character"))
+        assertTrue(rejection("般若\tbō rě\tban'ruo,bo're").message!!.contains("is the reading"))
+    }
+
+    @Test
+    fun aCharacterPastTheBasicPlaneIsOneSyllable() {
+        // 𠮷 is U+20BB7, two chars
+        val entry = Misreadings.parse(sequenceOf("𠮷野\tjí yě\tzhan'ye"), "list").single()
+        assertEquals("ji'ye", entry.typed)
     }
 
     @Test

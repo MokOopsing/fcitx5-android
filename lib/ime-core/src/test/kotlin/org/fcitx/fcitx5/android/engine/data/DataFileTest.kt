@@ -144,6 +144,21 @@ class DataFileTest {
     private fun DataFile.bytes(id: Int) = section(id).let { s -> ByteArray(s.capacity()) { s.get(it) } }
 
     @Test
+    fun aSectionWhoseIdIsDamagedIsLostEvenToAVerifiedOpenAndHasCannotTell() {
+        val bytes = sample()
+        // entries are sorted by id: 1, 2, 7; the checksum goes with the entry, so it still matches
+        bytes[24 + 2 * 24] = 71
+        val file = open(bytes)
+        assertFalse(file.has(7))
+        try {
+            file.section(7)
+            fail("returned a section that is not there")
+        } catch (e: DataFormatException) {
+            assertTrue(e.message!!.contains("missing section 7"))
+        }
+    }
+
+    @Test
     fun aTruncatedFileIsRejected() {
         val bytes = sample()
         assertRejected(bytes.copyOf(bytes.size - 2), reason = "out of bounds")
@@ -165,13 +180,28 @@ class DataFileTest {
 
     @Test
     fun anOversizedMetaSectionIsRejected() {
-        val file = open(DataFile.Writer(DataFile.KIND_TABLE, KIND_VERSION).addMeta(1, mapOf("k" to "v".repeat(70_000))).toByteArray())
+        // written past addMeta, which refuses it
+        val meta = "k=${"v".repeat(70_000)}\n".toByteArray()
+        val file = open(DataFile.Writer(DataFile.KIND_TABLE, KIND_VERSION).add(1, meta).toByteArray())
         try {
             file.meta(1)
             fail("accepted")
         } catch (e: DataFormatException) {
             assertTrue(e.message, e.message!!.contains("meta section"))
         }
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun anOversizedMetaSectionCannotBeWritten() {
+        DataFile.Writer(DataFile.KIND_TABLE, KIND_VERSION).addMeta(1, mapOf("k" to "v".repeat(70_000)))
+    }
+
+    @Test
+    fun aMetaSectionAsLargeAsTheReaderTakesIsWrittenAndRead() {
+        // "k=", the value and a newline: 64 KiB
+        val value = "v".repeat(64 * 1024 - 3)
+        val file = open(DataFile.Writer(DataFile.KIND_TABLE, KIND_VERSION).addMeta(1, mapOf("k" to value)).toByteArray())
+        assertEquals(value, file.meta(1)["k"])
     }
 
     @Test(expected = IllegalArgumentException::class)

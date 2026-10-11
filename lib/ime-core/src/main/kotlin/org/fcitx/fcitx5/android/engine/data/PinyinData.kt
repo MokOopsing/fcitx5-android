@@ -37,14 +37,13 @@ class PinyinData private constructor(file: DataFile) {
     )
     val model = NgramModel(file, meta.int(META_LM_VOCABULARY), meta.int(META_UNKNOWN))
 
-    /** Which layer of the dictionary each word is from: data without the section is all one layer. */
-    val layers = WordLayers(
-        meta[META_LAYERS]?.split(',') ?: listOf(WordLayers.BASE),
-        if (file.has(Section.WORD_LAYER)) file.bitPacked(Section.WORD_LAYER) else null,
-        vocabulary.size,
-    )
+    /** Which layer of the dictionary each word is from: data naming one layer has no section for it. */
+    val layers = (meta[META_LAYERS]?.split(',') ?: listOf(WordLayers.BASE)).let { names ->
+        // asked for, not looked for with has(): a damaged section table loses a section and passes its checksums
+        WordLayers(names, if (names.size > 1) file.bitPacked(Section.WORD_LAYER) else null, vocabulary.size)
+    }
 
-    /** The model's words by their text, made when first asked for: see [WordIndex]. */
+    /** The model's words by their text, made when first asked for, on whichever thread asks first (a table that learns, in the background): see [WordIndex]. */
     val wordIndex: WordIndex by lazy { WordIndex(vocabulary, model.vocabularySize) }
 
     /** Words often read wrongly, by word: see [Misreadings]. */
@@ -107,7 +106,6 @@ class PinyinData private constructor(file: DataFile) {
     }
 }
 
-/** Word ids to text. Ids below [NgramModel.vocabularySize] are the model's own words. */
 /**
  * The layers of the dictionary, by [names] (libime's words, a year's new words ...), and
  * the one each word is from: what a prior per layer ([org.fcitx.fcitx5.android.engine.lattice.LayerPrior])
@@ -117,17 +115,14 @@ class WordLayers internal constructor(val names: List<String>, private val packe
     init {
         ensureFormat(names.isNotEmpty() && names.all { it.isNotEmpty() }) { "layer names ${names.joinToString(",")}" }
         ensureFormat(packed == null || packed.size == words) { "layers for ${packed?.size} of $words words" }
+        // here, not in layer(): that runs for every word scored, and must not fail on a key press
+        packed?.checkBelow("word layers", names.size)
     }
 
     val count: Int get() = names.size
 
     /** Of a word not in the dictionary (the user's own, [NgramModel.NO_WORD]): the base. */
-    fun layer(word: Int): Int {
-        if (packed == null || word !in 0 until packed.size) return 0
-        val layer = packed[word]
-        ensureFormat(layer < names.size) { "word $word in layer $layer of ${names.size}" }
-        return layer
-    }
+    fun layer(word: Int): Int = if (packed == null || word !in 0 until packed.size) 0 else packed[word]
 
     companion object {
         /** The layer with no name given: libime's dictionary, the base dictionary. */
@@ -138,6 +133,7 @@ class WordLayers internal constructor(val names: List<String>, private val packe
     }
 }
 
+/** Word ids to text. Ids below [NgramModel.vocabularySize] are the model's own words. */
 class Vocabulary internal constructor(private val strings: StringTable) {
     val size: Int get() = strings.size
     fun word(id: Int): String = strings[id]
@@ -172,6 +168,8 @@ class PinyinDictionary internal constructor(
         for (node in 0 until nodes) ensureFormat(childStart[node] > node) { "dictionary node $node precedes its parent" }
         wordStart.checkRuns("dictionary words", 0, words.size)
         words.checkBelow("dictionary words", vocabularySize)
+        // spelt out by id (Syllables.spelling) wherever a trie is walked
+        syllables.checkBelow("dictionary syllables", Syllables.count)
     }
 
     val root: Int get() = 0
@@ -309,13 +307,20 @@ class NgramModel internal constructor(file: DataFile, val vocabularySize: Int, p
         while (b < bEnd || t < tEnd) {
             val bw = if (b < bEnd) biWord[b] else Int.MAX_VALUE
             val tw = if (t < tEnd) triWord[t] else Int.MAX_VALUE
-            if (tw <= bw) {
-                visit.visit(tw, triProbTable[triProb.get(t).toInt() and 0xff])
-                t++
-                if (tw == bw) b++
-            } else {
-                visit.visit(bw, backoff + biProbTable[biProb.get(b).toInt() and 0xff])
-                b++
+            when {
+                // a word past the model, which only a damaged file has, is not handed on: skipped here,
+                // as checking them all at load would page in tens of MB at each first pinyin load
+                b < bEnd && bw >= vocabularySize -> b++
+                t < tEnd && tw >= vocabularySize -> t++
+                tw <= bw -> {
+                    visit.visit(tw, triProbTable[triProb.get(t).toInt() and 0xff])
+                    t++
+                    if (tw == bw) b++
+                }
+                else -> {
+                    visit.visit(bw, backoff + biProbTable[biProb.get(b).toInt() and 0xff])
+                    b++
+                }
             }
         }
     }
@@ -327,8 +332,9 @@ class NgramModel internal constructor(file: DataFile, val vocabularySize: Int, p
     /** log10 backoff weight of [word] as a context; 0 when it has none */
     fun backoff(word: Int): Float = uniBackoff.getFloat(known(word) * 4)
 
-    /** log10 backoff weight of the context (prev, word); 0 for a bigram the model lacks */
+    /** log10 backoff weight of the context (prev, word); 0 for a bigram the model lacks, or a [NO_WORD] prev */
     fun backoff(prev: Int, word: Int): Float {
+        if (prev == NO_WORD) return 0f
         val bigram = bigram(known(prev), known(word))
         return if (bigram >= 0) biBackoffTable[biBackoff.get(bigram).toInt() and 0xff] else 0f
     }

@@ -5,29 +5,34 @@
 package org.fcitx.fcitx5.android.engine.data
 
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
- * A read-only array of non-negative ints, each stored in exactly [width] bits, over a
- * little-endian buffer that is usually memory-mapped. The language model is mostly arrays of
- * word ids and offsets that need 19 to 23 bits; packing them rather than using 32 is what keeps
- * the data file near the size of libime's.
+ * A read-only array of non-negative ints, each stored in exactly [width] bits, read
+ * little-endian from a buffer (whatever its byte order) that is usually memory-mapped. The
+ * language model is mostly arrays of word ids and offsets that need 19 to 23 bits; packing them
+ * rather than using 32 is what keeps the data file near the size of libime's.
  *
  * Layout: `u32 width, u32 size`, then the values as little-endian 64-bit words, lowest bits
  * first. A value straddling two words only exists when the second word does, so no padding.
  */
-class BitPacked(private val buffer: ByteBuffer) {
+class BitPacked(buffer: ByteBuffer) {
+
+    // a view of its own: ByteBuffer.wrap's buffers are big-endian
+    private val buffer: ByteBuffer = buffer.duplicate().order(ByteOrder.LITTLE_ENDIAN)
 
     val width: Int
     val size: Int
     private val mask: Long
 
     init {
-        require(buffer.capacity() >= HEADER_BYTES) { "truncated header" }
-        width = buffer.getInt(0)
-        size = buffer.getInt(4)
+        val b = this.buffer
+        require(b.capacity() >= HEADER_BYTES) { "truncated header" }
+        width = b.getInt(0)
+        size = b.getInt(4)
         require(width in 1..MAX_WIDTH) { "bad width $width" }
         require(size >= 0) { "bad size $size" }
-        require(buffer.capacity() >= byteSize(width, size)) { "truncated: $size values of $width bits" }
+        require(b.capacity() >= byteSize(width, size)) { "truncated: $size values of $width bits" }
         mask = (1L shl width) - 1
     }
 

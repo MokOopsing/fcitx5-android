@@ -30,7 +30,8 @@ import java.util.zip.CRC32
  * whose sections fail their checksums, when opened with `verify`: a file cut short fails the
  * bounds checks, but blocks zeroed by a crash or bits flipped by bad storage would pass them and
  * just rank words wrongly. A damaged section table either misplaces a section, which its checksum
- * then catches, or loses one, which the reader asking for it catches.
+ * then catches, or loses one, which the reader asking for it catches: so a reader asks for every
+ * section the file should have, as [has] cannot tell a lost section from one never written.
  */
 class DataFile private constructor(buffer: ByteBuffer, expectedKind: Int, expectedKindVersion: Int, verify: Boolean) {
 
@@ -119,7 +120,10 @@ class DataFile private constructor(buffer: ByteBuffer, expectedKind: Int, expect
 
         fun addMeta(id: Int, meta: Map<String, String>) = apply {
             meta.forEach { (k, v) -> require('=' !in k && '\n' !in k && '\n' !in v && '\r' !in k && '\r' !in v) { "bad meta entry $k=$v" } }
-            add(id, meta.entries.joinToString("") { "${it.key}=${it.value}\n" }.toByteArray(Charsets.UTF_8))
+            val bytes = meta.entries.joinToString("") { "${it.key}=${it.value}\n" }.toByteArray(Charsets.UTF_8)
+            // the reader's limit: a file it would refuse fails here, where it is made
+            require(bytes.size <= MAX_META_BYTES) { "meta section of ${bytes.size} bytes, over $MAX_META_BYTES" }
+            add(id, bytes)
         }
 
         fun writeTo(out: OutputStream) {

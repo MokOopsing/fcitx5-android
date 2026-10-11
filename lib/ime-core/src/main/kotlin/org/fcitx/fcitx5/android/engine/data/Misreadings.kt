@@ -43,7 +43,9 @@ class Misreadings(val word: String, val reading: String, val misread: List<Strin
             if (f.size < 3 || f.any { it.isEmpty() }) fail("expected \"word<TAB>reading<TAB>misreadings\"")
             val entry = Misreadings(f[0], f[1], f[2].split(','))
             val readings = listOf(entry.typed) + entry.misread
-            if (readings.any { it.split('\'').size != f[0].length }) fail("not a syllable a character: $line")
+            // by code point: a character past U+FFFF (CJK Extension B) is two chars and one syllable
+            val characters = f[0].codePointCount(0, f[0].length)
+            if (readings.any { it.split('\'').size != characters }) fail("not a syllable a character: $line")
             if (entry.typed in entry.misread) fail("a misreading is the reading: $line")
             entry
         }.toList()
@@ -51,7 +53,8 @@ class Misreadings(val word: String, val reading: String, val misread: List<Strin
         /** `bō rě` as typed, `bo're`; ü as v. */
         fun toneless(reading: String): String =
             Normalizer.normalize(reading.trim(), Normalizer.Form.NFD)
-                .replace("ü", "v")
+                // ü as NFD leaves it, written out: an editor saving this file as NFC cannot change it
+                .replace("u\u0308", "v")
                 .filter { Character.getType(it) != Character.NON_SPACING_MARK.toInt() }
                 .split(' ').filter { it.isNotEmpty() }.joinToString("'")
     }

@@ -39,8 +39,11 @@ internal class StringTable(private val offsets: BitPacked, private val chars: By
         return n.compareTo(key.length)
     }
 
-    fun startsWith(i: Int, prefix: String): Boolean =
-        length(i) >= prefix.length && prefix.indices.all { char(i, it) == prefix[it] }
+    fun startsWith(i: Int, prefix: String): Boolean {
+        if (length(i) < prefix.length) return false
+        for (k in 0 until prefix.length) if (char(i, k) != prefix[k]) return false
+        return true
+    }
 
     companion object {
         fun write(out: DataFile.Writer, offsetsId: Int, charsId: Int, strings: List<String>) {

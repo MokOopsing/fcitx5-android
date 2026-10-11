@@ -13,6 +13,7 @@ import org.junit.Assert.fail
 import org.junit.Test
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.random.Random
 
 class PinyinDataTest {
 
@@ -41,6 +42,30 @@ class PinyinDataTest {
         PinyinData.load(ByteBuffer.wrap(b.build(meta).toByteArray()))
 
     private fun PinyinData.id(word: String) = (0 until vocabulary.size).first { vocabulary.word(it) == word }
+
+    /** Where section [id]'s entry is in the section table of [bytes]. */
+    private fun sectionEntry(bytes: ByteArray, id: Int): Int {
+        val file = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        return (0 until file.getInt(16)).map { 24 + it * 24 }.first { file.getInt(it) == id }
+    }
+
+    /** Sets every bit of the first value of BitPacked section [id] in [bytes]: its largest value. */
+    private fun maxFirstValue(bytes: ByteArray, id: Int) {
+        val file = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        val at = file.getLong(sectionEntry(bytes, id) + 8).toInt()
+        val width = file.getInt(at)
+        assertTrue("width $width", width <= 8)
+        bytes[at + 8] = (bytes[at + 8].toInt() or ((1 shl width) - 1)).toByte()
+    }
+
+    private fun assertRejectedUnverified(bytes: ByteArray, reason: String) {
+        try {
+            PinyinData.load(ByteBuffer.wrap(bytes), verify = false)
+            fail("loaded")
+        } catch (e: DataFormatException) {
+            assertTrue(e.message, e.message!!.contains(reason))
+        }
+    }
 
     @Test
     fun theDictionaryFindsWordsBySyllablesMostProbableFirst() {
@@ -96,6 +121,34 @@ class PinyinDataTest {
         assertThrows(IllegalArgumentException::class.java) { builder().entry("x", syl("ni"), layer = 1) }
         assertThrows(IllegalArgumentException::class.java) { builder().layers(listOf("base", "base")) }
         assertThrows(IllegalArgumentException::class.java) { builder().layers(listOf("a,b")) }
+        // fewer names than an entry added already needs
+        assertThrows(IllegalArgumentException::class.java) {
+            builder().layers(listOf("base", "new")).entry("x", syl("ni"), layer = 1).layers(listOf("base"))
+        }
+    }
+
+    /** Checked as it loads, not as each word is scored: a bad value must not fail on a key press. */
+    @Test
+    fun aWordOfALayerPastTheNamesFailsToLoad() {
+        val bytes = builder().layers(listOf("base", "places", "new")).entry("尼豪", syl("ni", "hao"), layer = 2).build().toByteArray()
+        // the same length, and two names: 尼豪's layer 2 is past them
+        val needle = "places,new".toByteArray()
+        val at = (0..bytes.size - needle.size).first { i -> needle.indices.all { bytes[i + it] == needle[it] } }
+        "places;new".toByteArray().copyInto(bytes, at)
+        assertRejectedUnverified(bytes, "word layers")
+    }
+
+    /** The checksum goes with a section's entry, so a damaged id passes a verified load and the section looks never written. */
+    @Test
+    fun layeredDataThatLostItsLayerSectionFailsToLoad() {
+        val bytes = builder().layers(listOf("base", "new")).entry("尼豪", syl("ni", "hao"), layer = 1).build().toByteArray()
+        ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN).putInt(sectionEntry(bytes, PinyinData.Section.WORD_LAYER), 99)
+        try {
+            PinyinData.load(ByteBuffer.wrap(bytes))
+            fail("loaded layered data without its layers")
+        } catch (e: DataFormatException) {
+            assertTrue(e.message, e.message!!.contains("missing section ${PinyinData.Section.WORD_LAYER}"))
+        }
     }
 
     @Test
@@ -152,6 +205,43 @@ class PinyinDataTest {
         assertEquals(emptyList<String>(), after(NO_WORD, data.id("妳好")))
     }
 
+    /** The words forEachAfter hands on are looked up in the vocabulary: one past the model loads, and is not handed on. */
+    @Test
+    fun anNgramWordPastTheModelIsNotHandedOn() {
+        // 3 bits each, all set: 7, past the model's 6 words
+        for (section in listOf(PinyinData.Section.BI_WORD, PinyinData.Section.TRI_WORD)) {
+            val bytes = builder().build().toByteArray()
+            maxFirstValue(bytes, section)
+            val data = PinyinData.load(ByteBuffer.wrap(bytes), verify = false)
+            val m = data.model
+            val words = ArrayList<Int>()
+            for (a in NO_WORD until data.vocabulary.size) {
+                for (b in NO_WORD until data.vocabulary.size) m.forEachAfter(m.context(a, b)) { word, _ -> words += word }
+            }
+            assertTrue("section $section: $words", words.isNotEmpty() && words.all { it < m.vocabularySize })
+        }
+    }
+
+    @Test
+    fun ngramsAddedInAnyOrderAreFoundByTheirWords() {
+        val b = builder()
+        val words = (0 until 8).map { "w$it" }
+        words.forEach { b.unigram(it, -4f, 0f) }
+        // few distinct values, so each quantises exactly
+        fun prob(vararg i: Int) = -0.1f * (1 + i.sum() % 7)
+        val random = Random(7)
+        val pairs = words.indices.flatMap { p -> words.indices.map { w -> p to w } }.shuffled(random)
+        pairs.forEach { (p, w) -> b.bigram(words[p], words[w], prob(p, w), 0f) }
+        val triples = pairs.flatMap { (p2, p) -> words.indices.map { w -> Triple(p2, p, w) } }.shuffled(random)
+        triples.forEach { (p2, p, w) -> b.trigram(words[p2], words[p], words[w], prob(p2, p, w) - 1f) }
+        val data = load(b)
+        val m = data.model
+        for ((p, w) in pairs) assertEquals(prob(p, w), m.score(data.id(words[p]), data.id(words[w])), 0f)
+        for ((p2, p, w) in triples) {
+            assertEquals(prob(p2, p, w) - 1f, m.score(data.id(words[p2]), data.id(words[p]), data.id(words[w])), 0f)
+        }
+    }
+
     @Test
     fun unknownWordsAndMissingContextsAreHandled() {
         val data = load()
@@ -175,6 +265,10 @@ class PinyinDataTest {
         assertEquals(0f, m.backoff(data.id("妳好")), 0f)
         assertEquals(-0.1f, m.backoff(data.id("你"), data.id("好")), 0f)
         assertEquals(0f, m.backoff(data.id("好"), data.id("你")), 0f)
+        // no prev is no context, not the unknown word: <unk> 好 has a backoff of its own here
+        val unk = load(builder().bigram("<unk>", "好", -1f, -0.3f))
+        assertEquals(-0.3f, unk.model.backoff(unk.id("<unk>"), unk.id("好")), 0f)
+        assertEquals(0f, unk.model.backoff(NO_WORD, unk.id("好")), 0f)
     }
 
     @Test
@@ -277,8 +371,21 @@ class PinyinDataTest {
     }
 
     @Test
+    fun aSyllablePastTheTableIsRejected() {
+        // big-endian, as ByteBuffer.wrap gives it: BitPacked reads little-endian whatever it is given
+        fun packed(vararg v: Int) = BitPacked(ByteBuffer.wrap(BitPacked.encode(v)))
+        try {
+            // node 1, the root's one child, is reached by a syllable with no spelling
+            PinyinDictionary(1, packed(0, Syllables.count), packed(1, 2, 2), packed(0, 0, 0), packed(), ByteBuffer.allocate(0), FloatArray(256))
+            fail("accepted")
+        } catch (e: DataFormatException) {
+            assertTrue(e.message, e.message!!.contains("dictionary syllables"))
+        }
+    }
+
+    @Test
     fun aTrieNodeThatIsItsOwnChildIsRejected() {
-        fun packed(vararg v: Int) = BitPacked(ByteBuffer.wrap(BitPacked.encode(v)).order(ByteOrder.LITTLE_ENDIAN))
+        fun packed(vararg v: Int) = BitPacked(ByteBuffer.wrap(BitPacked.encode(v)))
         try {
             // node 1's children start at 1: it would be its own child, and a walk down would never end
             PinyinDictionary(1, packed(0, 5), packed(1, 1, 2), packed(0, 0, 0), packed(), ByteBuffer.allocate(0), FloatArray(256))

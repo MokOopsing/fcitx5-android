@@ -36,11 +36,12 @@ class PinyinDataBuilder {
     fun layers(names: List<String>) = apply {
         require(names.isNotEmpty() && names.all { it.isNotEmpty() && ',' !in it }) { "layer names $names" }
         require(names.toSet().size == names.size) { "a layer named twice in $names" }
+        require(entries.all { it.layer < names.size }) { "an entry added already is of a layer past $names" }
         layerNames = names
     }
 
     fun unigram(word: String, prob: Float, backoff: Float) = apply {
-        finite(word, prob, backoff)
+        finite(prob, backoff) { word }
         require(ids.put(word, words.size) == null) { "unigram \"$word\" added twice" }
         words += word
         uniProb += prob
@@ -51,7 +52,7 @@ class PinyinDataBuilder {
     fun unigramOf(word: String): Float? = ids[word]?.let { uniProb[it] }
 
     fun bigram(prev: String, word: String, prob: Float, backoff: Float) = apply {
-        finite("$prev $word", prob, backoff)
+        finite(prob, backoff) { "$prev $word" }
         biPrev += lmId(prev)
         biWord += lmId(word)
         biProb += prob
@@ -59,7 +60,7 @@ class PinyinDataBuilder {
     }
 
     fun trigram(prev2: String, prev: String, word: String, prob: Float) = apply {
-        finite("$prev2 $prev $word", prob, 0f)
+        finite(prob, 0f) { "$prev2 $prev $word" }
         triPrev2 += lmId(prev2)
         triPrev += lmId(prev)
         triWord += lmId(word)
@@ -80,8 +81,8 @@ class PinyinDataBuilder {
     }
 
     // a NaN would poison the quantiser: it equals nothing, so it breaks every bin it lands in
-    private fun finite(ngram: String, prob: Float, backoff: Float) =
-        require(prob.isFinite() && backoff.isFinite()) { "\"$ngram\": $prob $backoff" }
+    private inline fun finite(prob: Float, backoff: Float, ngram: () -> String) =
+        require(prob.isFinite() && backoff.isFinite()) { "\"${ngram()}\": $prob $backoff" }
 
     private fun lmId(word: String) = requireNotNull(ids[word]) { "\"$word\" is not a unigram" }
 
@@ -171,7 +172,7 @@ class PinyinDataBuilder {
     }
 
     private fun writeModel(out: DataFile.Writer, lmSize: Int) {
-        val bi = (0 until biWord.size).sortedWith(compareBy<Int>({ biPrev[it] }, { biWord[it] }))
+        val bi = order(biWord.size, lmSize, { biPrev[it] }, { biWord[it] })
         val biKeys = LongArray(bi.size) { key(biPrev[bi[it]], biWord[bi[it]]) }
         for (k in 1 until biKeys.size) require(biKeys[k - 1] != biKeys[k]) { "duplicate bigram at ${bi[k]}" }
         // each trigram's context is the position of its leading bigram in sorted order
@@ -180,7 +181,7 @@ class PinyinDataBuilder {
             require(at >= 0) { "trigram ${words[triPrev2[t]]} ${words[triPrev[t]]} ${words[triWord[t]]} has no leading bigram" }
             at
         }
-        val tri = (0 until triWord.size).sortedWith(compareBy<Int>({ triContext[it] }, { triWord[it] }))
+        val tri = order(triWord.size, bi.size, { triContext[it] }, { triWord[it] })
         for (k in 1 until tri.size) {
             require(triContext[tri[k - 1]] != triContext[tri[k]] || triWord[tri[k - 1]] != triWord[tri[k]]) { "duplicate trigram at ${tri[k]}" }
         }
@@ -208,11 +209,26 @@ class PinyinDataBuilder {
         LittleEndianOutput(size * 4).apply { for (i in 0 until size) writeFloat(value(i)) }.toByteArray()
 
     /** For [count] items sorted by [owner] in 0 until [owners]: where each owner's run starts, plus the end. */
-    private fun starts(owners: Int, count: Int, owner: (Int) -> Int): IntArray {
+    private inline fun starts(owners: Int, count: Int, owner: (Int) -> Int): IntArray {
         val starts = IntArray(owners + 1)
         for (i in 0 until count) starts[owner(i) + 1]++
         for (o in 0 until owners) starts[o + 1] += starts[o]
         return starts
+    }
+
+    /**
+     * Indices 0 until [count] sorted by ([major] in 0 until [majors], [minor]), ties in index
+     * order as a stable sort leaves them. Not sortedWith, which boxes each of millions of indices
+     * and keys: a count places each major's run, sorted on primitive keys, minor above index.
+     * Inline, as [major] and [minor] would box each index and key through Function1 too.
+     */
+    private inline fun order(count: Int, majors: Int, major: (Int) -> Int, minor: (Int) -> Int): IntArray {
+        val runs = starts(majors, count, major)
+        val next = runs.copyOf()
+        val keys = LongArray(count)
+        for (i in 0 until count) keys[next[major(i)]++] = (minor(i).toLong() shl 32) or i.toLong()
+        for (m in 0 until majors) keys.sort(runs[m], runs[m + 1])
+        return IntArray(count) { keys[it].toInt() }
     }
 
     companion object {
