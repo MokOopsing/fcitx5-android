@@ -21,7 +21,9 @@ import org.fcitx.fcitx5.android.engine.session.Snapshot
  * one candidate, its code whole, commits it; a key past the longest code, or one that leads to no
  * entry, commits the first candidate on the page shown and starts a new code, or goes to the app
  * when no code starts with it (a table's punctuation). A code with no candidate is dropped by the
- * key that ends it, as 五笔 users expect of 空码.
+ * key that ends it, as 五笔 users expect of 空码. A space right after a code committed itself is
+ * taken, not typed: whether a code is the only one is not shown (the shared words have codes too),
+ * and the space a user types to commit it either way made a gap only after the lone ones.
  *
  * [TableOptions.pinyinKey] starting a code hands the keys after it to [pinyin], and its
  * candidates show their code here: the way to type a character whose code one does not know.
@@ -66,7 +68,16 @@ class TableSession(
     private val recent = ArrayList<String>()
     private val autoPhraseLength = if (options.autoPhraseLength < 0) table.maxLength else options.autoPhraseLength
 
-    override fun apply(action: Action): Snapshot = if (lookingUp) lookUp(action) else when (action) {
+    // a code just committed itself: the next key, if a space, is taken (see the class)
+    private var committedItself = false
+
+    override fun apply(action: Action): Snapshot {
+        val takesSpace = committedItself && action is Action.Key && action.char == ' '
+        committedItself = false
+        return if (takesSpace) snapshot() else dispatch(action)
+    }
+
+    private fun dispatch(action: Action): Snapshot = if (lookingUp) lookUp(action) else when (action) {
         is Action.Key -> type(action.char)
         Action.Backspace -> backspace()
         is Action.Select -> select(action.index)
@@ -102,7 +113,9 @@ class TableSession(
         else -> emptySet()
     }
 
-    override fun reads(c: Char): Boolean = if (lookingUp) {
+    override fun reads(c: Char): Boolean = if (committedItself && c == ' ') {
+        true
+    } else if (lookingUp) {
         c in 'a'..'z' || c == '\''
     } else {
         isCode(c) ||
@@ -148,7 +161,10 @@ class TableSession(
         input.append(c)
         update()
         val only = ranking.only()
-        if (only != null && commitsItself(only)) commit += take(only)
+        if (only != null && commitsItself(only)) {
+            commit += take(only)
+            committedItself = true
+        }
         return snapshot(commit = commit)
     }
 
