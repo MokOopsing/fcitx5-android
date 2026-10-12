@@ -149,7 +149,8 @@ class NineKeyLettersFragment : Fragment() {
             .setTitle(getString(R.string.t9_letters_of, digit.toString()))
             .setView(box)
             .setPositiveButton(android.R.string.ok) { _, _ ->
-                letters = current.with(digit, field.text.toString())
+                // emptied: as on a phone, as the hint says, not a key typing nothing
+                letters = current.with(digit, field.text.toString().ifEmpty { default })
                 rebuild()
             }
             .setNegativeButton(android.R.string.cancel, null)

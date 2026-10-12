@@ -84,6 +84,8 @@ class TextKeyboard(
                 AddressKey("@", R.id.button_at),
                 SpaceKey(),
                 SymbolKey(".", 0.1f, KeyDef.Appearance.Variant.Alternative, viewId = R.id.button_period),
+                // as it is: through the engine . would be 。
+                AddressKey(".", R.id.button_dot),
                 AddressKey(AddressKeys.DOMAINS.first(), R.id.button_domain, 0.14f, AddressKeys.DOMAINS),
                 LanguageKey(),
                 ReturnKey()
@@ -107,6 +109,7 @@ class TextKeyboard(
     private fun showAddressKeys() {
         findViewById<View>(R.id.button_comma).isVisible = address == AddressKeys.NONE
         findViewById<View>(R.id.button_period).isVisible = address == AddressKeys.NONE
+        findViewById<View>(R.id.button_dot).isVisible = address != AddressKeys.NONE
         findViewById<View>(R.id.button_slash).isVisible = address == AddressKeys.URL
         findViewById<View>(R.id.button_at).isVisible = address == AddressKeys.EMAIL
         findViewById<View>(R.id.button_domain).isVisible = address != AddressKeys.NONE

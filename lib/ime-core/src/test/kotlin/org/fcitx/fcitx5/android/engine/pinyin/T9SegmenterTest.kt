@@ -153,4 +153,16 @@ class T9SegmenterTest {
         assertTrue("ba" in typed)
         assertFalse("bo" in typed)
     }
+
+    @Test
+    fun ueIsUeOnTheUsersKeysTooAndAKeyOfNoLettersIsNotRead() {
+        // v moved off u's key to 9: 略 typed lue is 5 8 3 still, and lve 5 9 3
+        val keys = NineKeyLetters.of(listOf("abc", "def", "ghi", "jkl", "mno", "pqrs", "tu", "vwxyz"))
+        val custom = T9Segmenter(abbreviations = false, letters = keys)
+        assertTrue("lve" in custom.segment("583").read(0, 3))
+        assertTrue("lve" in custom.segment("593").read(0, 3))
+        val empty = T9Segmenter(letters = NineKeyLetters.of(listOf("abc", "")))
+        assertFalse(empty.reads('3'))
+        assertTrue(empty.reads('2'))
+    }
 }

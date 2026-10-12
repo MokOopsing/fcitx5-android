@@ -11,5 +11,6 @@
     <item name="button_period" type="id"/>
     <item name="button_slash" type="id"/>
     <item name="button_at" type="id"/>
+    <item name="button_dot" type="id"/>
     <item name="button_domain" type="id"/>
 </resources>

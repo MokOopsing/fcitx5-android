@@ -23,7 +23,7 @@ class TextKeyboardAddressTest {
 
     private val keyboard = TextKeyboard(PlaceholderStrings(RuntimeEnvironment.getApplication()), ThemePreset.PixelDark)
 
-    private val ids = listOf(R.id.button_comma, R.id.button_slash, R.id.button_at, R.id.button_period, R.id.button_domain)
+    private val ids = listOf(R.id.button_comma, R.id.button_slash, R.id.button_at, R.id.button_period, R.id.button_dot, R.id.button_domain)
 
     private fun shown() = ids.filter { keyboard.findViewById<View>(it).visibility == View.VISIBLE }
 
@@ -31,9 +31,10 @@ class TextKeyboardAddressTest {
     fun anAddressFieldHasWhatAddressesAreMadeOfInPlaceOfTheCommaAndFullStop() {
         assertEquals(listOf(R.id.button_comma, R.id.button_period), shown())
         keyboard.address = AddressKeys.URL
-        assertEquals(listOf(R.id.button_slash, R.id.button_domain), shown())
+        // a full stop as it is too: www., co.uk
+        assertEquals(listOf(R.id.button_slash, R.id.button_dot, R.id.button_domain), shown())
         keyboard.address = AddressKeys.EMAIL
-        assertEquals(listOf(R.id.button_at, R.id.button_domain), shown())
+        assertEquals(listOf(R.id.button_at, R.id.button_dot, R.id.button_domain), shown())
         keyboard.address = AddressKeys.NONE
         assertEquals(listOf(R.id.button_comma, R.id.button_period), shown())
     }

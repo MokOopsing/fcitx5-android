@@ -120,7 +120,8 @@ internal class NineKeys(private val data: PinyinData, private val letters: NineK
         val same = last >= picked && T9Segmenter.isKey(input[last]) && letters.sameKey(input[last], c)
         when {
             again && same -> input.setCharAt(last, c.uppercaseChar())
-            again -> input.append(letters.key(c))
+            // which of its keys was pressed is not told: the letter itself where it is on more than one
+            again -> input.append(if (letters.keysOf(c).length == 1) letters.key(c) else c.uppercaseChar())
             else -> input.append(c.uppercaseChar())
         }
         return true

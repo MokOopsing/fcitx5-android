@@ -79,7 +79,9 @@ class T9Segmenter(
                 }
             }
             for ((s, flags) in spellings) {
-                for (keys in letters.typings(s)) {
+                // üe is typed ue too (略 lue): on a phone u and v share 8, on the user's keys maybe not
+                val typings = letters.typings(s) + if ("ve" in s) letters.typings(s.replace("ve", "ue")) else emptyList()
+                for (keys in typings.distinct()) {
                     if (parts != null && s.length > 1) regular += keys
                     keepBest(wholeIds.getOrPut(keys) { TreeMap() }, id, flags)
                     for (n in 1 until keys.length) keepBest(startIds.getOrPut(keys.substring(0, n)) { TreeMap() }, id, flags or SyllableMatches.COMPLETION)
@@ -93,7 +95,7 @@ class T9Segmenter(
     }
 
     // the letters of a syllable taken are the session's to put in, not typed
-    override fun reads(c: Char) = c in '2'..'9'
+    override fun reads(c: Char) = c in '2'..'9' && letters.letters(c).isNotEmpty()
 
     override val typesLetters: Boolean get() = false
 
