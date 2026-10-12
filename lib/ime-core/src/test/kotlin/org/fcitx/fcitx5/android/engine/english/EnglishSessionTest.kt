@@ -402,4 +402,15 @@ class EnglishSessionTest {
         val typed = EnglishSession(data, coarseWords = listOf("hell")).also { it.type("hell") }
         assertEquals("hell ", typed.apply(Action.Key(' ')).commit)
     }
+
+    /** recieve, untill were in the pages often enough to be left as typed. */
+    @Test
+    fun aMisspellingIsCorrectedThoughThePagesHaveItAndNeverOffered() {
+        val list = mapOf("hell" to "hello", "teh" to "the")
+        val typed = EnglishSession(data, misspellings = list).also { it.type("Hell") }
+        assertEquals("Hello ", typed.apply(Action.Key(' ')).commit)
+        assertFalse("hell" in EnglishSession(data, misspellings = list).type("hel").candidates)
+        // the shipped list: no word twice, each to a word
+        assertTrue(Misspellings.MAP.getValue("recieve") == "receive" && Misspellings.MAP.values.none { it.isBlank() || it in Misspellings.MAP })
+    }
 }

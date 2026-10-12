@@ -47,6 +47,7 @@ class EnglishSession(
     private val maxCorrection: Float = MAX_CORRECTION,
     user: EnglishUser? = null,
     coarseWords: List<String> = CoarseWords.LIST,
+    private val misspellings: Map<String, String> = Misspellings.MAP,
 ) : Session {
 
     // what the user committed, kept by the host; else for this session alone
@@ -56,6 +57,11 @@ class EnglishSession(
 
     // never offered, completed or corrected to; typed, they are kept as typed
     private val coarse = data?.let { d -> CoarseWords.of({ d.id(it) }, coarseWords) } ?: CoarseWords.NONE
+
+    // the model's words that are misspellings: no more offered than coarse ones
+    private val misspelt = data?.let { d -> CoarseWords.of({ d.id(it) }, misspellings.keys.toList()) } ?: CoarseWords.NONE
+
+    private fun offered(word: Int) = !coarse.has(word) && !misspelt.has(word)
 
     private val input = StringBuilder()
     private var cursor = 0 // in input
@@ -366,7 +372,7 @@ class EnglishSession(
         val before = before()
         // no decoder, no correction: the context is not looked at
         val context = decoder?.context(before) ?: 0L
-        val found = decoder?.suggest(keys, context, SUGGESTED + 1).orEmpty().filter { !coarse.has(it.word) }
+        val found = decoder?.suggest(keys, context, SUGGESTED + 1).orEmpty().filter { offered(it.word) }
         // a capital the sentence's start does not account for is the user's: a name, not a slip
         val upper = typed.count { it.isUpperCase() }
         val name = upper > 1 || upper == 1 && !(typed[0].isUpperCase() && before.lastOrNull().let { it == null || it == EnglishText.START })
@@ -400,9 +406,11 @@ class EnglishSession(
      * - typed a word (nad, oft, of the many the pages have), the same if [KNOWN_MARGIN] likelier,
      *   but not a capital more or less (ladies, Ladies), nor a longer word (gear, years).
      * An apostrophe typed is never taken away. Null for none, or for keys that start a word likelier.
+     * A [misspelling][Misspellings] is no word, whatever the pages have: the word meant.
      */
     private fun correctionOf(typed: String, keys: String, found: List<EnglishDecoder.Suggestion>, context: Long, name: Boolean): String? {
         val data = data ?: return null
+        misspellings[typed.lowercase()]?.let { return it }
         val id = data.id(typed).takeIf { it != NgramModel.NO_WORD } ?: data.id(typed.lowercase())
         val own = if (id == NgramModel.NO_WORD) null else data.model.scoreAfter(context, id)
         val allowed = allowedFor(data, typed, id, known = own != null)
@@ -456,7 +464,7 @@ class EnglishSession(
         val start = before.lastOrNull() == EnglishText.START
         val context = decoder.context(before)
         val prev = before.last().takeIf { !start }
-        val model = decoder.predict(context, SUGGESTED + 1).filter { !coarse.has(it.word) }
+        val model = decoder.predict(context, SUGGESTED + 1).filter { offered(it.word) }
             .map { data.word(it.word) to user.score(it.lm, prev, data.word(it.word)) }
         // what the user typed after the word before: theirs to type again
         val theirs = prev?.let(user::followers).orEmpty().map { word ->
