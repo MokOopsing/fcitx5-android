@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.eval
 
 import org.fcitx.fcitx5.android.engine.data.PinyinData
+import org.fcitx.fcitx5.android.engine.lattice.CoarseWords
 import org.fcitx.fcitx5.android.engine.lattice.Decoding
 import org.fcitx.fcitx5.android.engine.lattice.LayerPrior
 import org.fcitx.fcitx5.android.engine.lattice.Penalties
@@ -59,6 +60,8 @@ class PinyinRun(
         data.dictionary, data.vocabulary,
         (if (user == null) WordScorer.of(data.model) else UserScorer(data.model, user)).let { if (prior == null) it else prior.scorer(it) },
         penalties, beam, user = user, wholeFirst = segmenter.typesLetters,
+        // as the app's session has them
+        coarse = CoarseWords.of({ data.wordIndex.find(it) }),
     )
     private val textWords = TextWords(data.model, data.wordIndex)
 

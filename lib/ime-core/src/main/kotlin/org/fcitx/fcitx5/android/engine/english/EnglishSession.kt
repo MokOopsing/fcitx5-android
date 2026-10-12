@@ -61,7 +61,8 @@ class EnglishSession(
     // the model's words that are misspellings: no more offered than coarse ones
     private val misspelt = data?.let { d -> CoarseWords.of({ d.id(it) }, misspellings.keys.toList()) } ?: CoarseWords.NONE
 
-    private fun offered(word: Int) = !coarse.has(word) && !misspelt.has(word)
+    // a coarse word the user typed is theirs to be offered
+    private fun offered(word: Int) = !(coarse.has(word) && user.count(checkNotNull(data).word(word)) <= 0f) && !misspelt.has(word)
 
     private val input = StringBuilder()
     private var cursor = 0 // in input

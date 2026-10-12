@@ -4,6 +4,8 @@
  */
 package org.fcitx.fcitx5.android.engine.lattice
 
+import org.fcitx.fcitx5.android.engine.user.UserScorer
+import org.fcitx.fcitx5.android.engine.user.UserModel
 import org.fcitx.fcitx5.android.engine.data.NgramModel.Companion.NO_WORD
 import org.fcitx.fcitx5.android.engine.data.PinyinData
 import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
@@ -427,5 +429,21 @@ class PinyinDecoderTest {
         val zai = PinyinDecoder(data.dictionary, data.vocabulary, WordScorer.of(data.model), coarse = coarse)
             .decode(plain.segment("zai")).sentences
         assertEquals(listOf("再", "在"), texts(zai).take(2))
+    }
+
+    /** A word of the list the user never typed is lowered; once they typed it, it is theirs. */
+    @Test
+    fun aCoarseWordIsLoweredTillTheUserTypesIt() {
+        val user = UserModel(data.dictionary, data.vocabulary)
+        val own = user.list(UserModel.Entry("仔仔", syl("zai", "zai")), -1f, 0)
+        val coarse = CoarseWords.of({ data.wordIndex.find(it) }, listOf("在", "仔仔"))
+        fun decoder(c: CoarseWords) = PinyinDecoder(data.dictionary, data.vocabulary, UserScorer(data.model, user), user = user, coarse = c)
+        fun score(d: PinyinDecoder, input: String, words: List<Int>) = d.decode(plain.segment(input)).sentences.first { it.words.toList() == words }.score
+        // one the vocabulary lacks is known by its text
+        assertEquals(score(decoder(CoarseWords.NONE), "zaizai", listOf(own)) + CoarseWords.PENALTY, score(decoder(coarse), "zaizai", listOf(own)), 1e-4f)
+        val lowered = score(decoder(coarse), "zai", listOf(id("在")))
+        assertEquals(score(decoder(CoarseWords.NONE), "zai", listOf(id("在"))) + CoarseWords.PENALTY, lowered, 1e-4f)
+        user.learn(null, listOf(UserModel.Entry("在", syl("zai"))))
+        assertTrue(score(decoder(coarse), "zai", listOf(id("在"))) > lowered - CoarseWords.PENALTY - 1e-4f)
     }
 }

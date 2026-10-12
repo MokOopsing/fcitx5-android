@@ -537,6 +537,27 @@ class PinyinSession(
         return snapshot(commit = picked + rest, handled = false)
     }
 
+    // a candidate with a coarse word the user never typed waits past the first page: see CoarseWords
+    private fun coarseAfterFirstPage(listed: List<Candidate>): List<Candidate> {
+        val (held, rest) = listed.partition(::isCoarse)
+        return if (held.isEmpty()) listed else rest.take(pageSize) + held + rest.drop(pageSize)
+    }
+
+    // one of its words coarse, or words in turn spelling one: 射 then 精 is 射精 as well
+    private fun isCoarse(c: Candidate): Boolean {
+        val words = c.words
+        for (i in words.indices) {
+            if (coarse.unasked(words[i], user, data.vocabulary.size)) return true
+            val run = StringBuilder()
+            for (j in i until words.size) {
+                if (words[j] == NO_WORD || run.length >= coarse.longest) break
+                run.append(text(words[j]))
+                if (j > i && coarse.has(run.toString())) return true
+            }
+        }
+        return false
+    }
+
     private fun commitRaw(): Snapshot {
         if (input.isEmpty()) {
             clear()
@@ -653,7 +674,7 @@ class PinyinSession(
         val best = sentences.firstOrNull()
         val restShown = if (best == null) T9Segmenter.plain(graph.input) else preedit(graph, best)
         lastRead = Read(
-            candidates = listed,
+            candidates = coarseAfterFirstPage(listed),
             graph = graph,
             decoderWords = decoderWords,
             sentences = sentences,

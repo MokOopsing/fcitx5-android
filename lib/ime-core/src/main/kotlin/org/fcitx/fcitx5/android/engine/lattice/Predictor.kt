@@ -186,7 +186,7 @@ class Predictor(
     private fun textOf(word: Int) = if (word < vocabulary.size) vocabulary.word(word) else user?.text(word).orEmpty()
 
     private fun offered(word: Int): Boolean {
-        if (user?.blockedAnyhow(word) == true || coarse.has(word)) return false
+        if (user?.blockedAnyhow(word) == true || coarse.unasked(word, user, vocabulary.size)) return false
         val text = textOf(word)
         var i = 0
         while (i < text.length) {

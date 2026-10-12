@@ -189,7 +189,7 @@ class PinyinDecoder(
         }
     }
 
-    private fun coarseness(word: Int) = if (coarse.has(word)) CoarseWords.PENALTY else 0f
+    private fun coarseness(word: Int) = if (coarse.unasked(word, user, vocabulary.size)) CoarseWords.PENALTY else 0f
 
     // what a word of the user's is spared of typing it short; not a character, whose initial
     // alone would cut every sentence into the characters the user types most (w for 我)
@@ -203,7 +203,7 @@ class PinyinDecoder(
     private fun addUserWords(to: Int, user: UserWords, node: Int, cost: Float, short: Float) {
         for (w in 0 until user.wordCount(node)) {
             val word = user.word(node, w)
-            if (!user.blocked(word, -1)) arcs.add(to, word, cost - spared(word, short))
+            if (!user.blocked(word, -1)) arcs.add(to, word, cost - spared(word, short) + coarseness(word))
         }
     }
 
