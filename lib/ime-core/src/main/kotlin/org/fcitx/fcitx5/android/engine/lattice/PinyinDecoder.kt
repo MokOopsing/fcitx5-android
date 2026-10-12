@@ -51,6 +51,8 @@ class PinyinDecoder(
      * chat samples, 9 fewer of 983 picked within ten pages, against 2 fewer of 1064 in full pinyin).
      */
     private val wholeFirst: Boolean = true,
+    /** Words ranked [CoarseWords.PENALTY] lower, the dictionary's: see [CoarseWords]. */
+    private val coarse: CoarseWords = CoarseWords.NONE,
 ) {
     init {
         require(beam >= 1 && wordsPerReading >= 1) { "beam $beam, words per reading $wordsPerReading" }
@@ -182,9 +184,11 @@ class PinyinDecoder(
     private fun addWords(to: Int, node: Int, words: Int, cost: Float, short: Float) {
         for (w in 0 until words) {
             val word = dictionary.word(node, w)
-            if (user?.blocked(word, node) != true) arcs.add(to, word, cost - spared(word, short) + dictionary.weight(node, w))
+            if (user?.blocked(word, node) != true) arcs.add(to, word, cost - spared(word, short) + dictionary.weight(node, w) + coarseness(word))
         }
     }
+
+    private fun coarseness(word: Int) = if (coarse.has(word)) CoarseWords.PENALTY else 0f
 
     // what a word of the user's is spared of typing it short; not a character, whose initial
     // alone would cut every sentence into the characters the user types most (w for 我)
@@ -214,7 +218,7 @@ class PinyinDecoder(
         for (w in 0 until minOf(words, longer.size)) {
             val word = dictionary.word(node, w)
             if (longer[w] != NO_WORD && user?.blocked(word, node) != true) {
-                arcs.add(to, word, cost + dictionary.weight(node, w) + penalties.lookAhead, longer[w])
+                arcs.add(to, word, cost + dictionary.weight(node, w) + penalties.lookAhead + coarseness(word), longer[w])
             }
         }
     }

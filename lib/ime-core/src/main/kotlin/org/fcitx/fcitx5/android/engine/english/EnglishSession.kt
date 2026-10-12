@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.engine.english
 
 import org.fcitx.fcitx5.android.engine.data.NgramModel
+import org.fcitx.fcitx5.android.engine.lattice.CoarseWords
 import org.fcitx.fcitx5.android.engine.session.Action
 import org.fcitx.fcitx5.android.engine.session.Choice
 import org.fcitx.fcitx5.android.engine.session.Offer
@@ -45,12 +46,16 @@ class EnglishSession(
     private val costs: TypingCosts = TypingCosts(),
     private val maxCorrection: Float = MAX_CORRECTION,
     user: EnglishUser? = null,
+    coarseWords: List<String> = CoarseWords.LIST,
 ) : Session {
 
     // what the user committed, kept by the host; else for this session alone
     private val user = user ?: EnglishUser()
 
     private val decoder = data?.let { d -> EnglishDecoder(d, costs) { context, word -> scored(d, context, word) } }
+
+    // never offered, completed or corrected to; typed, they are kept as typed
+    private val coarse = data?.let { d -> CoarseWords.of({ d.id(it) }, coarseWords) } ?: CoarseWords.NONE
 
     private val input = StringBuilder()
     private var cursor = 0 // in input
@@ -361,7 +366,7 @@ class EnglishSession(
         val before = before()
         // no decoder, no correction: the context is not looked at
         val context = decoder?.context(before) ?: 0L
-        val found = decoder?.suggest(keys, context, SUGGESTED + 1).orEmpty()
+        val found = decoder?.suggest(keys, context, SUGGESTED + 1).orEmpty().filter { !coarse.has(it.word) }
         // a capital the sentence's start does not account for is the user's: a name, not a slip
         val upper = typed.count { it.isUpperCase() }
         val name = upper > 1 || upper == 1 && !(typed[0].isUpperCase() && before.lastOrNull().let { it == null || it == EnglishText.START })
@@ -451,7 +456,8 @@ class EnglishSession(
         val start = before.lastOrNull() == EnglishText.START
         val context = decoder.context(before)
         val prev = before.last().takeIf { !start }
-        val model = decoder.predict(context, SUGGESTED + 1).map { data.word(it.word) to user.score(it.lm, prev, data.word(it.word)) }
+        val model = decoder.predict(context, SUGGESTED + 1).filter { !coarse.has(it.word) }
+            .map { data.word(it.word) to user.score(it.lm, prev, data.word(it.word)) }
         // what the user typed after the word before: theirs to type again
         val theirs = prev?.let(user::followers).orEmpty().map { word ->
             val id = data.id(word)

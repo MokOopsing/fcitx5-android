@@ -8,6 +8,7 @@ import org.fcitx.fcitx5.android.engine.data.NgramModel.Companion.NO_WORD
 import org.fcitx.fcitx5.android.engine.data.Misreadings
 import org.fcitx.fcitx5.android.engine.data.PinyinData
 import org.fcitx.fcitx5.android.engine.lattice.Candidate
+import org.fcitx.fcitx5.android.engine.lattice.CoarseWords
 import org.fcitx.fcitx5.android.engine.lattice.LayerPrior
 import org.fcitx.fcitx5.android.engine.lattice.Penalties
 import org.fcitx.fcitx5.android.engine.lattice.PinyinDecoder
@@ -127,6 +128,9 @@ class PinyinSession(
         val restShown: String = "", // the end of the preedit: what is left of the input, as shown
     )
 
+    // a few hundred lookups: made with each session, as the data's index is
+    private val coarse = CoarseWords.of({ data.wordIndex.find(it) })
+
     private val decoder = PinyinDecoder(
         data.dictionary,
         data.vocabulary,
@@ -135,8 +139,9 @@ class PinyinSession(
         user = user,
         extensions = extensions,
         wholeFirst = segmenter.typesLetters,
+        coarse = coarse,
     )
-    private val predictor = Predictor(data.model, data.vocabulary, data.dictionary, user, charReadings = charReadings)
+    private val predictor = Predictor(data.model, data.vocabulary, data.dictionary, user, coarse = coarse, charReadings = charReadings)
     private val textWords by lazy { TextWords(data.model, data.wordIndex) }
 
     private val input = StringBuilder()

@@ -35,6 +35,8 @@ class Predictor(
     private val dictionary: PinyinDictionary? = null,
     private val user: UserWords? = null,
     private val userWeight: Float = USER_WEIGHT,
+    /** Never offered: see [CoarseWords]. */
+    private val coarse: CoarseWords = CoarseWords.NONE,
     /** [charReadingsOf] the [dictionary], asked for when [reading] first needs it: one map for the predictors over it to share. */
     charReadings: () -> Map<Int, IntArray> = { dictionary?.let { charReadingsOf(it, vocabulary) }.orEmpty() },
 ) {
@@ -184,7 +186,7 @@ class Predictor(
     private fun textOf(word: Int) = if (word < vocabulary.size) vocabulary.word(word) else user?.text(word).orEmpty()
 
     private fun offered(word: Int): Boolean {
-        if (user?.blockedAnyhow(word) == true) return false
+        if (user?.blockedAnyhow(word) == true || coarse.has(word)) return false
         val text = textOf(word)
         var i = 0
         while (i < text.length) {

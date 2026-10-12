@@ -216,4 +216,12 @@ class PredictorTest {
         user.learn(null, listOf(Entry("我", syl("wo")), Entry("再", syl("ce"))))
         assertEquals(listOf("再"), texts(predicting.predict(NO_WORD, id("我"))))
     }
+
+    /** 小穴 was predicted after 妈妈的. */
+    @Test
+    fun aCoarseWordIsNeverPredicted() {
+        val coarse = CoarseWords.of({ data.wordIndex.find(it) }, listOf("好"))
+        val after = Predictor(data.model, data.vocabulary, data.dictionary, coarse = coarse).predict(NO_WORD, id("你"))
+        assertEquals(listOf("吗", "A股", "马克·吐温"), texts(after))
+    }
 }

@@ -394,4 +394,12 @@ class EnglishSessionTest {
             assertFalse(stop.handled)
         }
     }
+
+    @Test
+    fun aCoarseWordIsNeverOfferedYetTypedAsIs() {
+        val s = EnglishSession(data, coarseWords = listOf("hell")).type("hel")
+        assertFalse("hell" in s.candidates)
+        val typed = EnglishSession(data, coarseWords = listOf("hell")).also { it.type("hell") }
+        assertEquals("hell ", typed.apply(Action.Key(' ')).commit)
+    }
 }

@@ -419,4 +419,13 @@ class PinyinDecoderTest {
         val nineKeys = PinyinDecoder(jiao.dictionary, jiao.vocabulary, WordScorer.of(jiao.model), Penalties(), wholeFirst = false)
         assertEquals(listOf("几", "家", "见", "叫", "觉"), texts(nineKeys.decode(T9Segmenter().segment("5426")).words))
     }
+
+    /** 小穴 came before 小雪 for xiaoxue: a coarse word goes below one as common, still there. */
+    @Test
+    fun aCoarseWordIsRankedLowerYetTyped() {
+        val coarse = CoarseWords.of({ data.wordIndex.find(it) }, listOf("在"))
+        val zai = PinyinDecoder(data.dictionary, data.vocabulary, WordScorer.of(data.model), coarse = coarse)
+            .decode(plain.segment("zai")).sentences
+        assertEquals(listOf("再", "在"), texts(zai).take(2))
+    }
 }
