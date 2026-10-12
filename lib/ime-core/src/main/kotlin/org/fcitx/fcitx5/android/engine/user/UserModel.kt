@@ -350,6 +350,9 @@ class UserModel(
     /** Every reading of [text] the model has an id for: those typed, made, listed. */
     fun entriesOf(text: String): List<Entry> = ids.keys.filter { it.text == text }
 
+    /** Whether the user typed [text] as a word with an id here, however read. */
+    fun typed(text: String): Boolean = ids.any { (entry, id) -> entry.text == text && count(id) > 0f }
+
     /** Whether [entriesOf] lists any reading of [text]: no list made, and gone through only to the first. */
     fun hasText(text: String): Boolean = ids.keys.any { it.text == text }
 

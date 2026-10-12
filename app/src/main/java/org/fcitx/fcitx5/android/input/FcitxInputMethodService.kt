@@ -769,8 +769,9 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         // right cursor position, try to workaround this would simply introduce more bugs.
         selection.resetTo(attribute.initialSelStart, attribute.initialSelEnd)
         // the screen turned (resetStateForNewConfiguration) restarts input with no
-        // onFinishInputView: the engine's input goes below, the editor's preedit with it
-        if (restarting) currentInputConnection?.let(::dropPreedit)
+        // onFinishInputView: the engine's input goes below, the editor's preedit with it. Not over
+        // a selection: an app that set new text and restarted has no preedit, and would lose it
+        if (restarting && attribute.initialSelStart == attribute.initialSelEnd) currentInputConnection?.let(::dropPreedit)
         resetComposingState()
         val flags = CapabilityFlags.fromEditorInfo(attribute)
         capabilityFlags = flags

@@ -61,6 +61,34 @@ class CoarseCandidatesTest {
     }
 
     @Test
+    fun wordsInTurnTheUserTypedAreTheirsToo() {
+        // 小 and 穴 each far likelier than the word: read as the two, whatever the user typed
+        val split = PinyinData.load(
+            ByteBuffer.wrap(
+                PinyinDataBuilder()
+                    .unigram("<unk>", -7f, 0f)
+                    .unigram("小穴", -9f, 0f)
+                    .unigram("小学", -3f, 0f)
+                    .unigram("小雪", -3.5f, 0f)
+                    .unigram("小", -0.1f, 0f)
+                    .unigram("穴", -0.1f, 0f)
+                    .entry("小穴", syl("xiao", "xue"))
+                    .entry("小学", syl("xiao", "xue"))
+                    .entry("小雪", syl("xiao", "xue"))
+                    .entry("小", syl("xiao"))
+                    .entry("穴", syl("xue"))
+                    .build().toByteArray(),
+            ),
+        )
+        fun first(user: UserModel?) = PinyinSession(split, PinyinSegmenter(), pageSize = 2, user = user, prediction = false)
+            .type("xiaoxue").candidates.take(2)
+        assertTrue("小穴" !in first(null))
+        val user = UserModel(split.dictionary, split.vocabulary)
+        user.learn(null, listOf(UserModel.Entry("小穴", syl("xiao", "xue"))))
+        assertEquals("小穴", first(user).first())
+    }
+
+    @Test
     fun onceTheUserTypedItItIsTheirs() {
         val user = UserModel(data.dictionary, data.vocabulary)
         user.learn(null, listOf(UserModel.Entry("小穴", syl("xiao", "xue"))))
