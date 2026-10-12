@@ -19,8 +19,8 @@ import java.util.TreeMap
  * From each digit the graph gets:
  * - every syllable the digits there type, of any length, with their [Fuzzy] partners;
  * - at the end of the input or before a separator, every syllable the digits may still become
- *   ([Kind.PARTIAL], or [Kind.EXTENDED] where they are a syllable of two letters or more too: `64`
- *   on the way to nian, but not `6`, 哦, on the way to men);
+ *   ([Kind.PARTIAL], or [Kind.EXTENDED] where they are a syllable too, as on the full keyboard:
+ *   `64` on the way to nian, `2`, 啊, on the way to bu, so a lone 2 reads a first);
  * - where another digit follows, the initials the digits type (简拼, `94` zh): with
  *   [abbreviations] where no longer syllable is read there (sh in `745` 时间, not in `744`, shi),
  *   without only where nothing else is read but a syllable of one letter (`25` is 北京 too, not
@@ -46,8 +46,7 @@ class T9Segmenter(fuzzy: Set<Fuzzy> = emptySet(), private val abbreviations: Boo
     private val byInitial = HashMap<String, SyllableMatches>()
 
     // digits typing a syllable of an initial and a final, or a final alone, of two letters or more:
-    // 啊, 呃, 哦, 呣, 嗯 and 儿 alone would keep 简拼 off every 2, 3, 6 and 7, and make each syllable
-    // those digits start EXTENDED at the end
+    // 啊, 呃, 哦, 呣, 嗯 and 儿 alone would keep 简拼 off every 2, 3, 6 and 7
     private val regular = HashSet<String>()
 
     init {
@@ -122,7 +121,7 @@ class T9Segmenter(fuzzy: Set<Fuzzy> = emptySet(), private val abbreviations: Boo
                 if (isRegular) longest = length
             }
             if (endsAt(input, at + length)) {
-                starts[keys]?.let { fitting(it, typed) }?.let { edges.add(at, length, if (isRegular) Kind.EXTENDED else Kind.PARTIAL, it) }
+                starts[keys]?.let { fitting(it, typed) }?.let { edges.add(at, length, if (full != null) Kind.EXTENDED else Kind.PARTIAL, it) }
             }
             initials[keys]?.let { fitting(it, typed) }?.let { initialEdges += length to it }
         }

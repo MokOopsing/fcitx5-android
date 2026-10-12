@@ -78,17 +78,22 @@ class T9SegmenterTest {
     }
 
     @Test
-    fun aSyllableOfOneLetterKeepsNoInitialOffItsDigitNorReadsWhatItStartsAsExtended() {
+    fun aSyllableOfOneLetterKeepsNoInitialOffItsDigitAndReadsWhatItStartsAsExtended() {
         val strict = T9Segmenter(abbreviations = false)
         // 2 is 啊 and 6 哦 too: b and n stand for their syllables all the same, 北京 and 南京
         assertTrue("bei" in strict.segment("25").read(0, 1, Kind.INITIAL))
         assertTrue("nan" in strict.segment("65").read(0, 1, Kind.INITIAL))
         assertTrue("a" in strict.segment("25").read(0, 1))
-        // typed last, the start of a syllable still being typed, not a whole one read on
+        // typed last, a syllable read on from a whole one, as on the full keyboard: a lone 2 is
+        // 啊 before 不, whose b only starts it (it read b once, 不 first)
         val six = segmenter.segment("6")
-        assertTrue(setOf("men", "ni", "ou").all { it in six.read(0, 1, Kind.PARTIAL) })
-        assertTrue(six.read(0, 1, Kind.EXTENDED).isEmpty())
-        assertTrue("ba" in segmenter.segment("2").read(0, 1, Kind.PARTIAL))
+        assertTrue(setOf("men", "ni", "ou").all { it in six.read(0, 1, Kind.EXTENDED) })
+        assertTrue(six.read(0, 1, Kind.PARTIAL).isEmpty())
+        val two = segmenter.segment("2")
+        assertTrue("a" in two.read(0, 1))
+        assertTrue("ba" in two.read(0, 1, Kind.EXTENDED))
+        // with no whole syllable, only started
+        assertTrue("ta" in segmenter.segment("8").read(0, 1, Kind.PARTIAL))
     }
 
     @Test
