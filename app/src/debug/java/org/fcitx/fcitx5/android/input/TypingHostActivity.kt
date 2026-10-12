@@ -15,7 +15,7 @@ import java.util.concurrent.CopyOnWriteArrayList
  * editor there is. Debug builds only (see this source set's manifest).
  *
  * Extras: [EXTRA_ACTION], an `EditorInfo.IME_ACTION_*` that makes it a single-line field with
- * that action. Editor actions it receives are recorded in [actions]; a Return key event is not one.
+ * that action; [EXTRA_INPUT_TYPE], an `InputType` (a URL field, say). Editor actions it receives are recorded in [actions]; a Return key event is not one.
  */
 class TypingHostActivity : Activity() {
 
@@ -31,6 +31,7 @@ class TypingHostActivity : Activity() {
                 isSingleLine = true
                 imeOptions = it
             }
+            intent.getIntExtra(EXTRA_INPUT_TYPE, -1).takeIf { it >= 0 }?.let { inputType = it }
             setOnEditorActionListener { _, actionId, event ->
                 // TextView offers each Return key event here too, with the event: taking it drops the
                 // newline. Not told by IME_NULL: that is 0, as IME_ACTION_UNSPECIFIED is
@@ -51,5 +52,6 @@ class TypingHostActivity : Activity() {
 
     companion object {
         const val EXTRA_ACTION = "action"
+        const val EXTRA_INPUT_TYPE = "inputType"
     }
 }

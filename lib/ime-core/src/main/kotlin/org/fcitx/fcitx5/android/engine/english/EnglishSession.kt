@@ -172,17 +172,9 @@ class EnglishSession(
         return afterOwnSpace(c)
     }
 
-    // the session's own space after a full stop or a colon, taken back where [c] goes on with what
-    // is before it: a lower-case letter after a full stop (e.g., example.com; a sentence after it
-    // starts with a capital), / after a colon (https://)
-    private fun joins(c: Char): Boolean {
-        if (last.length < 2 || last.last() != ' ') return false
-        return when (last[last.length - 2]) {
-            '.' -> c in 'a'..'z'
-            ':' -> c == '/'
-            else -> false
-        }
-    }
+    // the session's own space after a colon, taken back by / (https://). Not a full stop's by a
+    // lower-case letter (e.g.): where the field asks for no capitals, a sentence starts with one
+    private fun joins(c: Char): Boolean = c == '/' && last.endsWith(": ")
 
     // [c] with no word typed: after the session's own space, it may take its place
     private fun afterOwnSpace(c: Char): Snapshot {
