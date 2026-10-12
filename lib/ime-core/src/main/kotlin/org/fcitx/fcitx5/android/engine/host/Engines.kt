@@ -236,7 +236,7 @@ class Engines(
                 EnglishSession(data, pageSize = s.pageSize, user = englishUser())
             }
             // 简拼 only where the digits read nothing else: as common on the evaluation set, and faster
-            T9 -> ForgetsInTables(pinyinSession(T9Segmenter(s.fuzzy, abbreviations = false), spell = true))
+            T9 -> ForgetsInTables(pinyinSession(T9Segmenter(s.fuzzy, abbreviations = false, letters = s.nineKeys), spell = true))
             SHUANGPIN -> ForgetsInTables(
                 pinyinSession(ShuangpinSegmenter(s.scheme, s.fuzzy, s.typos), spell = true),
             )

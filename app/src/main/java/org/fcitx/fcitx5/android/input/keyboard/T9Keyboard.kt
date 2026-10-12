@@ -36,7 +36,7 @@ import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
 import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.data.theme.ThemeManager
 import org.fcitx.fcitx5.android.engine.host.Keyboard
-import org.fcitx.fcitx5.android.engine.pinyin.T9Segmenter
+import org.fcitx.fcitx5.android.engine.pinyin.NineKeyLetters
 import org.fcitx.fcitx5.android.input.broadcast.ReturnKeyAppearance
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.fcitx.fcitx5.android.input.popup.PopupAction
@@ -66,7 +66,9 @@ import splitties.views.existingOrNewId
 class T9Keyboard(
     context: Context,
     theme: Theme,
-) : BaseKeyboard(context, theme, Layout) {
+    /** What each digit key types, as the user set it: the engine reads the digits by the same. */
+    private val letters: NineKeyLetters = NineKeyLetters.STANDARD,
+) : BaseKeyboard(context, theme, layout(letters)) {
 
     companion object {
         const val Name = "T9"
@@ -124,7 +126,14 @@ class T9Keyboard(
          * letter or digit of its long press; 1, while nothing is [composing], punctuation ([ONE]),
          * a symbol of its long press as it is; anything else resets [tap] and types as it is.
          */
-        internal fun typed(action: KeyAction, source: KeyActionListener.Source, tap: MultiTap, time: Long, composing: Boolean = false): KeyAction {
+        internal fun typed(
+            action: KeyAction,
+            source: KeyActionListener.Source,
+            tap: MultiTap,
+            time: Long,
+            composing: Boolean = false,
+            letters: NineKeyLetters = NineKeyLetters.STANDARD,
+        ): KeyAction {
             val key = (action as? KeyAction.FcitxKeyAction)?.act?.singleOrNull()
             if (key == '1' && source != KeyActionListener.Source.Popup && !composing) {
                 // as a digit key's letters: pressed again soon, the next in place of the last
@@ -147,7 +156,7 @@ class T9Keyboard(
                 return if (key in '2'..'9') KeyAction.CommitAction(key.toString()) else letter(key, again = false)
             }
             if (key !in '2'..'9') return action
-            val letter = tap.press(key, T9Segmenter.letters(key), time) ?: return action
+            val letter = tap.press(key, letters.letters(key), time) ?: return action
             return letter(letter, again = true)
         }
 
@@ -160,7 +169,8 @@ class T9Keyboard(
             emptySet(),
         )
 
-        val Layout: List<List<KeyDef>> = listOf(
+        /** The keys, each digit key with [letters]' letters on it. */
+        internal fun layout(letters: NineKeyLetters): List<List<KeyDef>> = listOf(
             listOf(
                 spacer(),
                 KeyDef(
@@ -171,15 +181,15 @@ class T9Keyboard(
                     ),
                     arrayOf(KeyDef.Popup.Keyboard.Explicit(ONE_MORE.toTypedArray())),
                 ),
-                digitKey('2', "ABC"),
-                digitKey('3', "DEF"),
+                digitKey('2', letters.letters('2').uppercase()),
+                digitKey('3', letters.letters('3').uppercase()),
                 BackspaceKey(RIGHT),
             ),
             listOf(
                 spacer(),
-                digitKey('4', "GHI"),
-                digitKey('5', "JKL"),
-                digitKey('6', "MNO"),
+                digitKey('4', letters.letters('4').uppercase()),
+                digitKey('5', letters.letters('5').uppercase()),
+                digitKey('6', letters.letters('6').uppercase()),
                 KeyDef(
                     KeyDef.Appearance.Text("重输", 16f, percentWidth = RIGHT, variant = KeyDef.Appearance.Variant.Alternative),
                     setOf(KeyDef.Behavior.Press(KeyAction.SymAction(KeySym(FcitxKeyMapping.FcitxKey_Escape)))),
@@ -187,9 +197,9 @@ class T9Keyboard(
             ),
             listOf(
                 spacer(),
-                digitKey('7', "PQRS"),
-                digitKey('8', "TUV"),
-                digitKey('9', "WXYZ"),
+                digitKey('7', letters.letters('7').uppercase()),
+                digitKey('8', letters.letters('8').uppercase()),
+                digitKey('9', letters.letters('9').uppercase()),
                 KeyDef(
                     KeyDef.Appearance.Text("0", 20f, percentWidth = RIGHT, variant = KeyDef.Appearance.Variant.Alternative),
                     setOf(KeyDef.Behavior.Press(KeyAction.FcitxKeyAction("0"))),
@@ -353,7 +363,7 @@ class T9Keyboard(
         val key = (action as? KeyAction.FcitxKeyAction)?.act?.singleOrNull()
         val time = pressed?.takeIf { it.first == key }?.second ?: SystemClock.uptimeMillis()
         pressed = null
-        val out = typed(action, source, multiTap, time, typing)
+        val out = typed(action, source, multiTap, time, typing, letters)
         // a key the engine reads as typing: 1 right after it is the separator, though the engine
         // has not told of what is typed yet
         if (types(out)) typing = true
@@ -371,10 +381,10 @@ class T9Keyboard(
         val shown = when (action) {
             is PopupAction.PreviewAction -> {
                 // a digit key's preview is its letters, upper case
-                val digit = ('2'..'9').firstOrNull { T9Segmenter.letters(it).uppercase() == action.content }
+                val digit = ('2'..'9').firstOrNull { letters.letters(it).uppercase() == action.content }
                 val now = SystemClock.uptimeMillis()
                 pressed = digit?.let { it to now }
-                val letter = digit?.let { multiTap.peek(it, T9Segmenter.letters(it), now) }
+                val letter = digit?.let { multiTap.peek(it, letters.letters(it), now) }
                 previewing = letter?.let { action.content to it.uppercase() }
                 previewing?.let { action.copy(content = it.second) }
             }

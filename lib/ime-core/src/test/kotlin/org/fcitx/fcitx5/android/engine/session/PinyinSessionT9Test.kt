@@ -11,6 +11,7 @@ import org.fcitx.fcitx5.android.engine.host.Keyboard
 import org.fcitx.fcitx5.android.engine.phrase.CustomPhrases
 import org.fcitx.fcitx5.android.engine.phrase.PhraseBook
 import org.fcitx.fcitx5.android.engine.pinyin.Fuzzy
+import org.fcitx.fcitx5.android.engine.pinyin.NineKeyLetters
 import org.fcitx.fcitx5.android.engine.pinyin.PinyinSegmenter
 import org.fcitx.fcitx5.android.engine.pinyin.T9Segmenter
 import org.fcitx.fcitx5.android.engine.rerank.SentenceRefiner
@@ -317,5 +318,21 @@ class PinyinSessionT9Test {
         assertEquals(typed.syllables, refined.syllables)
         assertEquals(typed.syllablesId, refined.syllablesId)
         assertEquals("ni'hao", session.apply(Action.Syllable(0, typed.syllablesId)).preedit)
+    }
+
+    @Test
+    fun theKeysTypeTheLettersTheUserPutOnThem() {
+        // h moved to 6 beside m n o, i on 5 too
+        val keys = NineKeyLetters.of(listOf("abc", "def", "gi", "jkli", "mnoh", "pqrs", "tuv", "wxyz"))
+        fun session() = PinyinSession(data, T9Segmenter(abbreviations = false, letters = keys), spell = true, prediction = false)
+        val s = session().type("65626")
+        assertEquals("你好", s.candidates[0])
+        // 6's letters offered as initials, h with them
+        assertTrue(s.syllables.containsAll(listOf("m", "n", "h")))
+        // pressed again soon, a letter of the same key goes in place of the last
+        val session = session()
+        session.apply(Key('6'))
+        val h = session.apply(Action.Letter('h', again = true))
+        assertEquals("h", h.preedit)
     }
 }

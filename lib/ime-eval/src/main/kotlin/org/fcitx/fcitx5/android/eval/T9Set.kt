@@ -5,7 +5,7 @@
 package org.fcitx.fcitx5.android.eval
 
 import org.fcitx.fcitx5.android.engine.pinyin.Syllables
-import org.fcitx.fcitx5.android.engine.pinyin.T9Segmenter
+import org.fcitx.fcitx5.android.engine.pinyin.NineKeyLetters
 
 /**
  * Types the full-pinyin samples of an evaluation set on the nine keys (九键), as [ShuangpinSet]
@@ -22,6 +22,6 @@ object T9Set {
 
     fun convert(samples: List<Sample>): List<Sample> = samples.mapNotNull { sample ->
         val reading = ExactReading.of(sample) { !Syllables.spelling(it)[0].isUpperCase() } ?: return@mapNotNull null
-        sample.copy(input = reading.joinToString("") { T9Segmenter.digits(Syllables.spelling(it.syllable)) })
+        sample.copy(input = reading.joinToString("") { NineKeyLetters.STANDARD.typings(Syllables.spelling(it.syllable)).first() })
     }
 }

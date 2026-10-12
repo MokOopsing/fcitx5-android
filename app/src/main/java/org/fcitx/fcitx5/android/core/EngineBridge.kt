@@ -14,6 +14,7 @@ import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.pinyin.CustomPhraseManager
 import org.fcitx.fcitx5.android.data.pinyin.ImportedDictionaries
 import org.fcitx.fcitx5.android.data.pinyin.dict.PinyinDictionary
+import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.restoreDirectory
 import org.fcitx.fcitx5.android.engine.data.DataFormatException
 import org.fcitx.fcitx5.android.engine.host.EngineEvent
@@ -21,6 +22,7 @@ import org.fcitx.fcitx5.android.engine.host.EngineSettings
 import org.fcitx.fcitx5.android.engine.host.Engines
 import org.fcitx.fcitx5.android.engine.libime.LibimeFiles
 import org.fcitx.fcitx5.android.engine.phrase.CustomPhrases
+import org.fcitx.fcitx5.android.engine.pinyin.NineKeyLetters
 import org.fcitx.fcitx5.android.engine.session.Choice
 import org.fcitx.fcitx5.android.engine.session.Offer
 import org.fcitx.fcitx5.android.engine.session.Snapshot
@@ -349,14 +351,19 @@ object EngineBridge {
     internal fun candidatesSent(event: Int, s: Snapshot): Int =
         if (s.candidates.isEmpty() || (event == EngineEvent.REFINE && !s.handled)) 0 else maxOf(CHUNK, s.candidates.size)
 
-    /** The addon's config, flattened as [EngineSettings.parse] reads it; on the fcitx thread too. */
+    /**
+     * The addon's config, flattened as [EngineSettings.parse] reads it, with the nine keys' letters
+     * the keyboard draws (the app's preference: fcitx reloads its config when they change); on the
+     * fcitx thread too.
+     */
     @JvmStatic
     fun configure(settings: String) {
-        engines.settings = EngineSettings.parse(settings)
+        val nineKeys = NineKeyLetters.parse(AppPrefs.getInstance().keyboard.t9Letters.getValue())
+        engines.settings = EngineSettings.parse(settings).copy(nineKeys = nineKeys)
     }
 
     /**
-     * Reads [additions] and the tables the user imported again, the sessions made anew; nothing to
+     * Reads [additions] again, the sessions made anew; nothing to
      * do while the engine is not made. An input method that could not load is tried again.
      */
     @JvmStatic

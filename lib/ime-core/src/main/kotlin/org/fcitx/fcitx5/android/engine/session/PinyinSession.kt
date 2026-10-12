@@ -22,6 +22,7 @@ import org.fcitx.fcitx5.android.engine.pinyin.Segmenter
 import org.fcitx.fcitx5.android.engine.pinyin.SyllableGraph
 import org.fcitx.fcitx5.android.engine.pinyin.SyllableGraph.Kind
 import org.fcitx.fcitx5.android.engine.pinyin.Syllables
+import org.fcitx.fcitx5.android.engine.pinyin.T9Segmenter
 import org.fcitx.fcitx5.android.engine.rerank.Reranker
 import org.fcitx.fcitx5.android.engine.rerank.SentencePicker
 import org.fcitx.fcitx5.android.engine.rerank.SentenceRefiner
@@ -148,7 +149,7 @@ class PinyinSession(
     private val candidates get() = lastRead.candidates
     private var unrefined: List<Candidate>? = null // the decoder's sentences, till the refiner picks one
     private var refined = 0 // slices of refining spent on them
-    private val nineKeys = if (segmenter.typesLetters) null else NineKeys(data)
+    private val nineKeys = (segmenter as? T9Segmenter)?.let { NineKeys(data, it.letters) }
     private var page = 0
     private var predicting = false
 

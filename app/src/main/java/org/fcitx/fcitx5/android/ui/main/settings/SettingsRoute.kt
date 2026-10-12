@@ -176,6 +176,9 @@ sealed class SettingsRoute : Parcelable {
     data object PopupOverrides : SettingsRoute()
 
     @Serializable
+    data object NineKeyLetters : SettingsRoute()
+
+    @Serializable
     data object Search : SettingsRoute()
 
     companion object {
@@ -250,6 +253,9 @@ sealed class SettingsRoute : Parcelable {
             }
             fragment<PopupOverridesFragment, PopupOverrides> {
                 label = ctx.getString(R.string.long_press_characters)
+            }
+            fragment<NineKeyLettersFragment, NineKeyLetters> {
+                label = ctx.getString(R.string.t9_letters)
             }
             fragment<SettingsSearchFragment, Search> {
                 label = ctx.getString(R.string.search_settings)

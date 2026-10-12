@@ -168,6 +168,7 @@ object InputMethodSettings {
                     AppChoice(T9MultiTap.KEY, R.string.t9_multi_tap, R.string.t9_multi_tap_summary, T9MultiTap.entries) {
                         AppPrefs.getInstance().keyboard.t9MultiTap
                     }.takeIf { nineKeys },
+                    Page(T9_LETTERS, R.string.t9_letters, R.string.t9_letters_summary, SettingsRoute.NineKeyLetters).takeIf { nineKeys },
                     Choice(EngineSettings.PAGE_SIZE, R.string.im_page_size, PAGE_SIZES, label = { _, v -> v }, nearest = numbers(EngineSettings.PAGE_SIZES)),
                     Toggle(EngineSettings.PREDICTION, text(R.string.im_prediction), R.string.im_prediction_summary),
                     Choice(
@@ -258,6 +259,9 @@ object InputMethodSettings {
 
     /** The English page's word list: its key. */
     const val ENGLISH_WORDS = "english_words"
+
+    /** 九键's page of its keys' letters: its key. */
+    const val T9_LETTERS = "t9_letters"
 
     /** The app's own input methods, each with a page in [of]. */
     val BUILT_IN: List<String> = listOf(Engines.PINYIN, Engines.T9, Engines.SHUANGPIN) + Engines.TABLES.keys + InputMethodNames.KEYBOARD

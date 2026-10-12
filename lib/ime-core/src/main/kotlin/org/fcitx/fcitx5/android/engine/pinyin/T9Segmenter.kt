@@ -12,8 +12,9 @@ import java.util.TreeMap
 
 /**
  * Cuts pinyin typed on a phone's nine keys (九键) into a [SyllableGraph]: each of 2 to 9 stands
- * for its letters (`2` abc … `9` wxyz, ü as v on `8`), so `64426` is ni'hao, mi'gao and the rest,
- * all of them in the graph for the decoder to weigh. The separator is `'`: the session takes
+ * for its [letters] (on a phone `2` abc … `9` wxyz, ü as v on `8`), so `64426` is ni'hao, mi'gao
+ * and the rest, all of them in the graph for the decoder to weigh. A letter the user put on more
+ * than one key is read from each. The separator is `'`: the session takes
  * the keyboard's 1 for it.
  *
  * From each digit the graph gets:
@@ -35,7 +36,11 @@ import java.util.TreeMap
  * ([Action.Syllable][org.fcitx.fcitx5.android.engine.session.Action.Syllable]) is in the input as
  * its letters and a separator: read as that syllable alone, or as an initial for a letter (`h`).
  */
-class T9Segmenter(fuzzy: Set<Fuzzy> = emptySet(), private val abbreviations: Boolean = true) : Segmenter {
+class T9Segmenter(
+    fuzzy: Set<Fuzzy> = emptySet(),
+    private val abbreviations: Boolean = true,
+    val letters: NineKeyLetters = NineKeyLetters.STANDARD,
+) : Segmenter {
 
     // digits typing a syllable whole, the start of one, and an initial
     private val whole = HashMap<String, SyllableMatches>()
@@ -66,16 +71,19 @@ class T9Segmenter(fuzzy: Set<Fuzzy> = emptySet(), private val abbreviations: Boo
                 val finalRules = fuzzy.filter { !it.onInitial && it.appliesAfter(init) }
                 if (init.isNotEmpty()) keepBest(letterIds.getOrPut(init) { TreeMap() }, id, SyllableMatches.COMPLETION)
                 SpellingIndex.variants(init, initialRules).flatMap { (i, iFlags) ->
-                    if (i.isNotEmpty()) keepBest(initialIds.getOrPut(digits(i)) { TreeMap() }, id, iFlags or SyllableMatches.COMPLETION)
+                    if (i.isNotEmpty()) {
+                        for (keys in letters.typings(i)) keepBest(initialIds.getOrPut(keys) { TreeMap() }, id, iFlags or SyllableMatches.COMPLETION)
+                    }
                     // with no initial the final is the syllable: ou's partner u is none, as in 双拼
                     SpellingIndex.finalsAfter(i, fin, finalRules).map { (f, fFlags) -> i + f to (iFlags or fFlags) }
                 }
             }
             for ((s, flags) in spellings) {
-                val keys = digits(s)
-                if (parts != null && s.length > 1) regular += keys
-                keepBest(wholeIds.getOrPut(keys) { TreeMap() }, id, flags)
-                for (n in 1 until keys.length) keepBest(startIds.getOrPut(keys.substring(0, n)) { TreeMap() }, id, flags or SyllableMatches.COMPLETION)
+                for (keys in letters.typings(s)) {
+                    if (parts != null && s.length > 1) regular += keys
+                    keepBest(wholeIds.getOrPut(keys) { TreeMap() }, id, flags)
+                    for (n in 1 until keys.length) keepBest(startIds.getOrPut(keys.substring(0, n)) { TreeMap() }, id, flags or SyllableMatches.COMPLETION)
+                }
             }
         }
         wholeIds.forEach { (k, m) -> whole[k] = toMatches(m) }
@@ -113,7 +121,8 @@ class T9Segmenter(fuzzy: Set<Fuzzy> = emptySet(), private val abbreviations: Boo
         while (at + length < input.length && isKey(input[at + length]) && length < MAX_SYLLABLE) {
             length++
             val typed = input.substring(at, at + length)
-            val keys = digits(typed.lowercase())
+            // a letter typed as itself as any key typing it: every way to type a syllable is indexed
+            val keys = buildString(length) { typed.forEach { append(letters.key(it.lowercaseChar())) } }
             val full = whole[keys]?.let { fitting(it, typed) }
             val isRegular = isRegular(keys, full)
             if (full != null) {
@@ -166,19 +175,5 @@ class T9Segmenter(fuzzy: Set<Fuzzy> = emptySet(), private val abbreviations: Boo
 
         /** Whether [c] is a key typed: a digit, or a letter typed as itself. */
         fun isKey(c: Char): Boolean = c in '2'..'9' || c in FIXED
-
-        /** The key typing [c] on the nine keys: '2' for a, b, c; ü is v, on '8'. */
-        fun digit(c: Char): Char = if (c in 'a'..'z') DIGITS[c - 'a'] else c
-
-        /** The letters [digit] types, ü as v. */
-        fun letters(digit: Char): String = KEYS.getOrElse(digit - '2') { "" }
-
-        private val KEYS = listOf("abc", "def", "ghi", "jkl", "mno", "pqrs", "tuv", "wxyz")
-
-        // made from KEYS, so the two cannot disagree
-        private val DIGITS = CharArray(26).also { d -> KEYS.forEachIndexed { k, typed -> typed.forEach { d[it - 'a'] = '2' + k } } }
-
-        /** [spelling] as typed on the nine keys. */
-        fun digits(spelling: String): String = buildString(spelling.length) { spelling.forEach { append(digit(it)) } }
     }
 }

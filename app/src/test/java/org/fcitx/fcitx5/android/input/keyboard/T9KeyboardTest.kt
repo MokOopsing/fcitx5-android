@@ -16,6 +16,7 @@ import org.fcitx.fcitx5.android.core.KeyStates
 import org.fcitx.fcitx5.android.core.KeySym
 import org.fcitx.fcitx5.android.data.theme.ThemePreset
 import org.fcitx.fcitx5.android.engine.host.Keyboard
+import org.fcitx.fcitx5.android.engine.pinyin.NineKeyLetters
 import org.fcitx.fcitx5.android.ui.main.settings.PlaceholderStrings
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -64,6 +65,21 @@ class T9KeyboardTest {
         val off = MultiTap(0)
         assertEquals(four, T9Keyboard.typed(four, keys, off, 0))
         assertEquals(four, T9Keyboard.typed(four, keys, off, 1))
+    }
+
+    @Test
+    fun aDigitPressedAgainGoesThroughTheLettersTheUserPutOnIt() {
+        val tap = MultiTap(600)
+        val keys = KeyActionListener.Source.Keyboard
+        val letters = NineKeyLetters.of(listOf("abc", "def", "gi", "jkl", "mnoh"))
+        val six = KeyAction.FcitxKeyAction("6")
+        assertEquals(six, T9Keyboard.typed(six, keys, tap, 0, letters = letters))
+        assertEquals(letter('n', again = true), T9Keyboard.typed(six, keys, tap, 100, letters = letters))
+        assertEquals(letter('o', again = true), T9Keyboard.typed(six, keys, tap, 200, letters = letters))
+        assertEquals(letter('h', again = true), T9Keyboard.typed(six, keys, tap, 300, letters = letters))
+        // drawn on the key too
+        val row = T9Keyboard.layout(letters)[1]
+        assertTrue(row.any { (it.appearance as? KeyDef.Appearance.AltText)?.displayText == "MNOH" })
     }
 
     @Test

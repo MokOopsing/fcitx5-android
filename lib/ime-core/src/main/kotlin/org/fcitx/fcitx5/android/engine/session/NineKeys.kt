@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.engine.session
 
 import org.fcitx.fcitx5.android.engine.data.PinyinData
+import org.fcitx.fcitx5.android.engine.pinyin.NineKeyLetters
 import org.fcitx.fcitx5.android.engine.pinyin.SyllableGraph
 import org.fcitx.fcitx5.android.engine.pinyin.SyllableGraph.Kind
 import org.fcitx.fcitx5.android.engine.pinyin.Syllables
@@ -15,7 +16,7 @@ import org.fcitx.fcitx5.android.engine.pinyin.T9Segmenter
  * be ([offered]), and those taken, which stand in the input as their letters and a separator.
  * Taking one and giving it back edit the session's input; the session reads it again after.
  */
-internal class NineKeys(private val data: PinyinData) {
+internal class NineKeys(private val data: PinyinData, private val letters: NineKeyLetters) {
 
     /** A syllable taken at [at] for the keys [was], a separator [added] after it; [then] the input after. */
     private class Taken(val at: Int, val was: String, val added: Boolean, val then: String)
@@ -84,9 +85,9 @@ internal class NineKeys(private val data: PinyinData) {
             compareByDescending<Int> { it == first }.thenByDescending { found.getValue(it) }.thenByDescending { weights[it] },
         )
         // a letter typed as itself offers itself alone
-        val keys = if (input[at] in T9Segmenter.FIXED) input[at].lowercase() else T9Segmenter.letters(input[at])
-        val letters = keys.filter { it in INITIAL_LETTERS }.map { it.toString() }
-        show((order.map { Syllables.spelling(it) } + letters).take(Action.Syllable.MAX), at)
+        val keys = if (input[at] in T9Segmenter.FIXED) input[at].lowercase() else letters.letters(input[at])
+        val initials = keys.filter { it in INITIAL_LETTERS }.map { it.toString() }
+        show((order.map { Syllables.spelling(it) } + initials).take(Action.Syllable.MAX), at)
     }
 
     /**
@@ -116,10 +117,10 @@ internal class NineKeys(private val data: PinyinData) {
     fun letter(input: StringBuilder, c: Char, again: Boolean, picked: Int): Boolean {
         if (c !in 'a'..'z') return false
         val last = input.length - 1
-        val same = last >= picked && T9Segmenter.isKey(input[last]) && T9Segmenter.digit(input[last].lowercaseChar()) == T9Segmenter.digit(c)
+        val same = last >= picked && T9Segmenter.isKey(input[last]) && letters.sameKey(input[last], c)
         when {
             again && same -> input.setCharAt(last, c.uppercaseChar())
-            again -> input.append(T9Segmenter.digit(c))
+            again -> input.append(letters.key(c))
             else -> input.append(c.uppercaseChar())
         }
         return true

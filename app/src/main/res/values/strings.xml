@@ -450,6 +450,14 @@
     <string name="t9_multi_tap_fast">Fast (0.4 s)</string>
     <string name="t9_multi_tap_medium">Medium (0.6 s)</string>
     <string name="t9_multi_tap_slow">Slow (0.9 s)</string>
+    <string name="t9_letters">Letters on the keys</string>
+    <string name="t9_letters_summary">Which letters each key types: up to five, a letter may be on more than one key</string>
+    <string name="t9_letters_hint">Tap a key to set the letters it types, up to five. A letter may be on more than one key; pinyin with a letter on no key cannot be typed.</string>
+    <string name="t9_letters_missing">On no key: %s</string>
+    <string name="t9_letters_of">Letters of %s</string>
+    <string name="t9_letters_field_hint">As on a phone: %s</string>
+    <string name="t9_letters_editor_hint">Letters a to z, each once, in the order the key shows them and multi-tap goes through them</string>
+    <string name="t9_letters_reset_all_message">Put every key back to its letters as on a phone?</string>
     <string name="im_model_level">Performance level</string>
     <string name="im_model_level_summary">Higher picks better and uses more battery</string>
     <string name="im_model_level_low">Low: by how common words and pairs are, least battery</string>

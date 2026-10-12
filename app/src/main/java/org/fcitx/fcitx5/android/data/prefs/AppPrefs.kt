@@ -13,6 +13,7 @@ import androidx.preference.PreferenceManager
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.InputFeedbacks.InputFeedbackMode
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceUi.Levels.Level
+import org.fcitx.fcitx5.android.engine.pinyin.NineKeyLetters
 import org.fcitx.fcitx5.android.input.candidates.expanded.ExpandedCandidateStyle
 import org.fcitx.fcitx5.android.input.candidates.floating.FloatingCandidatesMode
 import org.fcitx.fcitx5.android.input.candidates.floating.FloatingCandidatesOrientation
@@ -138,6 +139,12 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
                 override fun decode(raw: String) = T9MultiTap.entries.firstOrNull { it.name == raw }
             },
         ).apply { register() }
+
+        /**
+         * What each of 九键's digit keys types ([NineKeyLetters.serialize], empty as on a phone):
+         * set on its own page from the 九键 page, read by the keyboard and the engine alike.
+         */
+        val t9Letters = ManagedPreference.PString(sharedPreferences, "t9_letters", "").apply { register() }
 
         /** Shown on the English page (InputMethodSettings), not here: English's alone. */
         val englishAutoCaps = ManagedPreference.PBool(sharedPreferences, ENGLISH_AUTO_CAPS, true).apply { register() }

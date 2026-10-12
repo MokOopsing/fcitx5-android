@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.engine.host
 
 import org.fcitx.fcitx5.android.engine.pinyin.Fuzzy
+import org.fcitx.fcitx5.android.engine.pinyin.NineKeyLetters
 import org.fcitx.fcitx5.android.engine.pinyin.ShuangpinScheme
 import org.fcitx.fcitx5.android.engine.table.TableOptions
 
@@ -27,6 +28,8 @@ data class EngineSettings(
     val latinWords: Boolean = true,
     /** What the user set for each table input method, by its group in the config (`Wubi`). */
     val tables: Map<String, TableSettings> = emptyMap(),
+    /** The nine keys' letters: the app's, set on the keyboard's side, not in the addon's config. */
+    val nineKeys: NineKeyLetters = NineKeyLetters.STANDARD,
 ) {
     val scheme: ShuangpinScheme get() = SCHEMES[shuangpin] ?: ShuangpinScheme.ZIRANMA
 

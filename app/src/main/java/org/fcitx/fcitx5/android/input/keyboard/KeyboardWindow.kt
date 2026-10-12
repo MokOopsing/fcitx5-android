@@ -17,6 +17,7 @@ import org.fcitx.fcitx5.android.core.InputMethodEntry
 import org.fcitx.fcitx5.android.core.InputMethodNames
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.engine.host.Engines
+import org.fcitx.fcitx5.android.engine.pinyin.NineKeyLetters
 import org.fcitx.fcitx5.android.input.bar.KawaiiBarComponent
 import org.fcitx.fcitx5.android.input.broadcast.InputBroadcastReceiver
 import org.fcitx.fcitx5.android.input.broadcast.ReturnKeyAppearance
@@ -68,7 +69,7 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     // each made when first shown: every new input view made 九键 too, which most never use
     private val makers: Map<String, () -> BaseKeyboard> = mapOf(
         TextKeyboard.Name to { TextKeyboard(context, theme) },
-        T9Keyboard.Name to { T9Keyboard(context, theme) },
+        T9Keyboard.Name to { T9Keyboard(context, theme, NineKeyLetters.parse(AppPrefs.getInstance().keyboard.t9Letters.getValue())) },
         NumberKeyboard.Name to { NumberKeyboard(context, theme) },
     )
     private val keyboards = hashMapOf<String, BaseKeyboard>()

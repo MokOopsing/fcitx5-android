@@ -26,12 +26,6 @@ class T9SegmenterTest {
 
     @Test
     fun digitsAreEverySyllableTheyType() {
-        assertEquals("64426", T9Segmenter.digits("nihao"))
-        assertEquals("58", T9Segmenter.digits("lv"))
-        assertEquals("64'", T9Segmenter.digits("ni'"))
-        // every letter on one key, the one that types it
-        assertEquals(('a'..'z').joinToString(""), ('2'..'9').joinToString("") { T9Segmenter.letters(it) })
-        for (d in '2'..'9') T9Segmenter.letters(d).forEach { assertEquals(d, T9Segmenter.digit(it)) }
         val g = segmenter.segment("64426")
         assertTrue(setOf("ni", "mi").all { it in g.read(0, 2) })
         assertTrue("hao" in g.read(2, 5))
@@ -141,5 +135,22 @@ class T9SegmenterTest {
         assertTrue(segmenter.segment("m'2").read(0, 2).isEmpty())
         assertFalse(segmenter.reads('a'))
         assertFalse(segmenter.typesLetters)
+    }
+
+    @Test
+    fun lettersTheUserPutOnTheKeysAreReadFromEach() {
+        // a on 2 and on 5 too, l moved from 5 to 9
+        val keys = NineKeyLetters.of(listOf("abc", "def", "ghi", "jka", "mno", "pqrs", "tuv", "wxyzl"))
+        val custom = T9Segmenter(abbreviations = false, letters = keys)
+        assertTrue("ba" in custom.segment("22").read(0, 2))
+        assertTrue("ba" in custom.segment("25").read(0, 2))
+        assertTrue("lai" in custom.segment("924").read(0, 3))
+        // l is no longer on 5
+        assertFalse("lai" in custom.segment("524").read(0, 3))
+        assertTrue("jia" in custom.segment("542").read(0, 3))
+        // a letter typed as itself is that letter whichever key typed it
+        val typed = custom.segment("2A").read(0, 2)
+        assertTrue("ba" in typed)
+        assertFalse("bo" in typed)
     }
 }

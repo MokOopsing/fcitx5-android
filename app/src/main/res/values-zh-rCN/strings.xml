@@ -436,6 +436,14 @@
     <string name="t9_multi_tap_fast">快（0.4 秒）</string>
     <string name="t9_multi_tap_medium">中（0.6 秒）</string>
     <string name="t9_multi_tap_slow">慢（0.9 秒）</string>
+    <string name="t9_letters">按键字母</string>
+    <string name="t9_letters_summary">自定义每个数字键打出哪些字母，每键最多五个，可以重复</string>
+    <string name="t9_letters_hint">点一个键，设置它打出的字母，最多五个。同一个字母可以放在多个键上；不在任何键上的字母，含它的拼音就打不出来。</string>
+    <string name="t9_letters_missing">不在任何键上：%s</string>
+    <string name="t9_letters_of">%s 键的字母</string>
+    <string name="t9_letters_field_hint">默认：%s</string>
+    <string name="t9_letters_editor_hint">填 a 到 z 的字母，每个一次；顺序就是键上显示和连按选字母的顺序</string>
+    <string name="t9_letters_reset_all_message">把所有键恢复成默认的字母？</string>
     <string name="im_model_level">性能档位</string>
     <string name="im_model_level_summary">档位越高越准，也越费电</string>
     <string name="im_model_level_low">低档：只按词频和搭配，最省电</string>
