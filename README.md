@@ -1,6 +1,6 @@
 # 幽默输入法 · Youmo IME
 
-[中文](#幽默输入法) · [English](#youmo-ime)
+[中文](#幽默输入法) · [English](#youmo-ime) · [使用说明](docs/README.md)
 
 ---
 
@@ -50,6 +50,10 @@
 包名是 `io.github.sraw.youmo`，可以和上游的 Fcitx5（`org.fcitx.fcitx5.android`）同时安装。
 从本分支改名前的版本换过来，可以在旧版的“高级”设置里导出用户数据，再到新版里导入：设置、主题、剪贴板会带过来；
 旧版的备份不含引擎学到的词和词频，这部分要重新积累（新版的备份包含它们）。
+
+### 使用说明
+
+怎么用、各个键和手势、每个设置是什么意思，都在[使用说明](docs/README.md)里。应用设置首页右上角的问号也能打开它。
 
 ### 数据与许可
 
@@ -104,6 +108,8 @@ signKeyPwd=...
 ```
 
 ### 开发
+
+改代码之前先读 [specs/](specs/README.md)：架构、引擎、应用、数据与构建、测试、约定和踩过的坑（英文）。
 
 | 位置 | 内容 |
 |---|---|
@@ -176,6 +182,10 @@ The package name is `io.github.sraw.youmo`, so it installs alongside upstream Fc
 To move from this fork's builds before the renaming, export your user data in the old app's Advanced settings and import it in the new one.
 Settings, themes and the clipboard come along. The old app's backups leave out the words and frequencies the engine has learnt, so those start again (the new app's backups include them).
 
+### Using it
+
+The user's manual, in Chinese, is in [docs/](docs/README.md): every key, gesture and setting. The question mark at the top right of the app's settings opens it.
+
 ### Data and licences
 
 - Code: LGPL-2.1-or-later, as upstream.
@@ -231,6 +241,8 @@ signKeyPwd=...
 ```
 
 ### Development
+
+Before changing the code, read [specs/](specs/README.md): architecture, the engine, the app, data and build, testing, conventions, pitfalls.
 
 | Where | What |
 |---|---|

@@ -2,6 +2,11 @@
 
 Free to restructure; upstream compatibility is not a constraint.
 
+This page is the summary. The long form is [`specs/`](specs/README.md): architecture, the engine,
+the app, data and build, testing, conventions, pitfalls. Read the page for the area before changing
+it, and keep it true. What a user sees and every setting: [`docs/`](docs/README.md), updated with
+any change to behaviour or settings.
+
 ## Where code goes
 
 - `lib/ime-core` — plain JVM module (`java-library`, no Android on the classpath). **Decision logic
