@@ -230,6 +230,34 @@ class EnglishSessionTest {
     }
 
     @Test
+    fun theSpaceAfterAFullStopOrColonIsTakenBackWhereWhatFollowsGoesOnWithIt() {
+        val session = session()
+        session.type("hello")
+        assertEquals("hello. ", session.apply(Action.Key('.')).commit)
+        // example.com: a lower-case letter after the full stop
+        val c = session.apply(Action.Key('c'))
+        assertEquals(1, c.deleteBefore)
+        assertEquals("", c.commit)
+        // a sentence after it starts with a capital: the space stays
+        val other = session()
+        other.type("hello")
+        other.apply(Action.Key('.'))
+        assertEquals(0, other.apply(Action.Key('H')).deleteBefore)
+        // https://
+        val url = session()
+        url.type("hello")
+        assertEquals("hello: ", url.apply(Action.Key(':')).commit)
+        val slash = url.apply(Action.Key('/'))
+        assertEquals("/", slash.commit)
+        assertEquals(1, slash.deleteBefore)
+        // after a comma a lower-case word is the next one
+        val comma = session()
+        comma.type("hello")
+        comma.apply(Action.Key(','))
+        assertEquals(0, comma.apply(Action.Key('h')).deleteBefore)
+    }
+
+    @Test
     fun punctuationEndingAWordEndsItWithASpace() {
         val session = session()
         session.type("hello")

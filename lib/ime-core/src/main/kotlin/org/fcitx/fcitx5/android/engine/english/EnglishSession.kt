@@ -136,11 +136,21 @@ class EnglishSession(
 
     private fun key(c: Char): Snapshot {
         corrected = null
+        val join = input.isEmpty() && joins(c)
+        if (join) {
+            last = ""
+            recent = recent.dropLast(1)
+        }
         if (reads(c)) {
             if (input.isEmpty()) candidates = emptyList()
             input.insert(cursor++, c)
             read()
-            return snapshot()
+            return snapshot(deleteBefore = if (join) 1 else 0)
+        }
+        if (join) {
+            wrote(c.toString())
+            candidates = emptyList()
+            return snapshot(commit = c.toString(), deleteBefore = 1)
         }
         if (input.isNotEmpty()) {
             val typed = typed()
@@ -160,6 +170,18 @@ class EnglishSession(
             return snapshot(commit = word, handled = false)
         }
         return afterOwnSpace(c)
+    }
+
+    // the session's own space after a full stop or a colon, taken back where [c] goes on with what
+    // is before it: a lower-case letter after a full stop (e.g., example.com; a sentence after it
+    // starts with a capital), / after a colon (https://)
+    private fun joins(c: Char): Boolean {
+        if (last.length < 2 || last.last() != ' ') return false
+        return when (last[last.length - 2]) {
+            '.' -> c in 'a'..'z'
+            ':' -> c == '/'
+            else -> false
+        }
     }
 
     // [c] with no word typed: after the session's own space, it may take its place
