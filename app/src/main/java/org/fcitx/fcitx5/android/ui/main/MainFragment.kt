@@ -39,7 +39,7 @@ class MainFragment : PaddingPreferenceFragment() {
         view: View, savedInstanceState: Bundle?
     ) {
         super.onViewCreated(view, savedInstanceState)
-        // AboutMenuProvider is tied to viewLifecycleOwner, so the search and about menu items
+        // AboutMenuProvider is tied to viewLifecycleOwner, so the search, help and about menu items
         // are automatically shown when this Fragment is visible and removed when it's not
         requireActivity().addMenuProvider(
             AboutMenuProvider(), viewLifecycleOwner, Lifecycle.State.STARTED
@@ -52,8 +52,8 @@ class MainFragment : PaddingPreferenceFragment() {
             menu.item(R.string.search_settings, R.drawable.ic_baseline_search_24, tint, showAsAction = true) {
                 navigateWithAnim(SettingsRoute.Search)
             }
-            menu.item(R.string.faq) {
-                requireContext().openUrl(Const.faqUrl)
+            menu.item(R.string.help, R.drawable.ic_outline_help_outline_24, tint, showAsAction = true) {
+                requireContext().openUrl(Const.helpUrl)
             }
             menu.item(R.string.developer) {
                 navigateWithAnim(SettingsRoute.Developer)

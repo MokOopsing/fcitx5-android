@@ -14,6 +14,7 @@ object Const {
     const val licenseUrl = "https://www.gnu.org/licenses/old-licenses/lgpl-2.1"
     // upstream's pages describe upstream's app
     const val privacyPolicyUrl = "$githubRepo/blob/HEAD/PRIVACY.md"
-    const val faqUrl = "$githubRepo#readme"
+    // the user's manual, in the repository so it changes with the app
+    const val helpUrl = "$githubRepo/blob/HEAD/docs/README.md"
     const val releasesUrl = "$githubRepo/releases"
 }

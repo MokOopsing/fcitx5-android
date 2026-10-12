@@ -42,7 +42,6 @@
     <string name="no_more_input_methods">切り替えるインプットメソッドがもうありません</string>
     <string name="add_more_input_methods">インプットメソッドをさらに追加しますか？</string>
     <string name="about">このアプリについて</string>
-    <string name="faq">FAQ</string>
     <string name="current_version">カレントバージョン</string>
     <string name="real_time_logs">リアルタイムログ</string>
     <string name="developer">デベロッパー</string>

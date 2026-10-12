@@ -28,7 +28,6 @@
     <string name="whether_import_dict">¿Quiere importar este diccionario?</string>
     <string name="loading">Cargando</string>
     <string name="about">Acerca de</string>
-    <string name="faq">Preguntas frecuentes</string>
     <string name="current_version">Versión actual</string>
     <string name="real_time_logs">Registros en tiempo real</string>
     <string name="pin">Anclar</string>
