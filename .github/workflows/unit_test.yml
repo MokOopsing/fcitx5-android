@@ -8,7 +8,7 @@ name: Unit Tests
 #   - single OS
 # so it takes a few minutes rather than the build jobs' half hour, and can gate every push.
 #
-# Java 17, like the jobs that build APKs here (pull_request, emulator_test) and the nix shell: tests
+# Java 17, like the jobs that build APKs here (pull_request, emulator_test): tests
 # run on the JDK the release is built with. Bytecode target is Java 11 either way
 # (build-logic/convention/src/main/kotlin/Versions.kt).
 

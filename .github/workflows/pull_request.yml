@@ -18,15 +18,8 @@ concurrency:
 
 jobs:
   build_pull_request:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-24.04
-          - macos-15-intel
-          - macos-26
-          - windows-2025
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
     steps:
       - name: Fetch source code
         uses: actions/checkout@v7
@@ -44,37 +37,19 @@ jobs:
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
       # the engine data is unpacked with the SDK's CMake before AGP would install it for the native
-      # build; the version is the build's own. pwsh: one script for all four, sdkmanager.bat found
-      - name: Install CMake
-        shell: pwsh
+      # build; the version is the build's own (Versions.defaultCMake)
+      - name: Install build dependencies
         run: |
-          $cmake = (Select-String -Path build-logic/convention/src/main/kotlin/Versions.kt -Pattern 'defaultCMake = "([^"]+)"').Matches[0].Groups[1].Value
-          sdkmanager --install "cmake;$cmake"
-
-      - name: Install system dependencies (Ubuntu)
-        if: ${{ startsWith(matrix.os, 'ubuntu') }}
-        run: |
+          cmake=$(sed -n 's/.*defaultCMake = "\([^"]*\)".*/\1/p' build-logic/convention/src/main/kotlin/Versions.kt)
+          sdkmanager --install "cmake;${cmake:?no defaultCMake in Versions.kt}"
           sudo apt update
           sudo apt install extra-cmake-modules gettext
-
-      - name: Install system dependencies (macOS)
-        if: ${{ startsWith(matrix.os, 'macos') }}
-        run: |
-          brew install extra-cmake-modules
-
-      - name: Install system dependencies (Windows)
-        if: ${{ startsWith(matrix.os, 'windows') }}
-        run: |
-          C:/msys64/usr/bin/pacman -Syu --noconfirm
-          C:/msys64/usr/bin/pacman -S --noconfirm mingw-w64-ucrt-x86_64-gettext mingw-w64-ucrt-x86_64-extra-cmake-modules
-          Add-Content $env:GITHUB_PATH "C:/msys64/ucrt64/bin"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       # libime's sources, the engine-data release's model and the sentence models, some 400 MB:
-      # keyed on EngineDataPlugin, which names them and their SHA-256. Paths as in every workflow,
-      # or the caches nix.yml saves on main would not be found here
+      # keyed on EngineDataPlugin, which names them and their SHA-256. Paths as in every workflow
       - name: Cache engine data downloads
         uses: actions/cache@v6
         with:
@@ -89,7 +64,7 @@ jobs:
       - name: Upload app
         uses: actions/upload-artifact@v7
         with:
-          name: app-${{ matrix.os }}
+          name: app
           path: app/build/outputs/apk/*/release/
 
   # the voice build: its own code (src/voice) and sherpa-onnx's native build with our changes,
@@ -117,14 +92,10 @@ jobs:
       - name: Setup Android environment
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
 
-      - name: Install CMake
-        shell: pwsh
+      - name: Install build dependencies
         run: |
-          $cmake = (Select-String -Path build-logic/convention/src/main/kotlin/Versions.kt -Pattern 'defaultCMake = "([^"]+)"').Matches[0].Groups[1].Value
-          sdkmanager --install "cmake;$cmake"
-
-      - name: Install system dependencies
-        run: |
+          cmake=$(sed -n 's/.*defaultCMake = "\([^"]*\)".*/\1/p' build-logic/convention/src/main/kotlin/Versions.kt)
+          sdkmanager --install "cmake;${cmake:?no defaultCMake in Versions.kt}"
           sudo apt update
           sudo apt install extra-cmake-modules gettext
 
