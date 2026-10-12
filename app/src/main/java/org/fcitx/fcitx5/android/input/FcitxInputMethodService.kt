@@ -28,6 +28,7 @@ import android.view.inputmethod.CursorAnchorInfo
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InlineSuggestionsRequest
 import android.view.inputmethod.InlineSuggestionsResponse
+import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodSubtype
 import android.widget.FrameLayout
 import android.widget.inline.InlinePresentationSpec
@@ -767,6 +768,9 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         // initialSel{Start,End} is outdated. but it's the client app's responsibility to send
         // right cursor position, try to workaround this would simply introduce more bugs.
         selection.resetTo(attribute.initialSelStart, attribute.initialSelEnd)
+        // the screen turned (resetStateForNewConfiguration) restarts input with no
+        // onFinishInputView: the engine's input goes below, the editor's preedit with it
+        if (restarting) currentInputConnection?.let(::dropPreedit)
         resetComposingState()
         val flags = CapabilityFlags.fromEditorInfo(attribute)
         capabilityFlags = flags
@@ -1067,18 +1071,23 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         return inputView?.handleInlineSuggestions(response) == true
     }
 
+    /** Takes a Chinese preedit out of the editor, as the engine drops its input: see [PendingInputPolicy.keepsPreeditOnLeaving]. */
+    private fun dropPreedit(ic: InputConnection) {
+        // only a preedit: with none, an empty composing text takes the selection's place
+        if (editingSession.composing.isNotEmpty() &&
+            !PendingInputPolicy.keepsPreeditOnLeaving(fcitx.runImmediately { inputMethodEntryCached.languageCode })
+        ) {
+            ic.setComposingText("", 1)
+        }
+    }
+
     override fun onFinishInputView(finishingInput: Boolean) {
         Timber.d("onFinishInputView: finishingInput=$finishingInput")
         decorLocationUpdated = false
         inputDeviceMgr.onFinishInputView()
         inputView?.finishInput()
         currentInputConnection?.apply {
-            // only a preedit: with none, an empty composing text takes the selection's place
-            if (editingSession.composing.isNotEmpty() &&
-                !PendingInputPolicy.keepsPreeditOnLeaving(fcitx.runImmediately { inputMethodEntryCached.languageCode })
-            ) {
-                setComposingText("", 1)
-            }
+            dropPreedit(this)
             finishComposingText()
             monitorCursorAnchor(false)
         }
