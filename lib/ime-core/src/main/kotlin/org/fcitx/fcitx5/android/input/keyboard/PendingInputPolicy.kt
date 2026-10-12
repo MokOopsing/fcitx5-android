@@ -42,4 +42,12 @@ object PendingInputPolicy {
         hasPreedit -> Resolution.SelectFirstCandidate
         else -> Resolution.None
     }
+
+    /**
+     * Whether the editor keeps the preedit when the keyboard goes (hidden, the screen turned, another
+     * app): other languages' is their text; a Chinese one is pinyin, and kept it left `ni hao` in
+     * the text. Its first candidate cannot take its place: it comes from fcitx's thread, after the
+     * field may have gone, into another app's field even. So it goes, as typed into nothing.
+     */
+    fun keepsPreeditOnLeaving(languageCode: String): Boolean = !languageCode.startsWith("zh")
 }

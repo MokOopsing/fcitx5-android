@@ -1073,6 +1073,9 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         inputDeviceMgr.onFinishInputView()
         inputView?.finishInput()
         currentInputConnection?.apply {
+            if (!PendingInputPolicy.keepsPreeditOnLeaving(fcitx.runImmediately { inputMethodEntryCached.languageCode })) {
+                setComposingText("", 1)
+            }
             finishComposingText()
             monitorCursorAnchor(false)
         }

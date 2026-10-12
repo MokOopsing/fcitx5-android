@@ -6,6 +6,8 @@ package org.fcitx.fcitx5.android.input.keyboard
 
 import org.fcitx.fcitx5.android.input.keyboard.PendingInputPolicy.Resolution
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class PendingInputPolicyTest {
@@ -49,5 +51,13 @@ class PendingInputPolicyTest {
         assertEquals(Resolution.None, PendingInputPolicy.resolve("zh_CN", hasPreedit = false, address = true))
         // other languages type the text itself already
         assertEquals(Resolution.FinishComposing, PendingInputPolicy.resolve("en", hasPreedit = true, address = true))
+    }
+
+    /** The screen turned mid-pinyin left `ni hao` in the text. */
+    @Test
+    fun leavingAChinesePreeditDropsItAndOtherLanguagesKeepTheirs() {
+        assertFalse(PendingInputPolicy.keepsPreeditOnLeaving("zh_CN"))
+        assertTrue(PendingInputPolicy.keepsPreeditOnLeaving("en"))
+        assertTrue(PendingInputPolicy.keepsPreeditOnLeaving(""))
     }
 }
