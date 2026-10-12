@@ -103,4 +103,15 @@ class EngineMigrationTest {
         assertFalse(engine.resolve("tables").exists())
         assertTrue(engine.resolve("wubi.user").exists())
     }
+
+    @Test
+    fun punctuationAfterALetterOrDigitIsChineseFromTheFirstStart() {
+        val home = folder.root
+        EngineMigration.run(home, null)
+        assertEquals("HalfWidthPuncAfterLetterOrNumber=False\n", home.resolve("conf/punctuation.conf").readText())
+        home.put("conf/punctuation.conf", "HalfWidthPuncAfterLetterOrNumber=True\nTypePairedPunctuationsTogether=True\n")
+        EngineMigration.run(home, null)
+        assertEquals("HalfWidthPuncAfterLetterOrNumber=False\nTypePairedPunctuationsTogether=True\n", home.resolve("conf/punctuation.conf").readText())
+        assertFalse(home.resolve(".libime/conf/punctuation.conf").exists())
+    }
 }

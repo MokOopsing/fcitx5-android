@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.core
 
+import org.fcitx.fcitx5.android.engine.host.AddonDefaults
 import org.fcitx.fcitx5.android.engine.host.LibimeMigration
 import org.fcitx.fcitx5.android.engine.store.replaceFile
 import timber.log.Timber
@@ -42,6 +43,12 @@ object EngineMigration {
             }
             val chttrans = File(configHome, "conf/chttrans.conf")
             if (chttrans.exists()) LibimeMigration.inputMethodList(chttrans.readText())?.let { replace(configHome, chttrans, it) }
+            val punctuation = File(configHome, "conf/punctuation.conf")
+            // the app's choice, not libime's to carry over: nothing kept to undo
+            AddonDefaults.punctuation(if (punctuation.exists()) punctuation.readText() else "")?.let { text ->
+                punctuation.parentFile?.mkdirs()
+                replaceFile(punctuation, File(punctuation.path + ".new")) { it.writeText(text) }
+            }
         } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
             // run before every start: whatever it trips on must not keep fcitx from starting
             // fcitx starts with its defaults then: the old input methods are just not there
