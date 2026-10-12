@@ -94,15 +94,15 @@ class Mixer(
         )
     }
 
-    private companion object {
+    internal companion object {
         // what is left to share, never quite nothing: rounding can take a full context past one
-        const val LEAST = 1e-9
+        private const val LEAST = 1e-9
 
         // what reading the probabilities as floats can leave of a context with every word
-        const val FULL = 1e-6
+        private const val FULL = 1e-6
 
         // what rounding the base's six digits can take a full context's sum from one
-        const val SLACK = 1e-4
+        private const val SLACK = 1e-4
 
         /**
          * The weight that makes the words a context has no n-gram for share what is left of it.

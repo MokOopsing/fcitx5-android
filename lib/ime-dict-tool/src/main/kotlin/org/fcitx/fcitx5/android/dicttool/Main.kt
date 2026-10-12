@@ -145,6 +145,15 @@ private val COMMANDS = listOf(
     ),
     Command("english -o <out> --lm <english.arpa>", "compile the English words and model (EnglishData)", 0..0, ::english),
     Command(
+        "prune -o <out.arpa> --lm <lm.arpa> --threshold <t>",
+        """
+            the model less the n-grams that tell it less than t
+            in relative entropy (Pruner, SRILM's -prune)
+        """,
+        0..0,
+        ::prune,
+    ),
+    Command(
         "text -o <out.jsonl.gz> <shard.parquet>...",
         """
             the chat-like pages as mix takes them, a JSON array
@@ -238,6 +247,8 @@ private class Options(
     val tokens: Long,
     /** `english-lm`: a spell dictionary (fcitx's .fscd) whose words are none of the pages' slips. */
     val known: String?,
+    /** `prune`: the least relative entropy an n-gram must be worth to stay. */
+    val threshold: Double,
     val crawl: Crawl,
 ) {
     /** `cc`: the crawl, its first WET file and how many, and where CommonCrawl is. */
@@ -343,6 +354,7 @@ private class Options(
                 vocabulary = values.count("--vocabulary", VOCABULARY, 1 until NgramKey.MAX_WORDS - 2) ?: return null,
                 tokens = values.read("--tokens", Long.MAX_VALUE) { it.toLongOrNull()?.takeIf { n -> n >= 1 } } ?: return null,
                 known = values["--known"],
+                threshold = values.read("--threshold", 0.0) { it.toDoubleOrNull()?.takeIf { t -> t >= 0 && t.isFinite() } } ?: return null,
             )
         }
     }
@@ -896,6 +908,21 @@ internal fun hotwords(lines: List<String>): String = lines.asSequence()
     .mapNotNull(HotwordSpelling::spelled)
     .distinct()
     .joinToString("") { "$it\n" }
+
+private fun prune(options: Options, out: Appendable) {
+    val lm = options.lm!!
+    val model = File(lm).bufferedReader().use { ArpaModel.read(it, lm) }
+    out.appendLine("model: ${model.size} / ${model.bigrams.size} / ${model.trigrams.size} n-grams")
+    val start = model.words.indexOf(EnglishText.START)
+    require(start >= 0) { "no ${EnglishText.START} in $lm" }
+    val pruned = Pruner(model, options.threshold, start, SENTENCE_START).prune()
+    out.appendLine("pruned: ${pruned.size} / ${pruned.bigrams.size} / ${pruned.trigrams.size} n-grams")
+    File(options.output!!).bufferedWriter().use { pruned.write(it) }
+    out.appendLine("wrote ${options.output}: ${File(options.output).length()} bytes")
+}
+
+// how often a word starts its sentence: lib/ime-eval/data/english.txt has 19,669 words in 1,500
+private const val SENTENCE_START = 1.0 / 14
 
 private fun english(options: Options, out: Appendable) {
     val lm = options.lm!!
