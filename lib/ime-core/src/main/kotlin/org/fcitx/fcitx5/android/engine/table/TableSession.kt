@@ -71,6 +71,11 @@ class TableSession(
     // a code just committed itself: the next key, if a space, is taken (see the class)
     private var committedItself = false
 
+    // Enter between: the space is on a new line, typed
+    override fun passedOn() {
+        committedItself = false
+    }
+
     override fun apply(action: Action): Snapshot {
         val takesSpace = committedItself && action is Action.Key && action.char == ' '
         committedItself = false

@@ -68,4 +68,13 @@ class TableLoneCodeTest {
         assertEquals("", space.commit)
         assertFalse(keyboard.onEvent(EngineEvent.CHAR, ' '.code).handled)
     }
+
+    @Test
+    fun anEnterBetweenLetsTheSpaceThrough() {
+        val keyboard = Keyboard(session(), nineKeys = false)
+        "wqiy".forEach { keyboard.onEvent(EngineEvent.CHAR, it.code) }
+        // nothing typed: Enter is the app's, a new line
+        assertFalse(keyboard.onEvent(EngineEvent.ENTER, 0).handled)
+        assertFalse(keyboard.onEvent(EngineEvent.CHAR, ' '.code).handled)
+    }
 }

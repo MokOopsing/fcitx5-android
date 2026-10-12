@@ -151,7 +151,7 @@ class Keyboard(private val session: Session, private val nineKeys: Boolean, priv
             },
         )
         // a tap in the app's text: the panel as it was
-        event == EngineEvent.CURSOR -> shown.copy(commit = "", handled = false)
+        event == EngineEvent.CURSOR -> shown.copy(commit = "", handled = false).also { session.passedOn() }
         else -> passOn()
     }
 
@@ -166,7 +166,10 @@ class Keyboard(private val session: Session, private val nineKeys: Boolean, priv
      * The key is the app's; an offer of what may follow goes away with it, and so does what English
      * knows of the text before the cursor (an Enter or an arrow: the space it added is not there).
      */
-    private fun passOn(): Snapshot = if (shown.predicting || english) session.apply(Action.Reset).copy(handled = false) else IDLE
+    private fun passOn(): Snapshot {
+        session.passedOn()
+        return if (shown.predicting || english) session.apply(Action.Reset).copy(handled = false) else IDLE
+    }
 
     companion object {
         private const val DIGITS = 10

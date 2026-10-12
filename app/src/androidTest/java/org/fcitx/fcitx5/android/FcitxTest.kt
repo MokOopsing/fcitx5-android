@@ -331,6 +331,14 @@ class FcitxTest {
         Assert.assertTrue("米 among $candidates", "米" in candidates)
         Assert.assertFalse("no 你 among $candidates", "你" in candidates)
         fcitx.reset()
+        // 连按: 2 four times fast, each press again a character past the BMP, read as keys: 爸爸
+        sendString("2")
+        "bca".forEach { fcitx.sendKey(0x01000000 + Keyboard.letterKey(it, again = true)) }
+        awaitQuiet()
+        val baba = fcitx.getCandidates(0, 32).map { it.text }
+        Timber.i("candidates for 2 pressed four times fast are $baba")
+        Assert.assertTrue("爸爸 among $baba", "爸爸" in baba)
+        fcitx.reset()
     }
 
     /**

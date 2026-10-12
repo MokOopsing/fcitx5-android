@@ -651,7 +651,7 @@ class PinyinSession(
             text = { it.text }, all = { it.end == rest },
         ) { Candidate(it, rest, 0f, intArrayOf(NO_WORD), intArrayOf(rest)) }
         val best = sentences.firstOrNull()
-        val restShown = if (best == null) graph.input else preedit(graph, best)
+        val restShown = if (best == null) T9Segmenter.plain(graph.input) else preedit(graph, best)
         lastRead = Read(
             candidates = listed,
             graph = graph,

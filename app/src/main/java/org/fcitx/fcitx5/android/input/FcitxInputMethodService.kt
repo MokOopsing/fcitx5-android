@@ -1073,7 +1073,10 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         inputDeviceMgr.onFinishInputView()
         inputView?.finishInput()
         currentInputConnection?.apply {
-            if (!PendingInputPolicy.keepsPreeditOnLeaving(fcitx.runImmediately { inputMethodEntryCached.languageCode })) {
+            // only a preedit: with none, an empty composing text takes the selection's place
+            if (editingSession.composing.isNotEmpty() &&
+                !PendingInputPolicy.keepsPreeditOnLeaving(fcitx.runImmediately { inputMethodEntryCached.languageCode })
+            ) {
                 setComposingText("", 1)
             }
             finishComposingText()

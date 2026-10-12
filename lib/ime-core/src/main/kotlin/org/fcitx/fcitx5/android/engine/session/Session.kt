@@ -32,6 +32,9 @@ interface Session {
 
     /** What a long press on the candidate at [index] of all offers, where [Snapshot.actionable]. */
     fun offers(index: Int): Set<Offer>
+
+    /** A key went to the app, not here (Enter, an arrow with nothing typed), or the cursor moved: what came before it is past. */
+    fun passedOn() {}
 }
 
 /**
