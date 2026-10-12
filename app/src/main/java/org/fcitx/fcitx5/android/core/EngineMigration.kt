@@ -18,8 +18,12 @@ import java.io.IOException
  */
 object EngineMigration {
 
-    /** [configHome] is fcitx's (FCITX_CONFIG_HOME). */
-    fun run(configHome: File) {
+    /**
+     * [configHome] is fcitx's (FCITX_CONFIG_HOME), beside its data home; [engineDir] the engine's
+     * user data, null while the phone is locked.
+     */
+    fun run(configHome: File, engineDir: File?) {
+        importedTablesGone(configHome, engineDir)
         try {
             val profile = File(configHome, "profile")
             if (profile.exists()) LibimeMigration.profile(profile.readText())?.let { replace(configHome, profile, it) }
@@ -43,6 +47,29 @@ object EngineMigration {
             // fcitx starts with its defaults then: the old input methods are just not there
             Timber.w(e, "cannot migrate libime's config")
         }
+    }
+
+    /**
+     * What a table imported in an older build left: its input method's conf, which fcitx would
+     * still list with nothing to type it, its table, settings and what it learned. The app's own
+     * tables are kept apart: no conf of theirs in the data home, their logs in [engineDir] itself.
+     */
+    private fun importedTablesGone(configHome: File, engineDir: File?) {
+        val data = File(configHome.parentFile, "data")
+        val confs = File(data, "inputmethod").listFiles { f -> f.name.endsWith(".conf") }.orEmpty()
+        for (conf in confs) {
+            val ours = try {
+                conf.readLines().any { it.trim() == "Addon=androidengine" }
+            } catch (e: IOException) {
+                Timber.w(e, "imported table %s", conf.name)
+                false
+            }
+            if (ours) conf.delete()
+        }
+        File(data, "table").deleteRecursively()
+        File(configHome, "table").listFiles { f -> f.name.removeSuffix(".conf") !in LibimeMigration.TABLE_CONFIGS }
+            ?.forEach { it.delete() }
+        engineDir?.let { File(it, "tables").deleteRecursively() }
     }
 
     // a profile cut short by a kill would lose every group

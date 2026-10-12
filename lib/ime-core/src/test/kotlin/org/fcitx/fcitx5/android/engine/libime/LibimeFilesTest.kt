@@ -53,9 +53,7 @@ class LibimeFilesTest {
     fun whatIsAndIsNotLibimes() {
         assertTrue(LibimeFiles.isPinyinDictionary(resource("extra.dict")))
         assertFalse(LibimeFiles.isPinyinDictionary(resource("db.main.dict")))
-        assertTrue(LibimeFiles.isTable(resource("db.main.dict")))
-        assertFalse(LibimeFiles.isTable(resource("extra.dict")))
-        assertFalse(LibimeFiles.isTable(ByteArray(3)))
+        assertFalse(LibimeFiles.isPinyinDictionary(ByteArray(3)))
         assertThrows(DataFormatException::class.java) { LibimeFiles.table(resource("extra.dict")) }
         assertThrows(DataFormatException::class.java) { LibimeFiles.pinyinDictionary(resource("db.main.dict")) }
         assertThrows(DataFormatException::class.java) { LibimeFiles.history(resource("extra.dict")) }

@@ -48,6 +48,15 @@ class ImportedDictionariesTest {
     }
 
     @Test
+    fun aWordPackAnOlderBuildImportedIsGone() {
+        File(dir, "a.words").writeText("# youmo words 1\n搭子 da'zi -5.6\n")
+        File(dir, "b.words.disable").writeText("# youmo words 1\n")
+        File(dir, "mine.txt").writeText("搭子 da'zi 0\n")
+        ImportedDictionaries.migrate(dir)
+        assertEquals(listOf("mine.txt"), names())
+    }
+
+    @Test
     fun libimesDictionariesTurnIntoText() {
         File(dir, "on.dict").writeBytes(extra)
         File(dir, "off.dict.disable").writeBytes(extra)

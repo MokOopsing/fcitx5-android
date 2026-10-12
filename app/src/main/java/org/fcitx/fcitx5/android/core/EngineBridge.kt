@@ -28,7 +28,6 @@ import org.fcitx.fcitx5.android.engine.user.LibimeImport
 import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.toast
 import timber.log.Timber
-import java.io.BufferedReader
 import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
@@ -93,7 +92,7 @@ object EngineBridge {
 
     // credential-encrypted, unlike fcitx's home: what the user typed is not kept where it can be read
     // before the phone is first unlocked. Till then the engine learns in memory; the app restarts at unlock.
-    private fun userDir() = if (FcitxApplication.getInstance().isDirectBootMode) null else File(appContext.filesDir, "engine")
+    fun userDir() = if (FcitxApplication.getInstance().isDirectBootMode) null else File(appContext.filesDir, "engine")
 
     /**
      * [userDir], put back before the engine makes it anew: a user-data import killed between its

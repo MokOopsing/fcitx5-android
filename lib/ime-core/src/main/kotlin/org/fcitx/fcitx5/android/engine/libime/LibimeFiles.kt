@@ -90,9 +90,6 @@ object LibimeFiles {
         }
     }
 
-    /** Whether [data] starts as a libime table does (its `.main.dict`, not a user's `.user.dict`). */
-    fun isTable(data: ByteArray): Boolean = magic(data) == TABLE_MAGIC
-
     /**
      * A code table (libime's `TableBasedDictionary` saved), as its `saveText` writes it: the
      * header in libime's English, its rules, then its entries in the table's own order.

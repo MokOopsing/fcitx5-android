@@ -64,6 +64,11 @@ object ImportedDictionaries {
         // before any is put aside: one put aside under a taken name is noted by the name it had
         noteOlder(dir, read)
         for (file in dir.listFiles().orEmpty()) {
+            // a word pack an older build imported: its words are built in now
+            if (file.name.endsWith(".words") || file.name.endsWith(".words.${TextDictionary.DISABLE}")) {
+                file.delete()
+                continue
+            }
             val enabled = when {
                 file.name.endsWith(".dict") -> true
                 file.name.endsWith(".dict.${TextDictionary.DISABLE}") -> false

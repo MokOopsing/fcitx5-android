@@ -445,7 +445,7 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
             )
             with(FcitxApplication.getInstance().directBootAwareContext) {
                 val home = getExternalFilesDir(null) ?: filesDir
-                EngineMigration.run(File(home, "config"))
+                EngineMigration.run(File(home, "config"), EngineBridge.userDir())
                 // what the user changed while fcitx was down (a dictionary imported, say) is read anew
                 try {
                     EngineBridge.reload()

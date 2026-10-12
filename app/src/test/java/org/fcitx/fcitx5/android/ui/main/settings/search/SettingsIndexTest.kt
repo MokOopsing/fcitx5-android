@@ -26,10 +26,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * A search result for an input method's option opens the page that has it: a table's once opened
- * the list of imported tables, which has none.
- */
+/** A search result for an input method's option opens the page that has it. */
 @RunWith(RobolectricTestRunner::class)
 class SettingsIndexTest {
 

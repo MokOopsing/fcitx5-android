@@ -197,7 +197,7 @@ object InputMethodSettings {
             R.string.im_section_typing, listOf(
                 Toggle(TableSettings.AUTO_SELECT, text(R.string.im_auto_select), R.string.im_auto_select_summary),
                 Toggle(TableSettings.HINT, text(R.string.im_hint), R.string.im_hint_summary),
-                // Freq and Fast alike order by use (TableConf)
+                // Freq and Fast alike order by use
                 Toggle(TableSettings.ORDER_POLICY, text(R.string.im_order_by_use), read = { it != "No" }, write = { if (it) "Freq" else "No" }),
             )
         ),

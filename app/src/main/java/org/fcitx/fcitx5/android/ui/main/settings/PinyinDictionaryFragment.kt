@@ -231,7 +231,7 @@ class PinyinDictionaryFragment : PaddingPreferenceFragment() {
         lifecycleScope.withLoadingDialog(ctx) {
             try {
                 val incoming = inspect(ctx, uri) ?: return@withLoadingDialog
-                showLayers(ctx, uri, incoming, Layer.BASE)
+                showLayers(ctx, uri, incoming)
             } catch (e: CancellationException) {
                 // the page left: nothing to show the error on
                 throw e
@@ -255,8 +255,8 @@ class PinyinDictionaryFragment : PaddingPreferenceFragment() {
         return Incoming(fileName)
     }
 
-    /** Asks which layer [incoming] goes into, [offered] picked to begin with, and imports it there. */
-    private fun showLayers(ctx: Context, uri: Uri, incoming: Incoming, offered: Layer) {
+    /** Asks which layer [incoming] goes into, the base picked to begin with, and imports it there. */
+    private fun showLayers(ctx: Context, uri: Uri, incoming: Incoming) {
         val layers = listOf(Layer.BASE, Layer.NEW, Layer.USER)
         val items = layers.map { layer ->
             SpannableStringBuilder()
@@ -266,7 +266,7 @@ class PinyinDictionaryFragment : PaddingPreferenceFragment() {
                 // a gap under each: three of two lines each read as one block without
                 .inSpans(RelativeSizeSpan(GAP)) { append("\n") }
         }.toTypedArray<CharSequence>()
-        var picked = layers.indexOf(offered)
+        var picked = layers.indexOf(Layer.BASE)
         AlertDialog.Builder(ctx)
             .setTitle(R.string.import_into_title)
             .setSingleChoiceItems(items, picked) { _, which -> picked = which }

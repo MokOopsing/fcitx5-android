@@ -103,15 +103,10 @@
                 <data android:pathPattern=".*\\..*\\.txt" />
                 <data android:pathPattern=".*\\..*\\..*\\.txt" />
                 <data android:pathPattern=".*\\..*\\..*\\..*\\.txt" />
-                <data android:pathPattern=".*\\.words" />
-                <data android:pathPattern=".*\\..*\\.words" />
-                <data android:pathPattern=".*\\..*\\..*\\.words" />
-                <data android:pathPattern=".*\\..*\\..*\\..*\\.words" />
                 <!-- pathSuffix works on API 31+ -->
                 <data android:pathSuffix=".dict" />
                 <data android:pathSuffix=".scel" />
                 <data android:pathSuffix=".txt" />
-                <data android:pathSuffix=".words" />
             </intent-filter>
         </activity>
 

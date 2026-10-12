@@ -128,9 +128,7 @@ FCITX_CONFIGURATION(
         ExternalOption dictmanager{this, "DictManager", _("Manage Dictionaries"),
                                    "fcitx://config/addon/androidengine/dictmanager"};
         ExternalOption customphrase{this, "CustomPhrase", _("Manage Custom Phrase"),
-                                    "fcitx://config/addon/androidengine/customphrase"};
-        ExternalOption tablemanager{this, "TableManager", _("Manage Table-based Input Methods"),
-                                    "fcitx://config/addon/androidengine/tablemanager"};)
+                                    "fcitx://config/addon/androidengine/customphrase"};)
 
 // What each input method's own page shows of AndroidEngineConfig, under the same keys: a page
 // with every table's options on it read as if pinyin had them all
