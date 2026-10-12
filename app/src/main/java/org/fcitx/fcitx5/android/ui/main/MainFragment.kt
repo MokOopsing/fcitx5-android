@@ -81,7 +81,7 @@ class MainFragment : PaddingPreferenceFragment() {
         // setting; what a phone's user seldom needs (a physical keyboard's candidate window) is
         // under Advanced, and fcitx's global options are not shown at all
         preferenceScreen = preferenceManager.createPreferenceScreen(requireContext()).apply {
-            // the offline build fetches nothing itself: new words come with a new version or a pack
+            // the offline build fetches nothing itself: new words come with a new version
             val dataMade = dataDay(BuildConfig.ENGINE_DATA, BuildConfig.ENGINE_WORDS) ?: BuildConfig.BUILD_TIME
             if (DataAge.isStale(dataMade, System.currentTimeMillis())) {
                 addPreference(R.string.data_outdated, R.string.data_outdated_summary) {

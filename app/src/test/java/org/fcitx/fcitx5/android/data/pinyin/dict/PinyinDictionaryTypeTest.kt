@@ -18,8 +18,8 @@ class PinyinDictionaryTypeTest {
         assertEquals(Type.LibIME, Type.fromFileName("words.dict"))
         assertEquals(Type.Sougou, Type.fromFileName("words.scel"))
         assertEquals(Type.Text, Type.fromFileName("words.txt"))
-        assertEquals(Type.Words, Type.fromFileName("new.words"))
-        assertEquals(Type.Words, Type.fromFileName("new.words.disable"))
+        // a word pack is built in now: no file to import
+        assertNull(Type.fromFileName("new.words"))
     }
 
     /** A dictionary the user imported is kept as text; `.disable` marks it off. */
@@ -35,7 +35,7 @@ class PinyinDictionaryTypeTest {
         assertNull(Type.fromFileName(""))
     }
 
-    /** Only text and word packs have a disabled form: libime's are turned into text, not kept (see ImportedDictionaries). */
+    /** Only text has a disabled form: libime's are turned into text, not kept (see ImportedDictionaries). */
     @Test
     fun theDisableSuffixIsNotRecognisedForOtherTypes() {
         assertNull(Type.fromFileName("words.scel.disable"))
@@ -48,16 +48,13 @@ class PinyinDictionaryTypeTest {
         assertEquals(Type.LibIME, Type.fromFileName(withLowercaseExtension("words.DICT")))
         assertEquals(Type.Sougou, Type.fromFileName(withLowercaseExtension("词库.SCEL")))
         assertEquals(Type.Text, Type.fromFileName(withLowercaseExtension("words.TXT")))
-        assertEquals(Type.Words, Type.fromFileName(withLowercaseExtension("NEW.Words")))
     }
 
     /** The files kept are named in lowercase, as the engine reads them: no other is one of them. */
     @Test
     fun aKeptFileMatchesOnlyAsItIsNamed() {
         assertNull(Type.fromFileName("words.TXT"))
-        assertNull(Type.fromFileName("new.WORDS"))
         assertEquals(Type.Text, Type.fromFileName("words.txt.disable"))
-        assertEquals(Type.Words, Type.fromFileName("new.words"))
     }
 
     @Test

@@ -28,7 +28,6 @@ import org.fcitx.fcitx5.android.engine.table.TableOptions
 import org.fcitx.fcitx5.android.engine.table.TableSession
 import org.fcitx.fcitx5.android.engine.user.LibimeImport
 import org.fcitx.fcitx5.android.engine.user.WordLists
-import org.fcitx.fcitx5.android.engine.user.WordPack
 import java.io.Closeable
 import java.io.File
 import java.io.IOException
@@ -70,19 +69,11 @@ class Engines(
         val phrases: String,
         val dictionaries: String,
         val savePhrases: (CustomPhrases) -> Unit = {},
-        /**
-         * The word packs turned on ([WordPack]), each named (its file) with its lines and whether
-         * it is merged into the new words dictionary rather than the base one; [dictionaries]
-         * tells these apart too.
-         */
-        val packs: () -> List<Pack> = { emptyList() },
         /** The lines of the dictionaries turned on that are merged into the new words dictionary. */
         val newDictionary: () -> Sequence<String> = { emptySequence() },
         /** The lines of the dictionaries turned on that are merged into the base dictionary. */
         val dictionary: () -> Sequence<String>,
     )
-
-    class Pack(val name: String, val lines: Sequence<String>, val intoNew: Boolean = false)
 
     private val assets = EngineAssets(load, onError, kernel)
 

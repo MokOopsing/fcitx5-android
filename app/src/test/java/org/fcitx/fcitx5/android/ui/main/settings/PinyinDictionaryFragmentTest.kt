@@ -26,11 +26,8 @@ import java.io.InputStream
 import kotlin.coroutines.EmptyCoroutineContext
 
 /**
- * Importing the next youmo-new.words as offered keeps it in the new words. The dialog offered the
- * base for every file, so taking the default moved the monthly pack into the base layer. The
- * dictionaries the migration put aside unread are told of: they left the list without a word.
- * A pack replacing one is put in its layer before it replaces it, and a file refused is not read;
- * a dictionary's words are counted again only once its file changed. The changes to the files
+ * A file is imported into the layer asked. The dictionaries the migration put aside unread are
+ * told of: they left the list without a word. A file refused is not read; a dictionary's words are counted again only once its file changed. The changes to the files
  * are made in turn, and the engine reads them again once the last is made: on the page's scope,
  * one still waiting as the page was left was cancelled, and the engine read them without it.
  * A page made anew (a rotation) lists them once the changes of the one it replaced are made:
@@ -51,51 +48,23 @@ class PinyinDictionaryFragmentTest {
         override fun import(stream: InputStream, fileName: String, intoNew: Boolean) {
             done += "import $fileName ${stream.reader().readText()} intoNew=$intoNew"
         }
-
-        override fun setIntoNew(name: String, intoNew: Boolean) {
-            done += "setIntoNew $name $intoNew"
-        }
-
-        override fun replacePack(name: String, text: String) {
-            done += "replacePack $name $text"
-        }
-    }
-
-    @Test
-    fun aPackReplacingOneIsPutInTheLayerAskedBeforeItReplacesIt() {
-        val dictionaries = Recorded(PinyinDictionary.Type.Words)
-        assertTrue(dictionaries.importFile(Incoming("youmo-new (1).words", pack = true), intoNew = false) { "pack".byteInputStream() })
-        assertEquals(listOf("setIntoNew youmo-new false", "replacePack youmo-new pack"), dictionaries.done)
     }
 
     @Test
     fun aFileOfANewNameIsImportedIntoTheLayerAsked() {
-        val pack = Recorded(null)
-        assertTrue(pack.importFile(Incoming("youmo-new (1).words", pack = true), intoNew = true) { "words".byteInputStream() })
-        assertEquals(listOf("import youmo-new.words words intoNew=true"), pack.done)
+        val new = Recorded(null)
+        assertTrue(new.importFile(Incoming("mine.txt"), intoNew = true) { "words".byteInputStream() })
+        assertEquals(listOf("import mine.txt words intoNew=true"), new.done)
         val plain = Recorded(null)
-        assertTrue(plain.importFile(Incoming("mine.scel", pack = false), intoNew = false) { "words".byteInputStream() })
+        assertTrue(plain.importFile(Incoming("mine.scel"), intoNew = false) { "words".byteInputStream() })
         assertEquals(listOf("import mine.scel words intoNew=false"), plain.done)
     }
 
     @Test
     fun aFileRefusedIsNeitherReadNorKept() {
         val dictionaries = Recorded(PinyinDictionary.Type.Text)
-        assertFalse(dictionaries.importFile(Incoming("youmo-new.words", pack = true), intoNew = true) { throw AssertionError("read") })
+        assertFalse(dictionaries.importFile(Incoming("mine.txt"), intoNew = true) { throw AssertionError("read") })
         assertEquals(emptyList<String>(), dictionaries.done)
-    }
-
-    @Test
-    fun aPackReplacingOneIsOfferedTheNewWords() {
-        assertTrue(offersNewLayer(PackImport.Action.REPLACE, intoNew = true))
-    }
-
-    @Test
-    fun anythingElseIsOfferedTheBase() {
-        assertFalse(offersNewLayer(PackImport.Action.REPLACE, intoNew = false))
-        assertFalse(offersNewLayer(PackImport.Action.IMPORT, intoNew = true))
-        assertFalse(offersNewLayer(PackImport.Action.REFUSE, intoNew = true))
-        assertFalse(offersNewLayer(PackImport.Action.IMPORT, intoNew = false))
     }
 
     @Test

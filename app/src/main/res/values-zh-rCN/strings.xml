@@ -61,9 +61,8 @@
     <string name="version">版本</string>
     <string name="build_time">提交时间</string>
     <string name="engine_data">基础数据</string>
-    <string name="download_word_packs">去下载词包</string>
     <string name="data_outdated">这一版已超过半年</string>
-    <string name="data_outdated_summary">新词随新版本和词包发布，点此去下载</string>
+    <string name="data_outdated_summary">新词随新版本发布，点此去下载</string>
     <string name="build_git_hash">构建 Git 哈希</string>
     <string name="source_code">源代码</string>
     <string name="privacy_policy">隐私政策</string>
@@ -523,7 +522,7 @@
     <string name="builtin_base_summary">常用词和词频，随应用更新 · 只读</string>
     <string name="import_section">导入</string>
     <string name="import_dict">导入词库</string>
-    <string name="import_dict_summary">支持 .txt、.dict、搜狗 .scel 和 .words 文件</string>
+    <string name="import_dict_summary">支持 .txt、.dict 和搜狗 .scel 文件</string>
     <string name="dict_on">已开启</string>
     <string name="dict_off">已关闭</string>
     <string name="dict_summary">%1$s · %2$s</string>

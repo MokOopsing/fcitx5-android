@@ -10,14 +10,12 @@ import org.fcitx.fcitx5.android.data.pinyin.ImportedDictionaries
 import org.fcitx.fcitx5.android.data.pinyin.customphrase.PinyinCustomPhrase
 import org.fcitx.fcitx5.android.data.replaceDirectory
 import org.fcitx.fcitx5.android.engine.data.DataFormatException
-import org.fcitx.fcitx5.android.engine.data.SourceException
 import org.fcitx.fcitx5.android.engine.host.EngineEvent
 import org.fcitx.fcitx5.android.engine.host.Engines
 import org.fcitx.fcitx5.android.engine.phrase.CustomPhrases
 import org.fcitx.fcitx5.android.engine.session.Choice
 import org.fcitx.fcitx5.android.engine.session.Offer
 import org.fcitx.fcitx5.android.engine.session.Snapshot
-import org.fcitx.fcitx5.android.engine.user.WordPack
 import org.fcitx.fcitx5.android.utils.appContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -240,19 +238,6 @@ class EngineBridgeTest {
         // as UserLexicon reads them: what failed is heard of only after the others went in
         assertThrows(IOException::class.java) { added.dictionary().forEach { read += it } }
         assertEquals(listOf("你好 ni'hao 0.0"), read)
-    }
-
-    @Test
-    fun aWordPackIsReadOnlyAsTheEngineParsesItAndOneThatCannotBeIsLeftOut() {
-        val dictionaries = File(folder.root, "dictionaries").apply { mkdirs() }
-        File(dictionaries, "a.words").writeText("# youmo words 1\n搭子 da'zi -5.6\n")
-        val gone = File(dictionaries, "b.words").apply { writeText("# youmo words 1\n躺平 tang'ping -5.0\n") }
-        val packs = EngineBridge.additions(folder.root).packs()
-        assertEquals(listOf("a.words", "b.words"), packs.map { it.name })
-        gone.delete()
-        assertEquals(1, WordPack.parse(packs[0].lines, packs[0].name).words.size)
-        // as the engine catches one that does not parse
-        assertThrows(SourceException::class.java) { WordPack.parse(packs[1].lines, packs[1].name) }
     }
 
     @Test

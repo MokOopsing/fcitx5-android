@@ -37,13 +37,11 @@ import org.fcitx.fcitx5.android.ui.common.withLoadingDialog
 import org.fcitx.fcitx5.android.ui.main.MainViewModel
 import org.fcitx.fcitx5.android.ui.main.MainViewModel.ButtonMode
 import org.fcitx.fcitx5.android.ui.main.launchOutlivingPage
-import org.fcitx.fcitx5.android.utils.Const
 import org.fcitx.fcitx5.android.utils.addPreference
 import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.importErrorDialog
 import org.fcitx.fcitx5.android.utils.lazyRoute
 import org.fcitx.fcitx5.android.utils.navigateWithAnim
-import org.fcitx.fcitx5.android.utils.openUrl
 import org.fcitx.fcitx5.android.utils.queryFileName
 import org.fcitx.fcitx5.android.utils.toast
 import org.fcitx.fcitx5.android.utils.withLowercaseExtension
@@ -162,8 +160,6 @@ class PinyinDictionaryFragment : PaddingPreferenceFragment() {
         listed.filter { !it.intoNew }.forEach { base.addPreference(row(it)) }
         val files = category(R.string.import_section)
         files.addPreference(R.string.import_dict, R.string.import_dict_summary) { launcher.launch("*/*") }
-        // no network permission: the browser downloads a pack, importing it is as for any file
-        files.addPreference(R.string.download_word_packs) { ctx.openUrl(Const.wordPacksUrl) }
         screen.addPreference(Preference(ctx).apply {
             setSummary(R.string.words_page_hint)
             isSelectable = false
@@ -229,20 +225,13 @@ class PinyinDictionaryFragment : PaddingPreferenceFragment() {
             .show()
     }
 
-    /**
-     * Which layer a file is merged into: the base unless asked otherwise, the safest of the three;
-     * for a pack replacing one, the layer that one is in.
-     */
+    /** Which layer a file is merged into: the base unless asked otherwise, the safest of the three. */
     private fun askLayer(uri: Uri) {
         val ctx = requireContext()
         lifecycleScope.withLoadingDialog(ctx) {
             try {
                 val incoming = inspect(ctx, uri) ?: return@withLoadingDialog
-                // a pack replacing one stays where that one is when the import is taken as offered
-                val offered = withContext(Dispatchers.IO) {
-                    if (offersNewLayer(ManagedDictionaries.actionFor(incoming), PinyinDictManager.isIntoNew(incoming.name))) Layer.NEW else Layer.BASE
-                }
-                showLayers(ctx, uri, incoming, offered)
+                showLayers(ctx, uri, incoming, Layer.BASE)
             } catch (e: CancellationException) {
                 // the page left: nothing to show the error on
                 throw e
@@ -263,10 +252,7 @@ class PinyinDictionaryFragment : PaddingPreferenceFragment() {
             ctx.importErrorDialog(R.string.invalid_dict)
             return null
         }
-        return withContext(Dispatchers.IO) {
-            val text = type == PinyinDictionary.Type.Text || type == PinyinDictionary.Type.Words
-            Incoming(fileName, text && cr.openInputStreamOrThrow(uri).use(PackImport::isPack))
-        }
+        return Incoming(fileName)
     }
 
     /** Asks which layer [incoming] goes into, [offered] picked to begin with, and imports it there. */
@@ -357,12 +343,10 @@ class PinyinDictionaryFragment : PaddingPreferenceFragment() {
     }
 }
 
-/** A file to import: a word pack or not, told by its first line whatever the file is called, as the import tells one. */
-internal class Incoming(val fileName: String, val pack: Boolean) {
-    /** what it is kept as, and replaces one of if a pack */
-    val name = if (pack) PackImport.name(fileName) else PinyinDictionary.nameOf(fileName)
-
-    val keptAs get() = if (pack) TextDictionary.fileName(name, type = PinyinDictionary.Type.Words) else fileName
+/** A file to import, named [fileName]. */
+internal class Incoming(val fileName: String) {
+    /** what it is kept as */
+    val name = PinyinDictionary.nameOf(fileName)
 }
 
 /** Where a file the user imports goes: the dictionaries [PinyinDictManager] keeps, or a test's. */
@@ -371,31 +355,15 @@ internal interface ImportTarget {
     fun typeOf(name: String): PinyinDictionary.Type?
 
     fun import(stream: InputStream, fileName: String, intoNew: Boolean)
-
-    fun setIntoNew(name: String, intoNew: Boolean)
-
-    fun replacePack(name: String, text: String)
 }
-
-/** What importing [incoming] does, with what is there of its name. */
-internal fun ImportTarget.actionFor(incoming: Incoming) = PackImport.action(incoming.pack, typeOf(incoming.name))
 
 /**
  * Imports [incoming], as [open] reads it, into the new words ([intoNew]) or the base; false, with
- * nothing read or changed, for one refused.
+ * nothing read or changed, where one of its name is there.
  */
 internal fun ImportTarget.importFile(incoming: Incoming, intoNew: Boolean, open: () -> InputStream): Boolean {
-    // a pack of the same name is its next one (each month's official pack is youmo-new.words): it replaces
-    when (actionFor(incoming)) {
-        PackImport.Action.REFUSE -> return false
-        PackImport.Action.IMPORT -> open().use { import(it, incoming.keptAs, intoNew) }
-        PackImport.Action.REPLACE -> {
-            val text = open().bufferedReader().use { it.readText() }
-            // the layer first: a pack that then fails to replace is the last one, as asked
-            setIntoNew(incoming.name, intoNew)
-            replacePack(incoming.name, text)
-        }
-    }
+    if (typeOf(incoming.name) != null) return false
+    open().use { import(it, incoming.fileName, intoNew) }
     return true
 }
 
@@ -404,14 +372,6 @@ private object ManagedDictionaries : ImportTarget {
 
     override fun import(stream: InputStream, fileName: String, intoNew: Boolean) {
         PinyinDictManager.importFromInputStream(stream, fileName, intoNew).getOrThrow()
-    }
-
-    override fun setIntoNew(name: String, intoNew: Boolean) {
-        PinyinDictManager.setIntoNew(name, intoNew).getOrThrow()
-    }
-
-    override fun replacePack(name: String, text: String) {
-        PinyinDictManager.importPack(name, text).getOrThrow()
     }
 }
 
@@ -437,7 +397,7 @@ internal class WordCounts(private val count: (TextDictionary) -> Int) {
         }
     }
 
-    private fun keyOf(dictionary: TextDictionary) = TextDictionary.fileName(dictionary.name, type = dictionary.type)
+    private fun keyOf(dictionary: TextDictionary) = TextDictionary.fileName(dictionary.name)
 }
 
 /**
@@ -489,12 +449,6 @@ internal class DictionaryChanges(
         return reload
     }
 }
-
-/**
- * Whether importing a file that does [action] offers the new words rather than the base: a pack
- * replacing one merged into the new words ([intoNew]) stays there (each month's youmo-new.words).
- */
-internal fun offersNewLayer(action: PackImport.Action, intoNew: Boolean) = action == PackImport.Action.REPLACE && intoNew
 
 /**
  * The notice of [unread], the dictionaries the migration put aside unread: [intro], a line each

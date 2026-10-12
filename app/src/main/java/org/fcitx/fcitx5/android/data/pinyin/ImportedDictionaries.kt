@@ -4,14 +4,11 @@
  */
 package org.fcitx.fcitx5.android.data.pinyin
 
-import org.fcitx.fcitx5.android.data.pinyin.dict.PinyinDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.TextDictionary
-import org.fcitx.fcitx5.android.engine.data.WordLayers
 import org.fcitx.fcitx5.android.engine.data.DataFormatException
 import org.fcitx.fcitx5.android.engine.libime.LibimeFiles
 import org.fcitx.fcitx5.android.engine.store.replaceFile
 import org.fcitx.fcitx5.android.engine.user.LibimeImport
-import org.fcitx.fcitx5.android.engine.user.WordPack
 import timber.log.Timber
 import java.io.File
 import java.io.IOException
@@ -46,37 +43,16 @@ object ImportedDictionaries {
         return words
     }
 
-    /**
-     * Writes [lines], a word pack, to [dest] as it is (but for a byte order mark), whole or not
-     * at all, once it is read through: the engine reads it again as it is kept.
-     *
-     * @return how many words it has; none, and nothing is written
-     * @throws SourceException if it is no word pack, saying where
-     * @throws IOException if it could not be written
-     */
-    fun writePack(lines: Sequence<String>, dest: File): Int {
-        val kept = ArrayList<String>()
-        val pack = WordPack.parse(lines.withoutByteOrderMark().onEach { kept += it }, dest.name)
-        if (pack.words.isEmpty()) return 0
-        replaceFile(dest, File(dest.path + ".tmp")) { temp ->
-            temp.bufferedWriter().use { out -> kept.forEach { out.write(it); out.write('\n'.code) } }
-        }
-        return pack.words.size
-    }
-
     private fun Sequence<String>.withoutByteOrderMark() = mapIndexed { i, l -> if (i == 0) l.removePrefix("\uFEFF") else l }
 
-    /** Whether [dir] holds a dictionary called [name] of one of [types], on or off. */
-    fun hasDictionary(
-        dir: File,
-        name: String,
-        types: List<PinyinDictionary.Type> = listOf(PinyinDictionary.Type.Text, PinyinDictionary.Type.Words),
-    ): Boolean = types.any { type -> listOf(true, false).any { File(dir, TextDictionary.fileName(name, it, type)).exists() } }
+    /** Whether [dir] holds a dictionary called [name], on or off. */
+    fun hasDictionary(dir: File, name: String): Boolean =
+        listOf(true, false).any { File(dir, TextDictionary.fileName(name, it)).exists() }
 
     /**
      * Turns each of libime's dictionaries in [dir] into text, on or off as it was, and moves it
      * to [LIBIME]; one with no word the engine can read, or that is no libime dictionary, or too
-     * large for the heap, or whose name a text one or a word pack has, is only moved. One that
+     * large for the heap, or whose name a text one has, is only moved. One that
      * could not be read (an I/O error) is left to try again. Those only moved, but for one whose
      * name another has, are noted for the settings to tell of ([unread]); so are, once, those an
      * older one put aside without noting them, if they still cannot be read. Each is read by
@@ -100,7 +76,6 @@ object ImportedDictionaries {
     private fun migrate(file: File, enabled: Boolean, read: (ByteArray) -> List<String>) {
         val name = file.name.substringBeforeLast(".dict")
         val unread = try {
-            // a pack too: two of one name would share their entry in INTO_NEW
             if (hasDictionary(file.parentFile, name)) {
                 Timber.w("libime's dictionary %s: a dictionary of its name is there", file.name)
                 null
@@ -267,7 +242,7 @@ object ImportedDictionaries {
     private const val OLDER_NOTED = ".unread-older"
 
     /**
-     * The names of the dictionaries and packs merged into the new words dictionary, one a line;
+     * The names of the dictionaries merged into the new words dictionary, one a line;
      * the rest are merged into the base dictionary. A dot file: no dictionary to list.
      */
     const val INTO_NEW = ".new-words"
@@ -282,23 +257,10 @@ object ImportedDictionaries {
 
     private fun readIntoNew(dir: File): Set<String> {
         val file = File(dir, INTO_NEW)
-        if (!file.isFile) return packsOfTheirOwnLayer(dir)
+        if (!file.isFile) return emptySet()
         // as setIntoNew wrote them: a name may begin or end with a space
         return file.readLines().filter { it.isNotEmpty() }.toSet()
     }
-
-    /**
-     * Before [INTO_NEW] was kept, a pack was weighed as the layer its header named (the cloud's
-     * new words as `new`), only `base` as the base: those are the new words still, until the
-     * user moves one.
-     */
-    private fun packsOfTheirOwnLayer(dir: File): Set<String> =
-        dir.listFiles().orEmpty().filter { PinyinDictionary.Type.fromFileName(it.name) == PinyinDictionary.Type.Words }
-            .filter { file ->
-                val layer = file.useLines { lines -> lines.take(HEADER_LINES).firstOrNull { it.startsWith(LAYER_KEY) } }
-                layer?.substring(LAYER_KEY.length)?.trim() != WordLayers.BASE
-            }
-            .map { PinyinDictionary.nameOf(it.name) }.toSet()
 
     /**
      * Merges dictionary [name] into the new words dictionary ([into]) or the base one. The
@@ -322,7 +284,4 @@ object ImportedDictionaries {
     }
 
     private fun isOneLine(name: String) = name.isNotEmpty() && '\n' !in name && '\r' !in name
-
-    private const val LAYER_KEY = "# layer:"
-    private const val HEADER_LINES = 3
 }

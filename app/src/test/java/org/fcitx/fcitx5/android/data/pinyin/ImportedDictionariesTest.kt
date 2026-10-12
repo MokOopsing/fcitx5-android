@@ -5,7 +5,6 @@
 package org.fcitx.fcitx5.android.data.pinyin
 
 import org.fcitx.fcitx5.android.data.pinyin.ImportedDictionaries.Unread
-import org.fcitx.fcitx5.android.engine.data.SourceException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -49,23 +48,6 @@ class ImportedDictionariesTest {
     }
 
     @Test
-    fun aWordPackIsKeptAsItCameOnceReadThrough() {
-        val dest = File(dir, "2026q1.words")
-        val lines = sequenceOf("\uFEFF# youmo words 1", "# layer: 2026q1", "搭子 da'zi -5.6", "", "# end")
-        assertEquals(1, ImportedDictionaries.writePack(lines, dest))
-        assertEquals("# youmo words 1\n# layer: 2026q1\n搭子 da'zi -5.6\n\n# end\n", dest.readText())
-        // one with no word, or a bad line, is not written
-        assertEquals(0, ImportedDictionaries.writePack(sequenceOf("# youmo words 1"), File(dir, "empty.words")))
-        try {
-            ImportedDictionaries.writePack(sequenceOf("# youmo words 1", "搭子 da'zi"), File(dir, "bad.words"))
-            fail("read a bad pack")
-        } catch (e: SourceException) {
-            assertEquals("bad.words:2: expected \"word pin'yin log10P\"", e.message)
-        }
-        assertEquals(listOf("2026q1.words"), names())
-    }
-
-    @Test
     fun libimesDictionariesTurnIntoText() {
         File(dir, "on.dict").writeBytes(extra)
         File(dir, "off.dict.disable").writeBytes(extra)
@@ -89,22 +71,6 @@ class ImportedDictionariesTest {
         assertEquals(listOf(".libime", "other.dat", "taken.txt.disable"), names())
         assertEquals(listOf("corrupt.dict", "taken.dict"), aside())
         assertEquals("你 ni 0.0\n", File(dir, "taken.txt.disable").readText())
-    }
-
-    @Test
-    fun oneOfTheNameOfAWordPackIsOnlyPutAside() {
-        val pack = "# youmo words 1\n搭子 da'zi -5.6\n"
-        File(dir, "a.dict").writeBytes(extra)
-        File(dir, "a.words").writeText(pack)
-        // as an older migration left it: put aside, nothing noted
-        val libime = File(dir, ImportedDictionaries.LIBIME).apply { mkdir() }
-        File(libime, "b.dict").writeBytes(extra.copyOf(30))
-        File(dir, "b.words.disable").writeText(pack)
-        ImportedDictionaries.migrate(dir)
-        // no a.txt beside a.words to share its entry in the new words; one of a pack's name is no news
-        assertEquals(listOf(".libime", "a.words", "b.words.disable"), names())
-        assertEquals(listOf("a.dict", "b.dict"), aside())
-        assertEquals(emptyList<Unread>(), ImportedDictionaries.unread(dir))
     }
 
     @Test

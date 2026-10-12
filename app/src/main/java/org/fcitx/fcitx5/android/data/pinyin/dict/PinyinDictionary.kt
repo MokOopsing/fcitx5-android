@@ -8,9 +8,8 @@ import java.io.File
 
 abstract class PinyinDictionary {
 
-    /** [Words] is a word pack ([org.fcitx.fcitx5.android.engine.user.WordPack]): text too, kept as it came. */
     enum class Type(val ext: String) {
-        LibIME("dict"), Sougou("scel"), Text("txt"), Words("words");
+        LibIME("dict"), Sougou("scel"), Text("txt");
 
         companion object {
             /**
@@ -22,7 +21,6 @@ abstract class PinyinDictionary {
                     name.endsWith(".dict") -> LibIME
                     name.endsWith(".scel") -> Sougou
                     name.endsWith(".txt") || name.endsWith(".txt.${TextDictionary.DISABLE}") -> Text
-                    name.endsWith(".words") || name.endsWith(".words.${TextDictionary.DISABLE}") -> Words
                     else -> null
                 }
         }
@@ -58,7 +56,7 @@ abstract class PinyinDictionary {
         fun new(it: File): PinyinDictionary? = when (Type.fromFileName(it.name)) {
             Type.LibIME -> LibIMEDictionary(it)
             Type.Sougou -> SougouDictionary(it)
-            Type.Text, Type.Words -> TextDictionary(it)
+            Type.Text -> TextDictionary(it)
             null -> null
         }
     }

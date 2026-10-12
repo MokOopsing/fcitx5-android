@@ -29,7 +29,6 @@ class PinyinDictManagerTest {
 
     // the manager's own, made once for the class: each test's application has another external dir
     private val dir get() = PinyinDictManager.pinyinDicDir
-    private val pack = "# youmo words 1\n# layer: 2026q1\n搭子 da'zi -5.6\n"
 
     // the dictionaries, not the dot files kept among them (.new-words, .libime)
     private fun names() = dir.list()!!.filter { !it.startsWith(".") }.sorted()
@@ -39,47 +38,6 @@ class PinyinDictManagerTest {
         dir.listFiles()?.forEach { it.deleteRecursively() }
         // made when the manager first ran, under that test's application: it may be gone since
         dir.mkdirs()
-    }
-
-    @Test
-    fun aPackReplacesTheLastOfItsNameOnOrOffAsItWas() {
-        val first = PinyinDictManager.importPack("2026q1", pack).getOrThrow()
-        assertEquals(PinyinDictionary.Type.Words, first.type)
-        assertEquals(listOf("2026q1.words"), names())
-        // new words: merged into the new words dictionary
-        assertTrue(PinyinDictManager.isIntoNew("2026q1"))
-        assertEquals(setOf("2026q1"), PinyinDictManager.intoNew())
-        PinyinDictManager.setIntoNew("2026q1", false).getOrThrow()
-        assertTrue(first.disable())
-        PinyinDictManager.importPack("2026q1", pack + "智驾 zhi'jia -5.9\n").getOrThrow()
-        assertEquals(listOf("2026q1.words.disable"), names())
-        assertTrue(File(dir, "2026q1.words.disable").readText().contains("智驾"))
-        // the next one stays where the user moved the last
-        assertFalse(PinyinDictManager.isIntoNew("2026q1"))
-        // the imported dictionaries' list has it
-        assertEquals(listOf("2026q1"), PinyinDictManager.listDictionaries().map { it.name })
-    }
-
-    @Test
-    fun aPackThatIsNoPackOrNamedLikeAPlainDictionaryIsRefused() {
-        assertTrue(PinyinDictManager.importPack("../x", pack).isFailure)
-        assertTrue(PinyinDictManager.importPack("bad", "你 ni 0\n").isFailure)
-        assertTrue(PinyinDictManager.importPack("empty", "# youmo words 1\n").isFailure)
-        File(dir, "mine.txt").writeText("你 ni 0\n")
-        assertTrue(PinyinDictManager.importPack("mine", pack).isFailure)
-        assertEquals(listOf("mine.txt"), names())
-    }
-
-    @Test
-    fun aTextFileThatStartsAsAPackIsImportedAsOne() {
-        val file = File(RuntimeEnvironment.getApplication().cacheDir, "new.txt").apply { writeText("\uFEFF$pack") }
-        val imported = PinyinDictManager.importFromFile(file).getOrThrow()
-        assertEquals(PinyinDictionary.Type.Words, imported.type)
-        assertEquals("new", imported.name)
-        assertEquals(pack, imported.file.readText())
-        // a second of the name, as a plain dictionary, is refused
-        file.writeText("你 ni 0\n")
-        assertTrue(PinyinDictManager.importFromFile(file).isFailure)
     }
 
     @Test
@@ -143,15 +101,6 @@ class PinyinDictManagerTest {
         }
     }
 
-    @Test
-    fun aPackWhoseNameCannotBeListedIsNotKept() {
-        assertTrue(PinyinDictManager.importPack("a\nb", pack).isFailure)
-        assertEquals(emptyList<String>(), names())
-        // nor put in the base when tried again, as one already there would be
-        assertTrue(PinyinDictManager.importPack("a\nb", pack).isFailure)
-        assertEquals(emptyList<String>(), names())
-    }
-
     @Test(timeout = 10_000)
     fun aConverterIsReadThroughAsItRunsAndWhatItPrintedIsTheError() {
         assumeTrue(File("/bin/sh").canExecute())
@@ -168,33 +117,12 @@ class PinyinDictManagerTest {
     }
 
     @Test
-    fun aPackFirstImportedUnderAnyNameIsReplacedByItsNext() {
-        val file = File(RuntimeEnvironment.getApplication().cacheDir, "新词 2026.words").apply { writeText(pack) }
-        PinyinDictManager.importFromFile(file).getOrThrow()
-        PinyinDictManager.importPack("新词 2026", pack + "智驾 zhi'jia -5.9\n").getOrThrow()
-        assertEquals(listOf("新词 2026.words"), names())
-        assertTrue(File(dir, "新词 2026.words").readText().contains("智驾"))
-    }
-
-    @Test
-    fun packsFromBeforeTheLayersWereChosenStayWhereTheirHeadersPutThem() {
-        File(dir, "cloud.words").writeText("# youmo words 1\n# layer: new\n搭子 da'zi -5.6\n")
-        File(dir, "plain.words.disable").writeText("# youmo words 1\n# layer: base\n搭子 da'zi -5.6\n")
-        File(dir, "mine.txt").writeText("搭子 da'zi 0\n")
-        assertEquals(setOf("cloud"), ImportedDictionaries.intoNew(dir))
-        // the first change keeps them so
-        PinyinDictManager.setIntoNew("plain", true).getOrThrow()
-        assertEquals(setOf("cloud", "plain"), ImportedDictionaries.intoNew(dir))
-    }
-
-    @Test
     fun aDictionaryIsMergedWhereAskedAndForgottenWhenDeleted() {
         val file = File(RuntimeEnvironment.getApplication().cacheDir, "mine.txt").apply { writeText("搭子 da'zi 0\n") }
         val base = PinyinDictManager.importFromFile(file).getOrThrow()
-        assertFalse(PinyinDictManager.isIntoNew("mine"))
+        assertEquals(emptySet<String>(), ImportedDictionaries.intoNew(dir))
         file.renameTo(File(file.parentFile, "theirs.txt"))
         val new = PinyinDictManager.importFromFile(File(file.parentFile, "theirs.txt"), intoNew = true).getOrThrow()
-        assertTrue(PinyinDictManager.isIntoNew("theirs"))
         assertEquals(setOf("theirs"), ImportedDictionaries.intoNew(dir))
         assertTrue(PinyinDictManager.delete(new))
         assertEquals(emptySet<String>(), ImportedDictionaries.intoNew(dir))

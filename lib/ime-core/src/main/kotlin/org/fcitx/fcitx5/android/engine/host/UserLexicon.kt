@@ -4,7 +4,6 @@
  */
 package org.fcitx.fcitx5.android.engine.host
 
-import org.fcitx.fcitx5.android.engine.data.SourceException
 import org.fcitx.fcitx5.android.engine.data.WordLayers
 import org.fcitx.fcitx5.android.engine.host.Engines.Additions
 import org.fcitx.fcitx5.android.engine.host.Engines.Companion.NEW_WORD_SCORE
@@ -20,14 +19,13 @@ import org.fcitx.fcitx5.android.engine.user.UserModel
 import org.fcitx.fcitx5.android.engine.user.UserModel.Entry
 import org.fcitx.fcitx5.android.engine.user.UserStore
 import org.fcitx.fcitx5.android.engine.user.WordLists
-import org.fcitx.fcitx5.android.engine.user.WordPack
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.Executor
 
 /**
  * The user's words, for [Engines]: what they added to pinyin ([additions]: custom phrases,
- * dictionaries, word packs), the model of what they typed with its log under [userDir] (made
+ * dictionaries), the model of what they typed with its log under [userDir] (made
  * afresh from libime's, [legacy]), its layer prior, and the words they added
  * and blocked by hand ([WordLists]). It lists, adds, blocks, imports, exports and forgets those
  * words for the settings, blocks and forgets them for a table's candidate, and learns what a
@@ -215,7 +213,7 @@ internal class UserLexicon(
     }
 
     /**
-     * Of [removed], those neither the base dictionary nor the user's dictionaries and packs have,
+     * Of [removed], those neither the base dictionary nor the user's dictionaries have,
      * with the texts of them the tables forget: those none of these has in any reading, nor the
      * added words still. Null if a dictionary did not read: any of them may be its word.
      */
@@ -305,7 +303,7 @@ internal class UserLexicon(
     }
 
     /**
-     * Each word of the user's dictionaries and packs as it is read: [plain] one of a dictionary
+     * Each word of the user's dictionaries as it is read: [plain] one of a dictionary
      * merged into the base one, [scored] any other, with the score and the layer it goes in.
      * [failed] hears of each that does not read.
      */
@@ -325,25 +323,6 @@ internal class UserLexicon(
             }
         } catch (e: IOException) {
             failed(e)
-        }
-        val packs = try {
-            added()?.packs?.invoke().orEmpty()
-        } catch (e: IOException) {
-            failed(e)
-            emptyList()
-        }
-        for (imported in packs) {
-            // one that does not read is left out, the rest still go in
-            val pack = try {
-                WordPack.parse(imported.lines, imported.name)
-            } catch (e: SourceException) {
-                failed(IOException(e.message, e))
-                continue
-            }
-            // merged into the layer the user put it in, whatever layer the pack names: one weight
-            // for the new words, however many packs they came in
-            val layer = if (imported.intoNew) newLayer else 0
-            pack.words.forEach { scored(it.entry, it.score, layer) }
         }
     }
 
@@ -383,7 +362,7 @@ internal class UserLexicon(
      * so read that pinyin lacks is read again, all in one walk; a phrase saved as it is typed, on the
      * input thread, only if the model or the user's words (typed, made, listed) have its text: a
      * dictionary word of neither is learned there as its pieces read. The walk reads the base dictionary
-     * alone: a word only the user's dictionaries or packs have, so misread, is learned so either way.
+     * alone: a word only the user's dictionaries have, so misread, is learned so either way.
      */
     fun learnSaved(texts: Collection<String>, again: Boolean) {
         if (texts.isEmpty()) return

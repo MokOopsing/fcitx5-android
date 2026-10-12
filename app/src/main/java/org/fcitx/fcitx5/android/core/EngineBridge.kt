@@ -16,7 +16,6 @@ import org.fcitx.fcitx5.android.data.pinyin.ImportedDictionaries
 import org.fcitx.fcitx5.android.data.pinyin.dict.PinyinDictionary
 import org.fcitx.fcitx5.android.data.restoreDirectory
 import org.fcitx.fcitx5.android.engine.data.DataFormatException
-import org.fcitx.fcitx5.android.engine.data.SourceException
 import org.fcitx.fcitx5.android.engine.host.EngineEvent
 import org.fcitx.fcitx5.android.engine.host.EngineSettings
 import org.fcitx.fcitx5.android.engine.host.Engines
@@ -213,14 +212,11 @@ object EngineBridge {
         val dictionaryDir = File(dir, "dictionaries")
         ImportedDictionaries.migrate(dictionaryDir)
         val dictionaries = dictionaryDir.listFiles { f -> f.name.endsWith(".txt") }.orEmpty().sortedBy { it.name }
-        val packs = dictionaryDir.listFiles { f -> f.name.endsWith(".words") }.orEmpty().sortedBy { it.name }
         val intoNew = ImportedDictionaries.intoNew(dictionaryDir)
         fun File.intoNew() = PinyinDictionary.nameOf(name) in intoNew
         // a dictionary moved to another layer is a change too
-        val seen = (dictionaries + packs).joinToString("\n") { "${it.name} ${it.length()} ${it.lastModified()} ${it.intoNew()}" }
+        val seen = dictionaries.joinToString("\n") { "${it.name} ${it.length()} ${it.lastModified()} ${it.intoNew()}" }
         val save = PhraseFile(phraseFile, phrases, read, phraseSaves)::save
-        // each read only as the engine parses it, and dropped after: not every pack in the heap at once
-        val readPacks = { packs.map { Engines.Pack(it.name, it.packLines(), it.intoNew()) } }
         // one that cannot be read is left out, the rest still read; then the first failure is
         // thrown, for the engine to know a dictionary is missing: removing a word it may list
         // forgets nothing then (UserLexicon.selfMade)
@@ -243,20 +239,9 @@ object EngineBridge {
             phrases = phrases,
             dictionaries = seen,
             savePhrases = save,
-            packs = readPacks,
             newDictionary = { read(newDictionaries) },
             dictionary = { read(baseDictionaries) },
         )
-    }
-
-    // one that cannot be read is left out, as the engine leaves out one that does not parse
-    private fun File.packLines() = Sequence {
-        try {
-            readLines().iterator()
-        } catch (e: IOException) {
-            Timber.w(e, "word pack %s", name)
-            throw SourceException(name, 1, "cannot read", e)
-        }
     }
 
     /**

@@ -7,7 +7,6 @@ package org.fcitx.fcitx5.android.data.pinyin
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.pinyin.dict.PinyinDictionary
 import org.fcitx.fcitx5.android.data.pinyin.dict.TextDictionary
-import org.fcitx.fcitx5.android.engine.user.WordPack
 import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.errorArg
 import org.fcitx.fcitx5.android.utils.withLowercaseExtension
@@ -31,7 +30,7 @@ object PinyinDictManager {
     fun listDictionaries(): List<TextDictionary> {
         ImportedDictionaries.migrate(pinyinDicDir)
         return pinyinDicDir.listFiles().orEmpty()
-            .filter { PinyinDictionary.Type.fromFileName(it.name).let { t -> t == PinyinDictionary.Type.Text || t == PinyinDictionary.Type.Words } }
+            .filter { PinyinDictionary.Type.fromFileName(it.name) == PinyinDictionary.Type.Text }
             .map(::TextDictionary)
             .sortedBy { it.name }
     }
@@ -41,9 +40,6 @@ object PinyinDictManager {
 
     /** Forgets [told], the dictionaries put aside unread the user was told of. */
     fun forgetUnread(told: List<ImportedDictionaries.Unread>) = runCatching { ImportedDictionaries.forgetUnread(pinyinDicDir, told) }
-
-    /** Whether dictionary [name] is merged into the new words dictionary rather than the base one. */
-    fun isIntoNew(name: String) = name in ImportedDictionaries.intoNew(pinyinDicDir)
 
     /** The names of the dictionaries merged into the new words dictionary, the rest into the base one. */
     fun intoNew(): Set<String> = ImportedDictionaries.intoNew(pinyinDicDir)
@@ -65,13 +61,10 @@ object PinyinDictManager {
         val text = File.createTempFile("import", ".${PinyinDictionary.Type.Text.ext}", appContext.cacheDir)
         try {
             raw.toTextDictionary(text)
-            // a word pack is told by its first line, whatever the file was called
-            val pack = text.useLines { WordPack.isPack(it.firstOrNull().orEmpty()) }
-            val type = if (pack) PinyinDictionary.Type.Words else PinyinDictionary.Type.Text
-            val dest = File(pinyinDicDir, TextDictionary.fileName(raw.name, true, type))
-            // one of that name, on or off, a pack or not, is the user's: the list may not have shown it yet
+            val dest = File(pinyinDicDir, TextDictionary.fileName(raw.name, true))
+            // one of that name, on or off, is the user's: the list may not have shown it yet
             if (ImportedDictionaries.hasDictionary(pinyinDicDir, raw.name)) errorArg(R.string.dict_already_exists)
-            val words = text.useLines { if (pack) ImportedDictionaries.writePack(it, dest) else ImportedDictionaries.write(it, dest) }
+            val words = text.useLines { ImportedDictionaries.write(it, dest) }
             if (words == 0) errorArg(R.string.exception_dict_no_words, file.name)
             // not kept, a failed import, but for the file: one tried again would be "already there"
             try {
@@ -84,33 +77,6 @@ object PinyinDictManager {
         } finally {
             text.delete()
         }
-    }
-
-    /**
-     * Keeps [text], a word pack the user imports as [name], in place of the one of that name
-     * imported before, on or off as the user left it. A plain dictionary of the name is not touched.
-     */
-    fun importPack(name: String, text: String): Result<TextDictionary> = runCatching {
-        // any name importFromFile kept one under, but no path
-        if (name.isEmpty() || '/' in name) errorArg(R.string.exception_dict_filename, name)
-        if (ImportedDictionaries.hasDictionary(pinyinDicDir, name, listOf(PinyinDictionary.Type.Text))) errorArg(R.string.dict_already_exists)
-        val off = File(pinyinDicDir, TextDictionary.fileName(name, false, PinyinDictionary.Type.Words))
-        val on = File(pinyinDicDir, TextDictionary.fileName(name, true, PinyinDictionary.Type.Words))
-        val dest = if (off.exists()) off else on
-        // new words: merged into the new words dictionary when first imported, then where the
-        // user left it
-        val first = !off.exists() && !on.exists()
-        if (ImportedDictionaries.writePack(text.lineSequence(), dest) == 0) errorArg(R.string.exception_dict_no_words, name)
-        if (first) {
-            // not kept, a failed import (a name not one line): the next of the name would stay in the base
-            try {
-                ImportedDictionaries.setIntoNew(pinyinDicDir, name, true)
-            } catch (e: IOException) {
-                dest.delete()
-                throw e
-            }
-        }
-        TextDictionary(dest)
     }
 
     fun importFromInputStream(stream: InputStream, name: String, intoNew: Boolean = false): Result<TextDictionary> {

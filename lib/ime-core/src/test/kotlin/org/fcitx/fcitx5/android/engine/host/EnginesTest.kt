@@ -204,55 +204,16 @@ class EnginesTest : EnginesFixture() {
     }
 
     @Test
-    fun aPackMergedIntoTheBaseIsScoredAsItSaysButNotWeighedAsALayer() {
+    fun theNewWordsLayerIsLearnedAndKept() {
+        val additions = Engines.Additions("", "d", newDictionary = { sequenceOf("泥 ni 0") }) { emptySequence() }
         val dir = folder.newFolder("engine")
-        val pack = "# youmo words 1\n# layer: 2026q1\n泥 ni -2.5\n"
-        val additions = Engines.Additions("", "p", packs = { listOf(Engines.Pack("p.words", pack.lineSequence())) }) { emptySequence() }
         Engines(::load, dir, { throw it }, additions = { additions }).use { engines ->
-            // 泥 at -2.5 between 你 (-2) and 拟 (-3)
-            assertEquals(listOf("你", "泥", "拟"), engines.type(Engines.PINYIN, "ni").candidates)
-            repeat(10) {
-                engines.onEvent(Engines.PINYIN, EngineEvent.RESET, 0)
-                engines.type(Engines.PINYIN, "ni")
-                engines.onEvent(Engines.PINYIN, EngineEvent.PICK, 1)
-            }
-        }
-        // the base's weight is fixed: nothing of the picks but 泥's own counts is kept
-        assertFalse(File(folder.root, "engine/${Engines.USER_PINYIN}").readText().contains("2026q1"))
-        // nor any layer's prior but the data's own, the base's here: 泥 picked over 你 would move the new words' were the pack merged there
-        assertEquals(LayerPrior(PinyinData.load(load(Engines.PINYIN_DATA)).layers).count, priorsKept(dir).count)
-    }
-
-    @Test
-    fun aWordPackIsTypedScoredAsItSaysAndItsLayerLearned() {
-        val errors = ArrayList<IOException>()
-        val pack = "# youmo words 1\n# layer: 2026q1\n泥 ni -2.5\n妮 ni -9\n"
-        val additions = Engines.Additions("", "p", packs = {
-            listOf(Engines.Pack("new.words", pack.lineSequence(), intoNew = true), Engines.Pack("old.words", "你 ni 0".lineSequence()))
-        }) { emptySequence() }
-        val dir = folder.newFolder("engine")
-        Engines(::load, dir, { errors += it }, additions = { additions }).use { engines ->
-            // 泥 at -2.5 sits between 你 (-2) and 拟 (-3); 妮 under the unknown word's -7
-            assertEquals(listOf("你", "泥", "拟", "妮"), engines.type(Engines.PINYIN, "ni").candidates)
-            engines.onEvent(Engines.PINYIN, EngineEvent.PICK, 1)
-            // the file that is no pack is reported, the pack still read
-            assertEquals(1, errors.size)
-            assertEquals("old.words:1: not a word pack: expected \"# youmo words 1\"", errors[0].message)
+            val at = engines.type(Engines.PINYIN, "ni").candidates.indexOf("泥")
+            assertTrue(at > 0)
+            engines.onEvent(Engines.PINYIN, EngineEvent.PICK, at)
         }
         // 泥 picked over 你: its layer a step up, in the log
         priorsKept(dir).let { assertEquals(LayerPrior.STEP, it[it.layer(WordLayers.NEW)], 0f) }
-        // the prior learned is kept with the user's words, and the pack's words come back scored
-        Engines(::load, dir, { errors += it }, additions = { additions }).use { engines ->
-            assertEquals(listOf("你", "泥", "拟", "妮"), engines.type(Engines.PINYIN, "ni").candidates)
-            repeat(10) {
-                engines.onEvent(Engines.PINYIN, EngineEvent.RESET, 0)
-                engines.type(Engines.PINYIN, "ni")
-                engines.onEvent(Engines.PINYIN, EngineEvent.PICK, 1)
-            }
-            engines.onEvent(Engines.PINYIN, EngineEvent.RESET, 0)
-            // 11 picks of 0.05 on its layer, and its own counts: 泥 over 你
-            assertEquals("泥", engines.type(Engines.PINYIN, "ni").candidates.first())
-        }
     }
 
     @Test
