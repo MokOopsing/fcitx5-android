@@ -98,6 +98,12 @@ class DataFile private constructor(buffer: ByteBuffer, expectedKind: Int, expect
         throw DataFormatException("section $id: ${e.message}", e)
     }
 
+    fun eliasFano(id: Int): EliasFano = try {
+        EliasFano(section(id))
+    } catch (e: IllegalArgumentException) {
+        throw DataFormatException("section $id: ${e.message}", e)
+    }
+
     /** `key=value` lines, UTF-8. */
     fun meta(id: Int): Map<String, String> {
         val s = section(id)

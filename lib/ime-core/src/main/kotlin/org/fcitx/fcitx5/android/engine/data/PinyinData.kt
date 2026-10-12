@@ -85,8 +85,8 @@ class PinyinData private constructor(file: DataFile) {
     }
 
     companion object {
-        /** Layout of the sections below; bump on any change to it. */
-        const val VERSION = 1
+        /** Layout of the sections below; bump on any change to it. 2: the trigram runs' starts in [EliasFano]. */
+        const val VERSION = 2
 
         internal const val META_SYLLABLE_COUNT = "syllables.count"
         internal const val META_SYLLABLE_CHECKSUM = "syllables.checksum"
@@ -203,7 +203,7 @@ class PinyinDictionary internal constructor(
 
 /**
  * A backoff n-gram model up to trigrams, stored as sorted arrays: each unigram points at the run
- * of its bigrams (sorted by next word), each bigram at the run of its trigrams. Scores are log10
+ * of its bigrams (sorted by next word), each bigram at the run of its trigrams (those starts in [EliasFano]). Scores are log10
  * probabilities, as in the ARPA file it was built from; bigram and trigram values are quantised
  * to a byte (see [Quantizer]).
  *
@@ -221,7 +221,7 @@ class NgramModel internal constructor(file: DataFile, val vocabularySize: Int, p
     private val biWord = file.bitPacked(PinyinData.Section.BI_WORD)
     private val biProb = file.section(PinyinData.Section.BI_PROB)
     private val biBackoff = file.section(PinyinData.Section.BI_BACKOFF)
-    private val biTrigramStart = file.bitPacked(PinyinData.Section.BI_TRIGRAM_START)
+    private val biTrigramStart = file.eliasFano(PinyinData.Section.BI_TRIGRAM_START)
     private val biProbTable = Quantizer.decodeTable(file.section(PinyinData.Section.BI_PROB_CODEBOOK))
     private val biBackoffTable = Quantizer.decodeTable(file.section(PinyinData.Section.BI_BACKOFF_CODEBOOK))
     private val triWord = file.bitPacked(PinyinData.Section.TRI_WORD)
@@ -281,8 +281,9 @@ class NgramModel internal constructor(file: DataFile, val vocabularySize: Int, p
         val bigram = context.toInt()
         if (bigram < 0) return score(prev, word)
         val w = known(word)
-        val from = biTrigramStart[bigram]
-        val to = biTrigramStart[bigram + 1]
+        val run = biTrigramStart.run(bigram)
+        val from = (run ushr Int.SIZE_BITS).toInt()
+        val to = run.toInt()
         val at = triWord.lowerBound(from, to, w)
         if (at < to && triWord[at] == w) return triProbTable[triProb.get(at).toInt() and 0xff]
         return biBackoffTable[biBackoff.get(bigram).toInt() and 0xff] + score(prev, word)
@@ -300,8 +301,9 @@ class NgramModel internal constructor(file: DataFile, val vocabularySize: Int, p
         val bigram = context.toInt()
         var b = uniBigramStart[p]
         val bEnd = uniBigramStart[p + 1]
-        var t = if (bigram < 0) 0 else biTrigramStart[bigram]
-        val tEnd = if (bigram < 0) 0 else biTrigramStart[bigram + 1]
+        val trigrams = if (bigram < 0) 0L else biTrigramStart.run(bigram)
+        var t = (trigrams ushr Int.SIZE_BITS).toInt()
+        val tEnd = trigrams.toInt()
         val backoff = if (bigram < 0) 0f else biBackoffTable[biBackoff.get(bigram).toInt() and 0xff]
         // both runs are sorted by word: merge them
         while (b < bEnd || t < tEnd) {

@@ -73,8 +73,8 @@ class EnglishData private constructor(file: DataFile) {
     }
 
     companion object {
-        /** Layout of the sections; bump on any change to it. */
-        const val VERSION = 1
+        /** Layout of the sections; bump on any change to it. 2: the model's trigram runs' starts in EliasFano. */
+        const val VERSION = 2
 
         internal const val META_LM_VOCABULARY = "lm.vocabulary"
         internal const val META_UNKNOWN = "lm.unknown"

@@ -17,7 +17,7 @@ measurement that decided it.
 | `english` | `EnglishData`, `EnglishDecoder` (keys → words with slips), `EnglishSession` (Gboard-like word-at-a-time typing, autocorrect), `EnglishUser`, `EnglishText`, `Misspellings` |
 | `stroke` | `Strokes`, `StrokeLookup` (`u` then `h s p n z` inside pinyin) |
 | `phrase` | `CustomPhrases` (libime's `customphrase` format, with date/time variables), `PhraseBook` |
-| `data` | File formats: `DataFile` (the container), `PinyinData`, `CodeTable`, `NgramTables`, `BitPacked`, `Quantizer`, `StringTable`, `WordIndex`, `PinyinDataBuilder`, readers of text sources, `Misreadings`, `DataAge` |
+| `data` | File formats: `DataFile` (the container), `PinyinData`, `CodeTable`, `NgramTables`, `BitPacked`, `EliasFano` (the trigram runs' starts; a lookup costs more, so not for the unigrams'), `Quantizer`, `StringTable`, `WordIndex`, `PinyinDataBuilder`, readers of text sources, `Misreadings`, `DataAge` |
 | `store` | `RecordFormat` / `RecordStore`: append-only logs with CRC'd records, compacted by rename |
 | `libime` | Reading libime's binary files without libime (its `DATrie`, zstd): for users coming from upstream and for importing `.dict` |
 | `host` | `Engines` (the input methods by name, sessions made on first use), `EngineAssets`, `EngineSettings` (+ `ModelLevel`), `TableRegistry`, `UserLexicon`, `Keyboard` (the addon's event numbers), `LibimeMigration`, `AddonDefaults` |

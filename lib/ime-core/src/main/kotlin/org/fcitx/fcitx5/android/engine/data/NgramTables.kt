@@ -70,7 +70,7 @@ internal class NgramTables(private val name: (Int) -> String) {
         out.add(Section.BI_BACKOFF, ByteArray(bi.size) { biBackoffQ.encode(biBackoff[bi[it]]).toByte() })
         out.add(Section.BI_PROB_CODEBOOK, biProbQ.codebook())
         out.add(Section.BI_BACKOFF_CODEBOOK, biBackoffQ.codebook())
-        out.add(Section.BI_TRIGRAM_START, BitPacked.encode(starts(bi.size, tri.size) { triContext[tri[it]] }))
+        out.add(Section.BI_TRIGRAM_START, EliasFano.encode(starts(bi.size, tri.size) { triContext[tri[it]] }))
         val triProbQ = Quantizer.build(triProb.toArray(), exactZero = false)
         out.add(Section.TRI_WORD, BitPacked.encode(tri.size) { triWord[tri[it]] })
         out.add(Section.TRI_PROB, ByteArray(tri.size) { triProbQ.encode(triProb[tri[it]]).toByte() })
