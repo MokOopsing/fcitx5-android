@@ -335,4 +335,16 @@ class PinyinSessionT9Test {
         val h = session.apply(Action.Letter('h', again = true))
         assertEquals("h", h.preedit)
     }
+
+    @Test
+    fun aLetterOnTwoKeysPressedAgainWithNoKeyBeforeGoesInAsItself() {
+        // a on 2 and on 5: which was pressed is not told, so not 2's letters for it
+        val keys = NineKeyLetters.of(listOf("abc", "def", "ghi", "jkla"))
+        val session = PinyinSession(data, T9Segmenter(abbreviations = false, letters = keys), spell = true, prediction = false)
+        assertEquals("a", session.apply(Action.Letter('a', again = true)).preedit)
+        // on one key: that key, any of its letters
+        val one = PinyinSession(data, T9Segmenter(abbreviations = false, letters = keys), spell = true, prediction = false)
+        one.apply(Action.Letter('h', again = true))
+        assertTrue(one.apply(Key('4')).candidates.isNotEmpty())
+    }
 }
