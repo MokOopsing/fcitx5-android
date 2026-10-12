@@ -614,4 +614,13 @@ class EnginesTest : EnginesFixture() {
         const val MAX_PICKS = 10
         const val MAX_SLICES = 10_000
     }
+
+    @Test
+    fun nineKeysAndWubiAreOfferedFirstToBeAdded() {
+        val offered = listOf("engine-erbi", "engine-cangjie", Engines.WUBI, Engines.T9, "engine-ziranma", Engines.SHUANGPIN)
+        assertEquals(
+            listOf(Engines.T9, Engines.WUBI, "engine-erbi", "engine-cangjie", "engine-ziranma", Engines.SHUANGPIN),
+            Engines.addOrder(offered) { it },
+        )
+    }
 }

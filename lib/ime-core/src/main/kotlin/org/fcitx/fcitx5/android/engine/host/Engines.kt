@@ -331,6 +331,15 @@ class Engines(
         /** Pinyin on a phone's nine keys (九键). */
         const val T9 = "engine-t9"
 
+        const val WUBI = "engine-wubi"
+
+        /** Offered first to be added: the most asked for after pinyin, which is there already. */
+        private val ADDED_FIRST = listOf(T9, WUBI)
+
+        /** [methods] in the order they are offered to be added: [ADDED_FIRST], then the rest as they came. */
+        fun <T> addOrder(methods: Collection<T>, name: (T) -> String): List<T> =
+            methods.sortedBy { ADDED_FIRST.indexOf(name(it)).takeIf { i -> i >= 0 } ?: ADDED_FIRST.size }
+
         /** English: fcitx's own name for it, which fcitx falls back to, so a user's lists keep it. */
         const val ENGLISH = "keyboard-us"
 
@@ -357,7 +366,7 @@ class Engines(
 
         /** Each table input method. */
         val TABLES: Map<String, TableMethod> = mapOf(
-            "engine-wubi" to TableMethod("wbx.data", "Wubi", TableOptions.WUBI, "wbx"),
+            WUBI to TableMethod("wbx.data", "Wubi", TableOptions.WUBI, "wbx"),
             "engine-cangjie" to TableMethod("cj.data", "Cangjie", TableOptions.CANGJIE, "cangjie"),
             "engine-ziranma" to TableMethod("zrm.data", "Ziranma", TableOptions.ZIRANMA, "zrm"),
             "engine-erbi" to TableMethod("erbi.data", "Erbi", TableOptions.ERBI, "erbi"),

@@ -11,6 +11,7 @@ import org.fcitx.fcitx5.android.core.InputMethodEntry
 import org.fcitx.fcitx5.android.core.InputMethodNames
 import org.fcitx.fcitx5.android.core.SubtypeManager
 import org.fcitx.fcitx5.android.daemon.launchOnReady
+import org.fcitx.fcitx5.android.engine.host.Engines
 import org.fcitx.fcitx5.android.ui.common.BaseDynamicListUi
 import org.fcitx.fcitx5.android.ui.common.DynamicListUi
 import org.fcitx.fcitx5.android.ui.common.OnItemChangedListener
@@ -40,7 +41,7 @@ class InputMethodListFragment : ProgressFragment(), OnItemChangedListener<InputM
         val initialEnabled = fcitx.runOnReady { enabledIme().toList() }
         ui = requireContext().DynamicListUi(
             mode = BaseDynamicListUi.Mode.ChooseOne {
-                (available - entries.toSet()).toTypedArray()
+                Engines.addOrder(available - entries.toSet()) { it.uniqueName }.toTypedArray()
             },
             initialEntries = initialEnabled,
             enableOrder = true,
