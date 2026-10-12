@@ -40,4 +40,14 @@ class PendingInputPolicyTest {
         assertEquals(Resolution.FinishComposing, PendingInputPolicy.resolve("ZH_CN", hasPreedit = true))
         assertEquals(Resolution.SelectFirstCandidate, PendingInputPolicy.resolve("zhuang", hasPreedit = true))
     }
+
+    /** xiaoming then @ in an email field was 小明@: there what is typed is meant. */
+    @Test
+    fun inAnAddressFieldChineseCommitsWhatWasTyped() {
+        assertEquals(Resolution.CommitAsTyped, PendingInputPolicy.resolve("zh_CN", hasPreedit = true, address = true))
+        // nothing typed: nothing to commit, predictions are not taken there either
+        assertEquals(Resolution.None, PendingInputPolicy.resolve("zh_CN", hasPreedit = false, address = true))
+        // other languages type the text itself already
+        assertEquals(Resolution.FinishComposing, PendingInputPolicy.resolve("en", hasPreedit = true, address = true))
+    }
 }

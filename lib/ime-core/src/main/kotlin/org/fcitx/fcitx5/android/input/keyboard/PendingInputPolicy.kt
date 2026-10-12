@@ -18,6 +18,9 @@ object PendingInputPolicy {
         /** Keep the preedit in the editor exactly as typed. */
         FinishComposing,
 
+        /** The input method commits what was typed, its letters (Enter's), not a candidate. */
+        CommitAsTyped,
+
         /** Nothing to keep. */
         None,
     }
@@ -28,10 +31,14 @@ object PendingInputPolicy {
      * are predictions, which are not taken. Other languages type the text itself as the
      * preedit, so it is kept as is.
      *
+     * In an [address] field (a URL's, an email's) what is typed is what is meant: `xiaoming` then
+     * `@` is xiaoming@, not 小明@. A candidate is still there to pick before the key.
+     *
      * @param hasPreedit whether there is a preedit, in the editor or on fcitx's input panel
      */
-    fun resolve(languageCode: String, hasPreedit: Boolean): Resolution = when {
+    fun resolve(languageCode: String, hasPreedit: Boolean, address: Boolean = false): Resolution = when {
         !languageCode.startsWith("zh") -> Resolution.FinishComposing
+        hasPreedit && address -> Resolution.CommitAsTyped
         hasPreedit -> Resolution.SelectFirstCandidate
         else -> Resolution.None
     }

@@ -80,6 +80,7 @@ import org.fcitx.fcitx5.android.input.editing.ForwardedKeys
 import org.fcitx.fcitx5.android.input.editing.InputConnectionEditor
 import org.fcitx.fcitx5.android.input.editing.KeyEventRelay
 import org.fcitx.fcitx5.android.input.editing.toEditorTraits
+import org.fcitx.fcitx5.android.input.keyboard.AddressKeys
 import org.fcitx.fcitx5.android.input.keyboard.PendingInputPolicy
 import org.fcitx.fcitx5.android.utils.InputMethodUtil
 import org.fcitx.fcitx5.android.utils.Locales
@@ -449,10 +450,13 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     suspend fun FcitxAPI.commitAndReset() {
         val resolution = PendingInputPolicy.resolve(
             inputMethodEntryCached.languageCode,
-            hasPreedit = clientPreeditCached.isNotEmpty() || inputPanelCached.preedit.isNotEmpty()
+            hasPreedit = clientPreeditCached.isNotEmpty() || inputPanelCached.preedit.isNotEmpty(),
+            address = currentInputEditorInfo?.let { AddressKeys.of(it.toEditorTraits()) != AddressKeys.NONE } == true
         )
         when (resolution) {
             PendingInputPolicy.Resolution.SelectFirstCandidate -> select(0)
+            // the engine's Enter while composing: what was typed, committed
+            PendingInputPolicy.Resolution.CommitAsTyped -> sendKey(FcitxKeyMapping.FcitxKey_Return)
             // This runs on fcitx's thread pool, and the composing state belongs to the main thread.
             PendingInputPolicy.Resolution.FinishComposing ->
                 withContext(Dispatchers.Main) { finishComposing() }
