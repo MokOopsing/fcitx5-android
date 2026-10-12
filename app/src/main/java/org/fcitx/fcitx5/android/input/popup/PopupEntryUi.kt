@@ -5,6 +5,7 @@
 package org.fcitx.fcitx5.android.input.popup
 
 import android.content.Context
+import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
 import android.view.ViewOutlineProvider
 import android.widget.TextView
@@ -25,7 +26,12 @@ class PopupEntryUi(override val ctx: Context, theme: Theme, keyHeight: Int, radi
 
     var lastShowTime = -1L
 
+    /** The key it is shown over, to size it again as its text changes. */
+    val trigger = Rect()
+
     val textView = view(::AutoScaleTextView) {
+        // where wider than the bubble can be, not drawn past its sides
+        scaleMode = AutoScaleTextView.Mode.Proportional
         textSize = 23f
         gravity = gravityCenter
         setTextColor(theme.popupTextColor)
@@ -47,4 +53,7 @@ class PopupEntryUi(override val ctx: Context, theme: Theme, keyHeight: Int, radi
     fun setText(text: String) {
         textView.text = text
     }
+
+    /** How wide [text] is drawn, in px. */
+    fun textWidth(text: String) = textView.paint.measureText(text)
 }

@@ -11,6 +11,7 @@ import android.widget.TextView
 import org.fcitx.fcitx5.android.data.theme.ThemePreset
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -29,15 +30,17 @@ class PopupKeyboardUiTest {
     private val keyHeight = 50
     private val outer = Rect(0, 0, 1000, 600)
 
-    private fun popup(count: Int, trigger: Rect): PopupKeyboardUi {
-        val keys = Array(count) { ('a' + it).toString() }
+    private fun popup(count: Int, trigger: Rect): PopupKeyboardUi =
+        popup(Array(count) { ('a' + it).toString() }, trigger)
+
+    private fun popup(keys: Array<String>, trigger: Rect, outerBounds: Rect = outer): PopupKeyboardUi {
         return PopupKeyboardUi(
             ctx = RuntimeEnvironment.getApplication(),
             theme = ThemePreset.PixelDark,
-            outerBounds = outer,
+            outerBounds = outerBounds,
             triggerBounds = trigger,
             radius = 4f,
-            keyWidth = keyWidth,
+            minKeyWidth = keyWidth,
             keyHeight = keyHeight,
             popupHeight = 100,
             keys = keys,
@@ -122,5 +125,37 @@ class PopupKeyboardUiTest {
         assertEquals(KeyAction.CommitAction("Tab"), PopupKeyboardUi.keyAction("Tab"))
         // one letter to the eye (Yiddish ײַ), two code points: text
         assertEquals(KeyAction.CommitAction("\u05F2\u05B7"), PopupKeyboardUi.keyAction("\u05F2\u05B7"))
+    }
+
+    private fun PopupKeyboardUi.labels(): List<TextView> {
+        val rows = (0 until root.childCount).map { root.getChildAt(it) as ViewGroup }
+        return rows.flatMap { row -> (0 until row.childCount).mapNotNull { ((row.getChildAt(it) as? ViewGroup)?.getChildAt(0) as? TextView) } }
+    }
+
+    /** `.com`'s long press: its labels each fitted to a fixed width came out at four sizes. */
+    @Test
+    fun keysOfLabelsOfManyLengthsAreOneWidthAndOneTextSize() {
+        val domains = arrayOf(".com", ".cn", ".net", ".org")
+        val ui = popup(domains, Rect(480, 500, 520, 550))
+        val labels = ui.labels()
+        assertEquals(4, labels.size)
+        assertEquals(1, labels.map { it.textSize }.toSet().size)
+        // wide enough for the widest, so none is made smaller
+        assertTrue(labels.all { it.paint.measureText(it.text.toString()) < ui.keyWidth })
+        assertTrue(ui.keyWidth >= keyWidth)
+    }
+
+    @Test
+    fun keysTooWideToFitAcrossAreNarrowerAndAllTheirLabelsSmallerAlike() {
+        val long = arrayOf("example", "ex", "examples", "e", "exam")
+        val roomy = popup(long, Rect(480, 500, 520, 550))
+        // five across, each half as wide as the widest label and its padding (6 dp a side, at 1 dp = 1 px)
+        val fitting = roomy.labels().maxOf { it.paint.measureText(it.text.toString()) }.toInt() + 12
+        val narrow = Rect(0, 0, 5 * (fitting / 2), 600)
+        val ui = popup(long, Rect(0, 500, 40, 550), narrow)
+        assertEquals(fitting / 2, ui.keyWidth)
+        val sizes = ui.labels().map { it.textSize }.toSet()
+        assertEquals(1, sizes.size)
+        assertTrue(sizes.single() < roomy.labels().first().textSize)
     }
 }

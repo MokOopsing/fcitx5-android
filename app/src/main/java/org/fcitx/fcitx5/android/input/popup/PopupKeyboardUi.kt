@@ -24,6 +24,8 @@ import splitties.views.dsl.core.view
 import splitties.views.gravityCenter
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -34,7 +36,7 @@ import kotlin.math.roundToInt
  * determine column order. See [focusColumn] and [columnOrder].
  * @param onDismissSelf callback when popup keyboard wants to close
  * @param radius popup keyboard and key radius
- * @param keyWidth key width in popup keyboard
+ * @param minKeyWidth key width in popup keyboard, at least: see [keyWidth]
  * @param keyHeight key height in popup keyboard
  * @param popupHeight popup preview view height. Used to transform gesture coordinate from
  * trigger view to popup keyboard view. See [offsetX] and [offsetY].
@@ -48,7 +50,7 @@ class PopupKeyboardUi(
     triggerBounds: Rect,
     onDismissSelf: PopupContainerUi.() -> Unit = {},
     private val radius: Float,
-    private val keyWidth: Int,
+    minKeyWidth: Int,
     private val keyHeight: Int,
     private val popupHeight: Int,
     private val keys: Array<String>,
@@ -60,8 +62,9 @@ class PopupKeyboardUi(
         val textView = view(::AutoScaleTextView) {
             text = this@PopupKeyUi.text
             scaleMode = AutoScaleTextView.Mode.Proportional
-            textSize = 23f
-            setTextColor(theme.keyTextColor)
+            textSize = TEXT_SIZE
+            // as markInactive has it: keyTextColor left the keys not yet passed over another colour
+            setTextColor(theme.popupTextColor)
         }
 
         override val root = frameLayout {
@@ -88,11 +91,33 @@ class PopupKeyboardUi(
     private val focusRow: Int
     private val focusColumn: Int
 
+    private val keyUis = labels.map {
+        PopupKeyUi(ctx, theme, it)
+    }
+
+    /**
+     * One for every key, wide enough for the widest label and no narrower than [minKeyWidth]
+     * (the bubble over the key pressed), and one text size: each label fitted to a fixed width by
+     * itself came out at as many sizes (`.com` smaller than `.cn`). Where the keys so wide would
+     * not fit across [outerBounds], narrower, all their labels made smaller alike.
+     */
+    val keyWidth: Int
+
     init {
         val keyCount: Float = keys.size.toFloat()
         rowCount = ceil(keyCount / 5).toInt()
         // round() left fewer slots than entries for 13, 17, 21 ... entries and hid the last ones
         columnCount = ceil(keyCount / rowCount).toInt()
+
+        val padding = ctx.dp(KEY_PADDING)
+        val widest = keyUis.maxOfOrNull { it.textView.paint.measureText(it.text) } ?: 0f
+        val fitting = ceil(widest).toInt() + 2 * padding
+        keyWidth = min(max(minKeyWidth, fitting), outerBounds.width() / columnCount)
+        if (fitting > keyWidth) {
+            // its padding too, so never below nothing however narrow
+            val size = TEXT_SIZE * keyWidth / fitting
+            keyUis.forEach { it.textView.textSize = size }
+        }
 
         focusRow = 0
         focusColumn = calcInitialFocusedColumn(columnCount, keyWidth, outerBounds, triggerBounds)
@@ -150,10 +175,6 @@ class PopupKeyboardUi(
     }
 
     private var focusedIndex = keyOrders[focusRow][focusColumn]
-
-    private val keyUis = labels.map {
-        PopupKeyUi(ctx, theme, it)
-    }
 
     init {
         markFocus(focusedIndex)
@@ -217,6 +238,11 @@ class PopupKeyboardUi(
     }
 
     companion object {
+        private const val TEXT_SIZE = 23f
+
+        /** Space each side of the widest label, in dp. */
+        private const val KEY_PADDING = 6
+
         /** What picking [key] types: from the long press, and from a letter's swipe (its first). */
         fun keyAction(key: String): KeyAction =
             // one character goes through fcitx like any key; anything longer (a user-entered word, or

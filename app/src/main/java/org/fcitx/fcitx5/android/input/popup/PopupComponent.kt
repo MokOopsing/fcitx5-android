@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.input.popup
 
+import android.content.res.Configuration
 import android.graphics.Rect
 import android.view.View
 import android.view.ViewGroup
@@ -29,6 +30,8 @@ import splitties.views.dsl.core.add
 import splitties.views.dsl.core.frameLayout
 import splitties.views.dsl.core.lParams
 import java.util.LinkedList
+import kotlin.math.ceil
+import kotlin.math.max
 
 class PopupComponent :
     UniqueComponent<PopupComponent>(), Dependent, ManagedHandler by managedHandler() {
@@ -49,6 +52,9 @@ class PopupComponent :
     }
     private val popupWidth by lazy {
         context.dp(38)
+    }
+    private val popupPadding by lazy {
+        context.dp(6)
     }
     private val popupHeight by lazy {
         context.dp(116)
@@ -87,6 +93,7 @@ class PopupComponent :
             }
             lastShowTime = System.currentTimeMillis()
             setText(content)
+            place(this, bounds)
             return
         }
         val popup = (freeEntryUi.poll()
@@ -94,11 +101,7 @@ class PopupComponent :
             lastShowTime = System.currentTimeMillis()
             setText(content)
         }
-        popup.root.layoutParams = FrameLayout.LayoutParams(popupWidth, popupHeight).apply {
-            // align popup bottom with key border bottom [^1]
-            topMargin = bounds.bottom - popupHeight - keyBottomMargin
-            leftMargin = (bounds.left + bounds.right - popupWidth) / 2
-        }
+        place(popup, bounds)
         // make sure that popup.root does not have parent view before adding it under root container
         // it's wired that on some devices it would have a parent view despite it was newly created
         // or just polled from freeEntryUi
@@ -112,7 +115,32 @@ class PopupComponent :
     }
 
     private fun updatePopup(viewId: Int, content: String) {
-        showingEntryUi[viewId]?.setText(content)
+        showingEntryUi[viewId]?.apply {
+            setText(content)
+            place(this, trigger)
+        }
+    }
+
+    /**
+     * Over the key [bounds], [width] wide, by default as wide as the key's face (its bounds less
+     * its margins) and its text, never narrower than [popupWidth]: a fixed width over a wider key
+     * (九键's, `.com`, any in landscape) left the key's pressed colour showing at both sides.
+     */
+    private fun place(popup: PopupEntryUi, bounds: Rect, width: Int = entryWidth(popup, bounds)) {
+        popup.trigger.set(bounds)
+        popup.root.layoutParams = FrameLayout.LayoutParams(width, popupHeight).apply {
+            // align popup bottom with key border bottom [^1]
+            topMargin = bounds.bottom - popupHeight - keyBottomMargin
+            leftMargin = (bounds.left + bounds.right - width) / 2
+        }
+    }
+
+    private fun entryWidth(popup: PopupEntryUi, bounds: Rect): Int {
+        val prefs = ThemeManager.prefs
+        val landscape = context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val margin = context.dp((if (landscape) prefs.keyHorizontalMarginLandscape else prefs.keyHorizontalMargin).getValue())
+        val text = ceil(popup.textWidth(popup.textView.text.toString())).toInt() + 2 * popupPadding
+        return maxOf(popupWidth, bounds.width() - 2 * margin, text)
     }
 
     private fun showKeyboard(viewId: Int, keyboard: KeyDef.Popup.Keyboard, bounds: Rect) {
@@ -133,6 +161,7 @@ class PopupComponent :
         }
         // clear popup preview text         OR create empty popup preview
         showingEntryUi[viewId]?.setText("") ?: showPopup(viewId, "", bounds)
+        val entry = showingEntryUi[viewId] ?: return
         val keyboardUi = PopupKeyboardUi(
             context,
             theme,
@@ -140,13 +169,15 @@ class PopupComponent :
             bounds,
             { dismissPopup(viewId) },
             popupRadius,
-            popupWidth,
+            max(entry.root.layoutParams.width, popupWidth),
             popupKeyHeight,
             // position popup keyboard higher, because of [^1]
             popupHeight + keyBottomMargin,
             keys,
             labels
         )
+        // the bubble under the key in focus as wide as it, as one shape
+        place(entry, bounds, keyboardUi.keyWidth)
         showPopupContainer(viewId, keyboardUi)
     }
 
