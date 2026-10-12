@@ -76,8 +76,7 @@ class StringEscapeTest {
 
     /**
      * An empty value escapes to an empty string, not to a pair of quotes. Anything that stores
-     * escaped values in a line-based format therefore loses empty values on re-read -- see
-     * [org.fcitx.fcitx5.android.data.quickphrase.QuickPhraseEntryTest].
+     * escaped values in a line-based format therefore loses empty values on re-read.
      */
     @Test
     fun anEmptyStringEscapesToNothing() {

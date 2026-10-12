@@ -180,8 +180,6 @@ sealed class ConfigDescriptor<T, U> : Parcelable {
         enum class ETy {
             PinyinDict,
             Punctuation,
-            QuickPhrase,
-            Chttrans,
             PinyinCustomPhrase,
         }
 
@@ -320,8 +318,6 @@ sealed class ConfigDescriptor<T, U> : Parcelable {
                             when (raw.name) {
                                 "DictManager" -> ConfigExternal.ETy.PinyinDict
                                 "Punctuation" -> ConfigExternal.ETy.Punctuation
-                                "QuickPhrase", "Editor" -> ConfigExternal.ETy.QuickPhrase
-                                "Chttrans" -> ConfigExternal.ETy.Chttrans
                                 "CustomPhrase" -> ConfigExternal.ETy.PinyinCustomPhrase
                                 else -> null
                             }

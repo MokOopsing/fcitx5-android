@@ -17,12 +17,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.RawConfig
-import org.fcitx.fcitx5.android.data.quickphrase.QuickPhrase
 import org.fcitx.fcitx5.android.ui.main.AboutFragment
 import org.fcitx.fcitx5.android.ui.main.DeveloperFragment
 import org.fcitx.fcitx5.android.ui.main.LicensesFragment
 import org.fcitx.fcitx5.android.ui.main.MainFragment
-import org.fcitx.fcitx5.android.ui.main.settings.addon.AddonConfigFragment
 import org.fcitx.fcitx5.android.ui.main.settings.behavior.AdvancedSettingsFragment
 import org.fcitx.fcitx5.android.ui.main.settings.behavior.CandidatesSettingsFragment
 import org.fcitx.fcitx5.android.ui.main.settings.behavior.ClipboardSettingsFragment
@@ -51,9 +49,6 @@ sealed class SettingsRoute : Parcelable {
 
     @Serializable
     data class InputMethodConfig(val name: String, val uniqueName: String) : SettingsRoute()
-
-    @Serializable
-    data class AddonConfig(val name: String, val uniqueName: String) : SettingsRoute()
 
     /* ========== Android ========== */
 
@@ -132,38 +127,6 @@ sealed class SettingsRoute : Parcelable {
     data class Punctuation(val title: String, val lang: String? = null) : SettingsRoute()
 
     @Serializable
-    data object QuickPhraseList : SettingsRoute()
-
-    @Serializable
-    data class QuickPhraseEdit(val param: Param) : SettingsRoute() {
-        constructor(quickPhrase: QuickPhrase) : this(Param(quickPhrase))
-
-        @Serializable
-        @Parcelize
-        data class Param(val quickPhrase: QuickPhrase) : Parcelable {
-            companion object {
-                val NavType = object : NavType<Param>(isNullableAllowed = false) {
-                    override fun put(bundle: SavedState, key: String, value: Param) {
-                        bundle.putParcelable(key, value)
-                    }
-
-                    override fun get(bundle: SavedState, key: String): Param? {
-                        return bundle.parcelable<Param>(key)
-                    }
-
-                    override fun serializeAsValue(value: Param): String {
-                        return Uri.encode(Json.encodeToString(value))
-                    }
-
-                    override fun parseValue(value: String): Param {
-                        return Json.decodeFromString(value)
-                    }
-                }
-            }
-        }
-    }
-
-    @Serializable
     data object PinyinCustomPhrase : SettingsRoute()
 
     @Serializable
@@ -197,7 +160,6 @@ sealed class SettingsRoute : Parcelable {
                 label = ctx.getString(R.string.input_methods)
             }
             fragment<InputMethodConfigFragment, InputMethodConfig>()
-            fragment<AddonConfigFragment, AddonConfig>()
 
             /* ========== Android ========== */
 
@@ -242,12 +204,6 @@ sealed class SettingsRoute : Parcelable {
             }
             fragment<UserWordListFragment, UserWordList>()
             fragment<PunctuationEditorFragment, Punctuation>()
-            fragment<QuickPhraseListFragment, QuickPhraseList> {
-                label = ctx.getString(R.string.quickphrase_editor)
-            }
-            fragment<QuickPhraseEditFragment, QuickPhraseEdit>(
-                typeMap = mapOf(typeOf<QuickPhraseEdit.Param>() to QuickPhraseEdit.Param.NavType)
-            )
             fragment<PinyinCustomPhraseFragment, PinyinCustomPhrase> {
                 label = ctx.getString(R.string.custom_phrases)
             }

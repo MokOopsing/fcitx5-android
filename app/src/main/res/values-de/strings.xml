@@ -71,11 +71,7 @@
     <string name="edited_x">%1$s bearbeitet</string>
     <string name="invalid_value">Ungültiger Wert</string>
     <string name="keyboard_long_press_delay">Verzögerung bei langem Tastendruck</string>
-    <string name="create_new">Neu erstellen</string>
-    <string name="name">Name</string>
     <string name="reset">Zurücksetzen</string>
-    <string name="quickphrase_keyword">Schlüsselwort</string>
-    <string name="quickphrase_phrase">Phrase</string>
     <string name="input_method_options">Optionen der Eingabemethode</string>
     <string name="theme">Thema</string>
     <string name="brightness">Helligkeit</string>

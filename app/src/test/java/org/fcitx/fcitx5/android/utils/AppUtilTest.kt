@@ -25,7 +25,7 @@ class AppUtilTest {
     @Test
     fun otherPagesAreNot() {
         listOf(
-            SettingsRoute.AddonConfig("Clipboard", "clipboard"),
+            SettingsRoute.Clipboard,
             SettingsRoute.Developer,
             SettingsRoute.PinyinDict("content://elsewhere/words.dict"),
         ).forEach { assertFalse("$it", AppUtil.isLaunchRoute(it)) }

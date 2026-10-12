@@ -48,16 +48,6 @@ public:
     }
 };
 
-class AddonStatus {
-public:
-    const fcitx::AddonInfo *info;
-    bool enabled;
-
-    AddonStatus(const fcitx::AddonInfo *info, bool enabled) :
-            info(info),
-            enabled(enabled) {}
-};
-
 class ActionEntity {
 public:
     int id;

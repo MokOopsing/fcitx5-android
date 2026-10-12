@@ -126,10 +126,6 @@ interface FcitxAPI {
 
     suspend fun setGlobalConfig(config: RawConfig)
 
-    suspend fun getAddonConfig(addon: String): RawConfig
-
-    suspend fun setAddonConfig(addon: String, config: RawConfig)
-
     suspend fun getAddonSubConfig(addon: String, path: String): RawConfig
 
     suspend fun setAddonSubConfig(addon: String, path: String, config: RawConfig = RawConfig())
@@ -137,9 +133,6 @@ interface FcitxAPI {
     suspend fun getImConfig(key: String): RawConfig
 
     suspend fun setImConfig(key: String, config: RawConfig)
-
-    suspend fun addons(): Array<AddonInfo>
-    suspend fun setAddonState(name: Array<String>, state: BooleanArray)
 
     suspend fun triggerQuickPhrase()
     suspend fun triggerUnicode()

@@ -215,26 +215,6 @@ public:
         return p_instance->addonManager().addon(addon, true);
     }
 
-    std::unique_ptr<fcitx::RawConfig> getAddonConfig(const std::string &addonName) {
-        const auto addonInstance = getAddonInstance(addonName);
-        if (!addonInstance) {
-            return nullptr;
-        }
-        const auto configuration = addonInstance->getConfig();
-        if (!configuration) {
-            return nullptr;
-        }
-        return std::make_unique<fcitx::RawConfig>(mergeConfigDesc(*configuration));
-    }
-
-    void setAddonConfig(const std::string &addonName, const fcitx::RawConfig &config) {
-        auto addonInstance = getAddonInstance(addonName);
-        if (!addonInstance) {
-            return;
-        }
-        addonInstance->setConfig(config);
-    }
-
     std::unique_ptr<fcitx::RawConfig> getAddonSubConfig(const std::string &addonName, const std::string &path) {
         const auto addonInstance = getAddonInstance(addonName);
         if (!addonInstance) {
@@ -281,69 +261,6 @@ public:
             return;
         }
         engine->setConfigForInputMethod(*entry, config);
-    }
-
-    std::vector<AddonStatus> getAddons() {
-        auto &globalConfig = p_instance->globalConfig();
-        auto &addonManager = p_instance->addonManager();
-        const auto &enabledAddons = globalConfig.enabledAddons();
-        const std::unordered_set<std::string> enabledSet(enabledAddons.begin(), enabledAddons.end());
-        const auto &disabledAddons = globalConfig.disabledAddons();
-        const std::unordered_set<std::string>
-                disabledSet(disabledAddons.begin(), disabledAddons.end());
-        std::vector<AddonStatus> addons;
-        for (const auto category: {fcitx::AddonCategory::InputMethod,
-                                   fcitx::AddonCategory::Frontend,
-                                   fcitx::AddonCategory::Loader,
-                                   fcitx::AddonCategory::Module,
-                                   fcitx::AddonCategory::UI}) {
-            const auto names = addonManager.addonNames(category);
-            for (const auto &name: names) {
-                const auto *info = addonManager.addonInfo(name);
-                if (!info) {
-                    continue;
-                }
-                bool enabled = info->isDefaultEnabled();
-                if (disabledSet.count(info->uniqueName())) {
-                    enabled = false;
-                } else if (enabledSet.count(info->uniqueName())) {
-                    enabled = true;
-                }
-                addons.emplace_back(info, enabled);
-            }
-        }
-        return addons;
-    }
-
-    void setAddonState(const std::map<std::string, bool> &state) {
-        auto &globalConfig = p_instance->globalConfig();
-        auto &addonManager = p_instance->addonManager();
-        const auto &enabledAddons = globalConfig.enabledAddons();
-        std::set<std::string> enabledSet(enabledAddons.begin(), enabledAddons.end());
-        const auto &disabledAddons = globalConfig.disabledAddons();
-        std::set<std::string> disabledSet(disabledAddons.begin(), disabledAddons.end());
-        for (const auto &item: state) {
-            const auto *info = addonManager.addonInfo(item.first);
-            if (!info) {
-                continue;
-            }
-            const bool enabled = item.second;
-            const auto &uniqueName = info->uniqueName();
-            if (enabled == info->isDefaultEnabled()) {
-                enabledSet.erase(uniqueName);
-                disabledSet.erase(uniqueName);
-            } else if (enabled) {
-                enabledSet.insert(uniqueName);
-                disabledSet.erase(uniqueName);
-            } else {
-                enabledSet.erase(uniqueName);
-                disabledSet.insert(uniqueName);
-            }
-        }
-        globalConfig.setEnabledAddons({enabledSet.begin(), enabledSet.end()});
-        globalConfig.setDisabledAddons({disabledSet.begin(), disabledSet.end()});
-        globalConfig.safeSave();
-        p_instance->reloadConfig();
     }
 
     void triggerQuickPhrase() {
@@ -1029,14 +946,6 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_getFcitxGlobalConfig(JNIEnv *env, jclas
 
 extern "C"
 JNIEXPORT jobject JNICALL
-Java_org_fcitx_fcitx5_android_core_Fcitx_getFcitxAddonConfig(JNIEnv *env, jclass clazz, jstring addon) {
-    RETURN_VALUE_IF_NOT_RUNNING(nullptr)
-    auto result = Fcitx::Instance().getAddonConfig(CString(env, addon));
-    return result ? fcitxRawConfigToJObject(env, *result) : nullptr;
-}
-
-extern "C"
-JNIEXPORT jobject JNICALL
 Java_org_fcitx_fcitx5_android_core_Fcitx_getFcitxAddonSubConfig(JNIEnv *env, jclass clazz, jstring addon, jstring path) {
     RETURN_VALUE_IF_NOT_RUNNING(nullptr)
     auto result = Fcitx::Instance().getAddonSubConfig(CString(env, addon), CString(env, path));
@@ -1061,14 +970,6 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_setFcitxGlobalConfig(JNIEnv *env, jclas
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_org_fcitx_fcitx5_android_core_Fcitx_setFcitxAddonConfig(JNIEnv *env, jclass clazz, jstring addon, jobject config) {
-    RETURN_IF_NOT_RUNNING
-    auto rawConfig = jobjectToRawConfig(env, config);
-    Fcitx::Instance().setAddonConfig(CString(env, addon), rawConfig);
-}
-
-extern "C"
-JNIEXPORT void JNICALL
 Java_org_fcitx_fcitx5_android_core_Fcitx_setFcitxAddonSubConfig(JNIEnv *env, jclass clazz, jstring addon, jstring path, jobject config) {
     RETURN_IF_NOT_RUNNING
     auto rawConfig = jobjectToRawConfig(env, config);
@@ -1081,40 +982,6 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_setFcitxInputMethodConfig(JNIEnv *env, 
     RETURN_IF_NOT_RUNNING
     auto rawConfig = jobjectToRawConfig(env, config);
     Fcitx::Instance().setInputMethodConfig(CString(env, im), rawConfig);
-}
-
-extern "C"
-JNIEXPORT jobjectArray JNICALL
-Java_org_fcitx_fcitx5_android_core_Fcitx_getFcitxAddons(JNIEnv *env, jclass clazz) {
-    RETURN_VALUE_IF_NOT_RUNNING(nullptr)
-    const auto &addons = Fcitx::Instance().getAddons();
-    jobjectArray array = env->NewObjectArray(static_cast<int>(addons.size()), GlobalRef->AddonInfo, nullptr);
-    int i = 0;
-    for (const auto addon: addons) {
-        auto obj = JRef(env, fcitxAddonStatusToJObject(env, addon));
-        env->SetObjectArrayElement(array, i++, obj);
-    }
-    return array;
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_org_fcitx_fcitx5_android_core_Fcitx_setFcitxAddonState(JNIEnv *env, jclass clazz, jobjectArray name, jbooleanArray state) {
-    RETURN_IF_NOT_RUNNING
-    int nameLength = env->GetArrayLength(name);
-    int stateLength = env->GetArrayLength(state);
-    if (nameLength != stateLength) {
-        FCITX_WARN() << "Addon name and state length mismatch!";
-        return;
-    }
-    std::map<std::string, bool> map;
-    const auto enabled = env->GetBooleanArrayElements(state, nullptr);
-    for (int i = 0; i < nameLength; i++) {
-        auto jName = JRef<jstring>(env, env->GetObjectArrayElement(name, i));
-        map.insert({CString(env, jName), enabled[i]});
-    }
-    env->ReleaseBooleanArrayElements(state, enabled, 0);
-    Fcitx::Instance().setAddonState(map);
 }
 
 extern "C"

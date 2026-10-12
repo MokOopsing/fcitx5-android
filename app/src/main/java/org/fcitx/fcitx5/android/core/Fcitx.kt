@@ -132,14 +132,6 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
         setFcitxGlobalConfig(config)
     }
 
-    override suspend fun getAddonConfig(addon: String) = withFcitxContext {
-        getFcitxAddonConfig(addon) ?: RawConfig()
-    }
-
-    override suspend fun setAddonConfig(addon: String, config: RawConfig) = withFcitxContext {
-        setFcitxAddonConfig(addon, config)
-    }
-
     override suspend fun getAddonSubConfig(addon: String, path: String) = withFcitxContext {
         getFcitxAddonSubConfig(addon, path) ?: RawConfig()
     }
@@ -154,10 +146,6 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
     override suspend fun setImConfig(key: String, config: RawConfig) = withFcitxContext {
         setFcitxInputMethodConfig(key, config)
     }
-
-    override suspend fun addons() = withFcitxContext { getFcitxAddons() ?: emptyArray() }
-    override suspend fun setAddonState(name: Array<String>, state: BooleanArray) =
-        withFcitxContext { setFcitxAddonState(name, state) }
 
     override suspend fun triggerQuickPhrase() = withFcitxContext { triggerQuickPhraseInput() }
     override suspend fun triggerUnicode() = withFcitxContext { triggerUnicodeInput() }
@@ -309,9 +297,6 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
         external fun getFcitxGlobalConfig(): RawConfig?
 
         @JvmStatic
-        external fun getFcitxAddonConfig(addon: String): RawConfig?
-
-        @JvmStatic
         external fun getFcitxAddonSubConfig(addon: String, path: String): RawConfig?
 
         @JvmStatic
@@ -321,19 +306,10 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
         external fun setFcitxGlobalConfig(config: RawConfig)
 
         @JvmStatic
-        external fun setFcitxAddonConfig(addon: String, config: RawConfig)
-
-        @JvmStatic
         external fun setFcitxAddonSubConfig(addon: String, path: String, config: RawConfig)
 
         @JvmStatic
         external fun setFcitxInputMethodConfig(im: String, config: RawConfig)
-
-        @JvmStatic
-        external fun getFcitxAddons(): Array<AddonInfo>?
-
-        @JvmStatic
-        external fun setFcitxAddonState(name: Array<String>, state: BooleanArray)
 
         @JvmStatic
         external fun triggerQuickPhraseInput()

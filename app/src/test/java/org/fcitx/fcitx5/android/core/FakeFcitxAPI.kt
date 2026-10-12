@@ -35,13 +35,11 @@ class FakeFcitxAPI : FcitxAPI {
     override var clientPreeditCached = FormattedText.Empty
     override var inputPanelCached = FcitxEvent.InputPanelEvent.Data()
 
-    var addons: Array<AddonInfo> = emptyArray()
     var candidates: Array<CandidateWord> = emptyArray()
     var availableIme: Array<InputMethodEntry> = emptyArray()
     var enabledIme: Array<InputMethodEntry> = emptyArray()
 
     private val globalConfig = RawConfig()
-    private val addonConfigs = mutableMapOf<String, RawConfig>()
     private val addonSubConfigs = mutableMapOf<Pair<String, String>, RawConfig>()
     private val imConfigs = mutableMapOf<String, RawConfig>()
 
@@ -203,13 +201,6 @@ class FakeFcitxAPI : FcitxAPI {
         globalConfig.subItems = config.subItems
     }
 
-    override suspend fun getAddonConfig(addon: String) = addonConfigs[addon] ?: RawConfig()
-
-    override suspend fun setAddonConfig(addon: String, config: RawConfig) {
-        calls += "setAddonConfig($addon)"
-        addonConfigs[addon] = config
-    }
-
     override suspend fun getAddonSubConfig(addon: String, path: String) =
         addonSubConfigs[addon to path] ?: RawConfig()
 
@@ -223,16 +214,6 @@ class FakeFcitxAPI : FcitxAPI {
     override suspend fun setImConfig(key: String, config: RawConfig) {
         calls += "setImConfig($key)"
         imConfigs[key] = config
-    }
-
-    override suspend fun addons() = addons
-
-    override suspend fun setAddonState(name: Array<String>, state: BooleanArray) {
-        calls += "setAddonState(${name.zip(state.toList()).joinToString { (n, s) -> "$n=$s" }})"
-        addons = addons.map {
-            val i = name.indexOf(it.uniqueName)
-            if (i >= 0) it.copy(enabled = state[i]) else it
-        }.toTypedArray()
     }
 
     override suspend fun triggerQuickPhrase() {

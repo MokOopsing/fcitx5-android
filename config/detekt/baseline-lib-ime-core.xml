@@ -3,7 +3,5 @@
   <ManuallySuppressedIssues/>
   <CurrentIssues>
     <ID>LargeClass:EditingSessionTest.kt:EditingSessionTest</ID>
-    <ID>SwallowedException:QuickPhraseEntry.kt:QuickPhraseEntry.Companion$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:QuickPhraseEntry.kt:QuickPhraseEntry.Companion$e: Exception</ID>
   </CurrentIssues>
 </SmellBaseline>

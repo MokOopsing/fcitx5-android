@@ -50,13 +50,7 @@
     <string name="crash_logs">Registros de cierres inesperados</string>
     <string name="verbose_log">Registro a detalle</string>
     <string name="invalid_value">Valor no válido</string>
-    <string name="quickphrase_editor">Editor de frases rápidas</string>
-    <string name="quickphrase_already_exists">La frase rápida ya existe</string>
-    <string name="create_new">Crear</string>
-    <string name="name">Nombre</string>
     <string name="reset">Restablecer</string>
-    <string name="quickphrase_keyword">Palabra clave</string>
-    <string name="quickphrase_phrase">Frase</string>
     <string name="input_method_options">Opciones de método de entrada</string>
     <string name="theme">Tema</string>
     <string name="brightness">Brillo</string>

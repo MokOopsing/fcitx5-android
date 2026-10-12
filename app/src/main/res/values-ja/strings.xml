@@ -80,13 +80,7 @@
     <string name="edited_x">%1$s を編集しました</string>
     <string name="invalid_value">無効な値</string>
     <string name="keyboard_long_press_delay">キーの長押しの期間</string>
-    <string name="quickphrase_editor">クイックフレーズエディター</string>
-    <string name="quickphrase_already_exists">クイックフレーズはすでに存在します</string>
-    <string name="create_new">新規作成</string>
-    <string name="name">名前</string>
     <string name="reset">リセット</string>
-    <string name="quickphrase_keyword">キーワード</string>
-    <string name="quickphrase_phrase">フレーズ</string>
     <string name="input_method_options">インプットメソッドのオプション</string>
     <string name="theme">テーマ</string>
     <string name="key_ripple_effect">キーの波紋効果を有効にする</string>
@@ -112,8 +106,6 @@
     <string name="import_from_file">ファイルからインポート…</string>
     <string name="duplicate_builtin_theme">ビルトインテーマを複製…</string>
     <string name="exception_logcat_created">Logcatプロセスはすでに作成されています</string>
-    <string name="exception_quickphrase_parse">クイックフレーズの行の解析に失敗しました: %1$s</string>
-    <string name="exception_quickphrase_filename">%1$s のファイル拡張子はクイックフレーズを示していません</string>
     <string name="exception_theme_filename">%1$s のファイル拡張子はテーマを示していません</string>
     <string name="exception_libime_dict_filename">%1$s のファイル拡張子はlibime辞書を示していません</string>
     <string name="exception_text_dict_filename">%1$s のファイル拡張子はテキスト辞書を示していません</string>

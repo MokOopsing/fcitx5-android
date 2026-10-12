@@ -5,9 +5,6 @@
     <ID>ComplexCondition:IdleUi.kt:IdleUi$!fromUser || disableAnimation || (state == State.InlineSuggestion || currentState == State.InlineSuggestion) || (state == State.NumberRow || currentState == State.NumberRow)</ID>
     <ID>ComplexCondition:KeySym.kt:KeySym.Companion$charCode != 0 &amp;&amp; // skip \t, because it's charCode is different from KeySym charCode != '\t'.code &amp;&amp; // skip \n, because fcitx wants \r for return charCode != '\n'.code &amp;&amp; // skip Android's private-use character charCode != KeyCharacterMap.HEX_INPUT.code &amp;&amp; charCode != KeyCharacterMap.PICKER_DIALOG_INPUT.code</ID>
     <ID>ComplexCondition:PopupKeyboardUi.kt:PopupKeyboardUi$newRow &lt; -2 || newRow &gt; rowCount + 1 || newColumn &lt; -2 || newColumn &gt; columnCount + 1</ID>
-    <ID>ConstructorParameterNaming:BuiltinQuickPhrase.kt:BuiltinQuickPhrase$private var _override: CustomQuickPhrase? = null</ID>
-    <ID>ConstructorParameterNaming:CustomQuickPhrase.kt:CustomQuickPhrase$private var _enabled: Boolean = false</ID>
-    <ID>ConstructorParameterNaming:CustomQuickPhrase.kt:CustomQuickPhrase$private var _file: File</ID>
     <ID>CyclomaticComplexMethod:BaseKeyboard.kt:BaseKeyboard$private fun createKeyView: KeyView</ID>
     <ID>CyclomaticComplexMethod:CapabilityFlag.kt:CapabilityFlags.Companion$fun fromEditorInfo: CapabilityFlags</ID>
     <ID>CyclomaticComplexMethod:ConfigDescriptor.kt:ConfigDescriptor.Companion$override fun parse: Either&lt;ParseException, ConfigDescriptor&lt;*, *&gt;&gt;</ID>
@@ -59,7 +56,6 @@
     <ID>TooGenericExceptionCaught:ManagedPreference.kt:ManagedPreference.PStringLike$e: Exception</ID>
     <ID>TooGenericExceptionCaught:PinyinDictionaryFragment.kt:PinyinDictionaryFragment$e: Exception</ID>
     <ID>TooGenericExceptionCaught:PreferenceScreenFactory.kt:PreferenceScreenFactory$e: Exception</ID>
-    <ID>TooGenericExceptionCaught:QuickPhraseListFragment.kt:QuickPhraseListFragment$e: Exception</ID>
     <ID>TooGenericExceptionCaught:RecentlyUsed.kt:RecentlyUsed$e: Exception</ID>
     <ID>TooGenericExceptionCaught:ScrollbarDrawable.kt:e: Exception</ID>
     <ID>TooGenericExceptionCaught:SystemProperty.kt:e: Exception</ID>

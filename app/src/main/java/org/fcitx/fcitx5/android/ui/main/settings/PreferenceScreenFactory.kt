@@ -111,12 +111,6 @@ object PreferenceScreenFactory {
             }
         }
 
-        fun quickPhraseEditor() = Preference(context).apply {
-            setOnPreferenceClickListener {
-                navigate(SettingsRoute.QuickPhraseList)
-            }
-        }
-
         fun pinyinCustomPhrase() = Preference(context).apply {
             setOnPreferenceClickListener {
                 navigate(SettingsRoute.PinyinCustomPhrase)
@@ -147,14 +141,6 @@ object PreferenceScreenFactory {
             }
         }
 
-        fun addonConfigPreference(addon: String) = Preference(context).apply {
-            setOnPreferenceClickListener {
-                navigate(
-                    SettingsRoute.AddonConfig(descriptor.description ?: descriptor.name, addon)
-                )
-            }
-        }
-
         when (descriptor) {
             is ConfigBool -> MySwitchPreference(context).apply {
                 summary = descriptor.tooltip
@@ -174,8 +160,6 @@ object PreferenceScreenFactory {
                     // fcitx://config/addon/punctuation/punctuationmap/zh_CN
                     descriptor.uri?.substringAfterLast('/')
                 )
-                ConfigExternal.ETy.QuickPhrase -> quickPhraseEditor()
-                ConfigExternal.ETy.Chttrans -> addonConfigPreference("chttrans")
                 ConfigExternal.ETy.PinyinCustomPhrase -> pinyinCustomPhrase()
                 else -> stubPreference()
             }

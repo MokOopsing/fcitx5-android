@@ -52,7 +52,7 @@ need the native build and an emulator; CI runs them weekly / on PRs labelled `em
   it dumb: store config, record calls, simulate no input.
 - `unitTests.isReturnDefaultValues = false` on purpose: a JVM test that reaches an android.jar
   stub should fail loudly. Anything needing the framework runs under Robolectric.
-- `FcitxAPI.getAddonConfig` and friends are `suspend` and run on the fcitx thread.
+- `FcitxAPI.getImConfig`, `getAddonSubConfig` and friends are `suspend` and run on the fcitx thread.
   Do not add `runBlocking` on the main thread; `FcitxConnection.runImmediately` is for cached
   reads and `eventFlow` only.
 - detekt findings are frozen in `config/detekt/baseline-*.xml`. New code must not add to them;

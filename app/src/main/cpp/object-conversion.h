@@ -92,31 +92,6 @@ fcitx::RawConfig jobjectToRawConfig(JNIEnv *env, jobject jConfig) {
     return config;
 }
 
-jobjectArray stringVectorToJStringArray(JNIEnv *env, const std::vector<std::string> &strings) {
-    jobjectArray array = env->NewObjectArray(static_cast<int>(strings.size()), GlobalRef->String, nullptr);
-    int i = 0;
-    for (const auto &s: strings) {
-        env->SetObjectArrayElement(array, i++, JString(env, s));
-    }
-    return array;
-}
-
-jobject fcitxAddonStatusToJObject(JNIEnv *env, const AddonStatus &status) {
-    const auto info = status.info;
-    return env->NewObject(GlobalRef->AddonInfo, GlobalRef->AddonInfoInit,
-                          *JString(env, info->uniqueName()),
-                          *JString(env, info->name().match()),
-                          *JString(env, info->comment().match()),
-                          static_cast<int32_t>(info->category()),
-                          info->isConfigurable(),
-                          status.enabled,
-                          info->isDefaultEnabled(),
-                          info->onDemand(),
-                          stringVectorToJStringArray(env, info->dependencies()),
-                          stringVectorToJStringArray(env, info->optionalDependencies())
-    );
-}
-
 jobject fcitxActionToJObject(JNIEnv *env, const ActionEntity &act) {
     jobjectArray menu = nullptr;
     if (act.menu) {
