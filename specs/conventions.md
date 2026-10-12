@@ -84,7 +84,8 @@ with a reason, not ignored.
 
 ## Docs
 
-- `README.md`: what the app is, the measured accuracy, data and licences, building (bilingual).
+- `README.md`, for users: what the app is, its features, the measured accuracy, releases and plans,
+  data and licences (bilingual). `BUILDING.md`: building, the data releases, signing, where code is.
 - `docs/`: the user's manual, in Chinese: every feature and every setting. A change to behaviour or
   a setting updates it in the same commit.
 - `specs/`: this, for whoever changes the code. Keep it true as you change the code.
