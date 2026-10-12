@@ -126,12 +126,13 @@ class EngineDataPlugin : Plugin<Project> {
             "engine-data/stroke-$STROKES_COMMIT.dict.yaml",
         )
         const val ENGLISH_TASK = "compileEnglishData"
-        // FineWeb's English pages, counted by lib/ime-dict-tool's english-lm (its manifest.txt in the
-        // release says from what and how): the arpa the tool compiles, in a tar CMake unpacks
-        private const val ENGLISH_RELEASE = "english-data-20261011"
+        // FineWeb's English pages, counted by lib/ime-dict-tool's english-lm and pruned by its prune
+        // at 3e-8 (its manifest.txt in the release says from what and how): the arpa the tool
+        // compiles, in a tar CMake unpacks
+        private const val ENGLISH_RELEASE = "english-data-20261012"
         private val ENGLISH = Download(
             "$RELEASES_URL$ENGLISH_RELEASE/english.tar.zst",
-            "5be175367d041abf7ff2863d01e388e3d2cecaf375aa2b525d094a5e167eb4cc",
+            "ffef6cc2460d05fbfc2c2c8c7b844281f70fef6cd2da74da5da6e941ec0ebee0",
             "engine-data/$ENGLISH_RELEASE-english.tar.zst",
         )
         private const val ENGLISH_FILE = "english.arpa"

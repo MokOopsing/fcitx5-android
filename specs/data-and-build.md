@@ -48,7 +48,7 @@ GitHub release of this repository, and pinned in `EngineDataPlugin` by tag and S
 |---|---|---|---|
 | Pinyin language model (libime's, mixed with chat-like pages of FineWeb-2 and a CommonCrawl crawl) | `engine-data-*` (`LM_RELEASE`) | `lib/ime-dict-tool/engine-data.sh` on a rented 16-core machine, ~1 h, ~100 GB down | compiled with libime's dictionary into `engine/pinyin.data` |
 | New words (curated `lexicon/add.tsv`, packed for that model) | `words-*` (`WORDS_RELEASE`) | `ime-dict-tool pack --lexicon lexicon/add.tsv` | the `new` layer of `pinyin.data` |
-| English words and trigram model (FineWeb sample-10BT) | `english-data-*` (`ENGLISH_RELEASE`) | `ime-dict-tool english-lm` | `engine/english.data` |
+| English words and trigram model (FineWeb sample-10BT) | `english-data-*` (`ENGLISH_RELEASE`) | `ime-dict-tool english-lm`, then `prune --threshold 3e-8` (relative entropy: 117 → 44 MB compiled, slips fixed 73.8 → 72.7%) | `engine/english.data` |
 | Sentence models 4M and 25M (own training, Apache-2.0) | `sentence-models-*` (`MODELS_RELEASE`) | the training pipeline (not in this repo) | `engine/sentence-model*.safetensors` |
 | Voice recognizer (X-ASR zh-en, sherpa-onnx's int8 export) in onnxruntime's ORT format | `voice-models-*` (`ORT_RELEASE` in `VoiceDataPlugin`) | onnxruntime 1.28's `convert_onnx_models_to_ort --optimization_style Fixed --target_platform arm` (its `manifest.txt`) | `voice/encoder.ort`, `decoder.ort`, `joiner.ort`, mapped in place (lib/sherpa-onnx README) |
 | Code tables, strokes, dictionary | libime's and rime-stroke's sources, pinned archives | compiled in the build | `engine/table/*.data`, `engine/stroke.data` |
