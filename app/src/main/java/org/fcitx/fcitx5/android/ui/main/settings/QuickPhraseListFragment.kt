@@ -4,10 +4,7 @@
  */
 package org.fcitx.fcitx5.android.ui.main.settings
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -16,7 +13,6 @@ import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.PopupMenu
-import androidx.core.app.NotificationCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
@@ -43,7 +39,6 @@ import org.fcitx.fcitx5.android.utils.importErrorDialog
 import org.fcitx.fcitx5.android.utils.item
 import org.fcitx.fcitx5.android.utils.materialTextInput
 import org.fcitx.fcitx5.android.utils.navigateWithAnim
-import org.fcitx.fcitx5.android.utils.notificationManager
 import org.fcitx.fcitx5.android.utils.onPositiveButtonClick
 import org.fcitx.fcitx5.android.utils.parcelable
 import org.fcitx.fcitx5.android.utils.queryFileName
@@ -220,17 +215,6 @@ class QuickPhraseListFragment : Fragment(), OnItemChangedListener<QuickPhrase> {
         }
     }
 
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getText(R.string.quickphrase_editor),
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = CHANNEL_ID }
-            requireContext().notificationManager.createNotificationChannel(channel)
-        }
-    }
-
     private fun registerLauncher() {
         launcher = registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
             if (uri != null)
@@ -241,9 +225,7 @@ class QuickPhraseListFragment : Fragment(), OnItemChangedListener<QuickPhrase> {
     private fun importFromUri(uri: Uri) {
         val ctx = requireContext()
         val cr = ctx.contentResolver
-        val nm = ctx.notificationManager
         lifecycleScope.launch {
-            val id = IMPORT_ID++
             val fileName = cr.queryFileName(uri) ?: return@launch
             val extName = fileName.substringAfterLast('.')
             if (extName != QuickPhrase.EXT) {
@@ -255,14 +237,6 @@ class QuickPhraseListFragment : Fragment(), OnItemChangedListener<QuickPhrase> {
                 ctx.importErrorDialog(R.string.quickphrase_already_exists)
                 return@launch
             }
-            NotificationCompat.Builder(ctx, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_baseline_format_quote_24)
-                .setContentTitle(getString(R.string.quickphrase_editor))
-                .setContentText("${getString(R.string.importing)} $entryName")
-                .setOngoing(true)
-                .setProgress(100, 0, true)
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .build().let { nm.notify(IMPORT_TAG, id, it) }
             try {
                 val imported = withContext(Dispatchers.IO) {
                     val inputStream = cr.openInputStream(uri)!!
@@ -272,29 +246,16 @@ class QuickPhraseListFragment : Fragment(), OnItemChangedListener<QuickPhrase> {
             } catch (e: Exception) {
                 ctx.importErrorDialog(e)
             }
-            nm.cancel(IMPORT_TAG, id)
         }
     }
 
     private fun reloadQuickPhrase() {
         if (!dustman.dirty) return
         resetDustman()
-        // save the reference to NotificationManager, in case we need to cancel notification
-        // after Fragment detached
-        val nm = requireContext().notificationManager
         // the app's scope: leaving the page ends the page's right after onStop, and with it the
-        // reload and the cancel; immediate as that one is, so what reads the fragment runs now
+        // reload; immediate as that one is, so what reads the fragment runs now
         launchOutlivingPage("quick phrase") {
             if (busy.compareAndSet(false, true)) {
-                val id = RELOAD_ID++
-                NotificationCompat.Builder(requireContext(), CHANNEL_ID)
-                    .setSmallIcon(R.drawable.ic_baseline_library_books_24)
-                    .setContentTitle(getString(R.string.quickphrase_editor))
-                    .setContentText(getString(R.string.reloading))
-                    .setOngoing(true)
-                    .setProgress(100, 0, true)
-                    .setPriority(NotificationCompat.PRIORITY_HIGH)
-                    .build().let { nm.notify(RELOAD_TAG, id, it) }
                 try {
                     viewModel.fcitx.runOnReady {
                         reloadingUnlessStopped({ isReady }, { Timber.w(it, "quick phrase reload") }) {
@@ -302,7 +263,6 @@ class QuickPhraseListFragment : Fragment(), OnItemChangedListener<QuickPhrase> {
                         }
                     }
                 } finally {
-                    nm.cancel(RELOAD_TAG, id)
                     busy.set(false)
                 }
             }
@@ -318,7 +278,6 @@ class QuickPhraseListFragment : Fragment(), OnItemChangedListener<QuickPhrase> {
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        createNotificationChannel()
         registerLauncher()
         ui.addOnItemChangedListener(this)
         resetDustman()
@@ -372,15 +331,6 @@ class QuickPhraseListFragment : Fragment(), OnItemChangedListener<QuickPhrase> {
             ui.removeItemChangedListener()
         }
         super.onDestroy()
-    }
-
-    companion object {
-        private var RELOAD_ID = 0
-        private var IMPORT_ID = 0
-        // a notification is its tag and id, app-wide: untagged, ids each counting from 0 cancelled one another's
-        private const val RELOAD_TAG = "quickphrase_reload"
-        private const val IMPORT_TAG = "quickphrase_import"
-        const val CHANNEL_ID = "quickphrase"
     }
 }
 

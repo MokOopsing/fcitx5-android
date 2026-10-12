@@ -25,10 +25,7 @@
     <string name="next">次</string>
     <string name="prev">前</string>
     <string name="done">完了</string>
-    <string name="setup_keyboard">キーボードセットアップの完了</string>
-    <string name="setup_channel">セットアップウィザード</string>
     <string name="pinyin_dict">Pinyin 辞書</string>
-    <string name="reloading">リロード中</string>
     <string name="importing">インポート中</string>
     <string name="import_error">インポートエラー</string>
     <string name="dict_already_exists">辞書はすでに存在します</string>
@@ -154,8 +151,6 @@
     <string name="saving">保存する</string>
     <string name="delete_all_pinned_items">固定されたすべてのアイテムを削除しますか？</string>
     <string name="vivo_keypress_workaround">vivo OriginOSにおけるキー押下時の回避策</string>
-    <string name="notification_permission_message">通知の許可がない場合、時間のかかる操作が行われたときに通知することができません。</string>
-    <string name="notification_permission_title">通知の権限がありません</string>
     <string name="toolbar_num_row_on_password">パスワード入力時に数字をツールバーに横並びで表示する</string>
     <string name="space_long_press_behavior">スペースキー長押し時の動作</string>
     <string name="space_behavior_none">なし</string>
@@ -174,8 +169,6 @@
     <string name="delete_theme_msg">本当に\"%1$s\"テーマを削除しますか？</string>
     <string name="capture_heap_dump">ヒープダンプを取得する</string>
     <string name="edit_theme">テーマを編集</string>
-    <string name="fcitx_daemon">Fcitxデーモン</string>
-    <string name="restarting_fcitx">Fcitxを再起動中</string>
     <string name="removed_n_items">%1$d 個のアイテムを削除しました</string>
     <string name="added_n_items">%1$d 個のアイテムを追加しました</string>
     <string name="whether_reset_switch_preference">この設定をデフォルトの設定にリセットしますか？</string>
@@ -191,10 +184,6 @@
     <string name="exception_user_data_metadata">ユーザーデータのメタデータが見つかりません</string>
     <string name="exception_user_data_package_name_mismatch">ユーザーデータが現在のアプリに適合しません</string>
     <string name="user_data_imported">%1$s のユーザーデータをインポートしました。再起動します…</string>
-    <string name="restart_channel">アプリの再起動</string>
-    <string name="restart_notify_msg">アプリが再起動されました。ここをクリックして開きます</string>
-    <string name="i_do_not_need_it">今はしない</string>
-    <string name="grant_permission">権限の許可</string>
     <string name="expand_keypress_area">キー押下範囲を端まで拡張する</string>
     <string name="lang_switch_key_behavior">言語切り替えキーの動作</string>
     <string name="lang_switch_behavior_next_ime_app">次のインプットメゾッドアプリに切り替える</string>

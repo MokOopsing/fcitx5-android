@@ -27,6 +27,7 @@ import org.fcitx.fcitx5.android.data.theme.ThemeManager
 import org.fcitx.fcitx5.android.ui.main.LogActivity
 import org.fcitx.fcitx5.android.utils.AppUtil
 import org.fcitx.fcitx5.android.utils.Locales
+import org.fcitx.fcitx5.android.utils.notificationManager
 import org.fcitx.fcitx5.android.utils.setupForest
 import org.fcitx.fcitx5.android.utils.startActivity
 import org.fcitx.fcitx5.android.utils.userManager
@@ -143,6 +144,10 @@ class FcitxApplication : Application() {
         ThemeManager.init(resources.configuration)
         Locales.onLocaleChange(resources.configuration)
         registerReceiver(shutdownReceiver, IntentFilter(Intent.ACTION_SHUTDOWN))
+        // the app posts no notifications (and asks for no permission to): an older version's channels go
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            notificationManager.notificationChannels.forEach { notificationManager.deleteNotificationChannel(it.id) }
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && !isDirectBootMode) {
             AppPrefs.getInstance().syncToDeviceEncryptedStorage()
             ThemeManager.syncToDeviceEncryptedStorage()

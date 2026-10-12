@@ -4,15 +4,9 @@
  */
 package org.fcitx.fcitx5.android.daemon
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.os.Build
-import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
-import org.fcitx.fcitx5.android.FcitxApplication
-import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.Fcitx
 import org.fcitx.fcitx5.android.core.FcitxAPI
 import org.fcitx.fcitx5.android.core.FcitxLifecycle
@@ -22,7 +16,6 @@ import org.fcitx.fcitx5.android.daemon.FcitxDaemon.connect
 import org.fcitx.fcitx5.android.daemon.FcitxDaemon.disconnect
 import org.fcitx.fcitx5.android.data.punctuation.PunctuationManager
 import org.fcitx.fcitx5.android.utils.appContext
-import org.fcitx.fcitx5.android.utils.notificationManager
 import timber.log.Timber
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -118,23 +111,8 @@ object FcitxDaemon {
      * Restart fcitx instance while keep the clients connected
      */
     fun restartFcitx() = lock.withLock {
-        val id = RESTART_ID++
-        NotificationCompat.Builder(appContext, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_baseline_sync_24)
-            .setContentTitle(appContext.getString(R.string.fcitx_daemon))
-            .setContentText(appContext.getString(R.string.restarting_fcitx))
-            .setOngoing(true)
-            .setProgress(100, 0, true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .build().let { appContext.notificationManager.notify(id, it) }
         realFcitx.stop()
         start()
-        FcitxApplication.getInstance().coroutineScope.launch {
-            // cancel notification on ready
-            realFcitx.lifecycle.whenReady {
-                appContext.notificationManager.cancel(id)
-            }
-        }
     }
 
     /**
@@ -156,29 +134,9 @@ object FcitxDaemon {
         start()
     }
 
-    init {
-        createNotificationChannel()
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                appContext.getText(R.string.fcitx_daemon),
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = CHANNEL_ID }
-            appContext.notificationManager.createNotificationChannel(channel)
-        }
-    }
-
     /**
      * A client's connection, or null if none: for what reaches fcitx only while it runs (a broadcast,
      * a settings page), without starting it as [connect] would
      */
     fun getFirstConnectionOrNull() = lock.withLock { clients.firstNotNullOfOrNull { it.value } }
-
-
-    private const val CHANNEL_ID = "fcitx-daemon"
-    private var RESTART_ID = 0
-
 }

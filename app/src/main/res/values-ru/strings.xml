@@ -26,10 +26,7 @@
     <string name="next">Следующий</string>
     <string name="prev">Предыдущий</string>
     <string name="done">Сделано</string>
-    <string name="setup_keyboard">Завершите настройку клавиатуры</string>
-    <string name="setup_channel">Мастер установки</string>
     <string name="pinyin_dict">Словари Пиньинь</string>
-    <string name="reloading">Перезагрузка</string>
     <string name="importing">Импортирование</string>
     <string name="import_error">Ошибка импорта</string>
     <string name="dict_already_exists">Словарь уже существует</string>
@@ -159,8 +156,6 @@
     <string name="saving">Сохранение</string>
     <string name="delete_all_pinned_items">Удалить все закрепленные элементы?</string>
     <string name="vivo_keypress_workaround">Обходной путь для нажатия клавиши в vivo Origin OS</string>
-    <string name="notification_permission_message">Без разрешения на публикацию уведомлений мы не сможем уведомить вас о выполнении некоторых сложных операций.</string>
-    <string name="notification_permission_title">Нет разрешения на уведомление</string>
     <string name="toolbar_num_row_on_password">Показывать строку с цифрами на панели инструментов при вводе пароля</string>
     <string name="space_long_press_behavior">Поведение при длительном нажатии клавиши пробела</string>
     <string name="space_behavior_none">Нет</string>
@@ -179,8 +174,6 @@
     <string name="delete_theme_msg">Вы действительно хотите удалить тему \"%1$s\"?</string>
     <string name="capture_heap_dump">Захватить дамп кучи</string>
     <string name="edit_theme">Изменить тему</string>
-    <string name="fcitx_daemon">Демон Fcitx</string>
-    <string name="restarting_fcitx">Перезапуск Fcitx</string>
     <string name="removed_n_items">Удаленный %1$d элемент(ы)</string>
     <string name="added_n_items">Добавлено элементов: %1$d</string>
     <string name="whether_reset_switch_preference">Вы хотите сбросить этот параметр по умолчанию?</string>
@@ -199,10 +192,6 @@
     <string name="exception_user_data_package_name_mismatch">Пользовательские данные не соответствуют текущему приложению</string>
     <string name="user_data_imported">Пользовательские данные %1$s  были импортированы, перезапуск…</string>
     <string name="confirm_import_user_data">Импорт пользовательских данных переопределит локальные настройки и историю ввода, и потребуется перезапустить приложение, чтобы изменения вступили в силу. Продолжить?</string>
-    <string name="restart_channel">Перезапуск приложения</string>
-    <string name="restart_notify_msg">Приложение перезапущено. Нажмите здесь, чтобы открыть</string>
-    <string name="i_do_not_need_it">Мне это не нужно</string>
-    <string name="grant_permission">Предоставить разрешение</string>
     <string name="clear_clp_db_confirm">База данных буфера обмена будет полностью очищена, включая закрепленные элементы. Продолжить?</string>
     <string name="expand_keypress_area">Расширить область нажатия клавиш до края</string>
     <string name="lang_switch_key_behavior">Поведение клавиши переключения языка</string>

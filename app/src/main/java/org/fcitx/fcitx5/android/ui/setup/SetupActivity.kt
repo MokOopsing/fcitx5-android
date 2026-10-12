@@ -4,11 +4,6 @@
  */
 package org.fcitx.fcitx5.android.ui.setup
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
-import android.content.Intent
-import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -16,7 +11,6 @@ import androidx.activity.addCallback
 import androidx.annotation.VisibleForTesting
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.NotificationCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.fragment.app.Fragment
@@ -26,7 +20,6 @@ import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.databinding.ActivitySetupBinding
 import org.fcitx.fcitx5.android.ui.setup.SetupPage.Companion.firstUndonePage
 import org.fcitx.fcitx5.android.ui.setup.SetupPage.Companion.isLastPage
-import org.fcitx.fcitx5.android.utils.notificationManager
 
 class SetupActivity : AppCompatActivity() {
 
@@ -78,7 +71,6 @@ class SetupActivity : AppCompatActivity() {
         // skip to undone page
         firstUndonePage()?.let { viewPager.currentItem = it.ordinal }
         updateButtons()
-        createNotificationChannel()
     }
 
     private fun updateButtons() {
@@ -101,43 +93,6 @@ class SetupActivity : AppCompatActivity() {
         updateButtons()
     }
 
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                getText(R.string.setup_channel),
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = CHANNEL_ID }
-            notificationManager.createNotificationChannel(channel)
-        }
-    }
-
-    override fun onPause() {
-        if (SetupPage.hasUndonePage())
-            NotificationCompat.Builder(this, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_baseline_keyboard_24)
-                .setContentTitle(getText(R.string.app_name))
-                .setContentText(getText(R.string.setup_keyboard))
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setContentIntent(
-                    PendingIntent.getActivity(
-                        this,
-                        0,
-                        Intent(this, javaClass),
-                        PendingIntent.FLAG_IMMUTABLE
-                    )
-                )
-                .setAutoCancel(true)
-                .build()
-                .let { notificationManager.notify(NOTIFY_ID, it) }
-        super.onPause()
-    }
-
-    override fun onResume() {
-        notificationManager.cancel(NOTIFY_ID)
-        super.onResume()
-    }
-
     private inner class Adapter : FragmentStateAdapter(this) {
         override fun getItemCount(): Int = SetupPage.entries.size
 
@@ -155,8 +110,6 @@ class SetupActivity : AppCompatActivity() {
         // app's) came back to the app with nothing to select the keyboard
         @VisibleForTesting
         internal var skipped = false
-        private const val CHANNEL_ID = "setup"
-        private const val NOTIFY_ID = 233
         fun shouldShowUp() = !skipped && SetupPage.hasUndonePage()
     }
 }

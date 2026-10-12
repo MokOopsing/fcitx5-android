@@ -20,10 +20,7 @@
     <string name="next">다음</string>
     <string name="prev">이전</string>
     <string name="done">완료</string>
-    <string name="setup_keyboard">키보드 설정 완료</string>
-    <string name="setup_channel">설정 마법사</string>
     <string name="pinyin_dict">병음 사전</string>
-    <string name="reloading">다시 불러오는 중</string>
     <string name="importing">가져오는 중</string>
     <string name="import_error">가져오기 오류</string>
     <string name="dict_already_exists">사전이 이미 존재합니다</string>

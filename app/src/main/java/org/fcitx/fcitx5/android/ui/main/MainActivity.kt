@@ -4,10 +4,7 @@
  */
 package org.fcitx.fcitx5.android.ui.main
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.view.ViewGroup
 import androidx.activity.enableEdgeToEdge
@@ -23,7 +20,6 @@ import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.fragment.NavHostFragment
 import org.fcitx.fcitx5.android.BuildConfig
 import org.fcitx.fcitx5.android.R
-import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.databinding.ActivityMainBinding
 import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
 import org.fcitx.fcitx5.android.ui.setup.SetupActivity
@@ -69,7 +65,6 @@ class MainActivity : AppCompatActivity() {
         }
         // made again (a rotation, a new app language): the pages are restored, the intent was acted on
         if (savedInstanceState == null) processIntent(intent)
-        checkNotificationPermission()
     }
 
     override fun onResume() {
@@ -129,44 +124,6 @@ class MainActivity : AppCompatActivity() {
                 navController.navigateWithAnim(route)
             }
         }
-    }
-
-    private var needNotifications by AppPrefs.getInstance().internal.needNotifications
-
-    private fun checkNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-                needNotifications = true
-                return
-            }
-            // do not ask again if user denied the request
-            if (!needNotifications) return
-            // always show a dialog to explain why we need notification permission,
-            // regardless of `shouldShowRequestPermissionRationale(...)`
-            AlertDialog.Builder(this)
-                .setIconAttribute(android.R.attr.alertDialogIcon)
-                .setTitle(R.string.notification_permission_title)
-                .setMessage(R.string.notification_permission_message)
-                .setNegativeButton(R.string.i_do_not_need_it) { _, _ ->
-                    // do not ask again if user denied the request
-                    needNotifications = false
-                }
-                .setPositiveButton(R.string.grant_permission) { _, _ ->
-                    requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 0)
-                }
-                .show()
-        }
-    }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != 0) return
-        // do not ask again if user denied the request
-        needNotifications = grantResults.getOrNull(0) == PackageManager.PERMISSION_GRANTED
     }
 
     override fun onStop() {

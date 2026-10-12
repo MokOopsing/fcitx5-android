@@ -23,10 +23,7 @@
     <string name="next">Weiter</string>
     <string name="prev">Zurück</string>
     <string name="done">Fertig</string>
-    <string name="setup_keyboard">Tastatureinrichtung beenden</string>
-    <string name="setup_channel">Einrichtungsassistent</string>
     <string name="pinyin_dict">Pinyin-Wörterbücher</string>
-    <string name="reloading">Wird neu geladen</string>
     <string name="importing">Wird importiert</string>
     <string name="import_error">Fehler beim Import</string>
     <string name="dict_already_exists">Wörterbuch bereits vorhanden</string>
@@ -114,14 +111,12 @@
     <string name="system_default">Systemstandard</string>
     <string name="default_">Standard</string>
     <string name="saving">Wird gespeichert</string>
-    <string name="notification_permission_title">Keine Erlaubnis für Benachrichtigungen</string>
     <string name="space_long_press_behavior">Verhalten bei langem Tastendruck auf die Space-Taste</string>
     <string name="space_behavior_none">Nichts</string>
     <string name="space_behavior_activate">An/Aus der Eingabemethode</string>
     <string name="show_lang_switch_key">Sprachwechseltaste anzeigen</string>
     <string name="horizontal_candidate_style">Stil der horizonttalen Kandidaten</string>
     <string name="num_items_deleted">%1$d Element(e) gelöscht</string>
-    <string name="fcitx_daemon">Fcitx Daemon</string>
     <string name="removed_n_items"> %1$d Element(e) entfernt</string>
     <string name="added_n_items">%1$d Element(e) hinzugefügt</string>
     <string name="whether_reset_switch_preference">Wollen Sie diese Einstellung auf den Standard zurücksetzen?</string>

@@ -6,9 +6,9 @@
 
 幽默输入法不收集任何数据，也不上传给我们或任何第三方。
 
-幽默输入法不申请网络权限，无法联网。它有两个版本：
+幽默输入法不申请网络权限，无法联网，也不发通知。它有两个版本：
 
-- **文字版**（默认）：不申请录音权限。
+- **文字版**（默认）：只申请振动权限，用于按键振动。
 - **语音版**：多申请一个录音权限，只在你按住说话时录音；语音在手机上识别，录音不保存、不发送。
 
 两个版本都是：
@@ -25,10 +25,10 @@
 
 Youmo IME collects no data, and uploads none to us or to anyone else.
 
-Youmo IME asks for no network permission and cannot go online. There are two builds:
+Youmo IME asks for no network permission and cannot go online; it posts no notifications either. There are two builds:
 
-- **Text** (the default): asks for no microphone permission.
-- **Voice**: asks for the microphone, used only while you hold to talk; speech is recognized on the phone, and the
+- **Text** (the default): asks only to vibrate, for key feedback.
+- **Voice**: asks for the microphone as well, used only while you hold to talk; speech is recognized on the phone, and the
   recording is neither kept nor sent.
 
 In both:

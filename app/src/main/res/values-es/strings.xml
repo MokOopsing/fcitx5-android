@@ -99,8 +99,4 @@
     <string name="disable_it">Desactivarlo</string>
     <string name="export_user_data">Exportar datos de usuario</string>
     <string name="import_user_data">Importar datos de usuario</string>
-    <string name="restart_channel">Reinicio de aplicación</string>
-    <string name="restart_notify_msg">Se reinició la aplicación; pulse aquí para abrir</string>
-    <string name="i_do_not_need_it">No lo necesito</string>
-    <string name="grant_permission">Otorgar permiso</string>
     </resources>

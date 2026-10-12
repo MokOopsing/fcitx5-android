@@ -75,12 +75,11 @@ class AdvancedSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstance(
                                 val inputStream = cr.openInputStream(uri)!!
                                 UserDataManager.import(inputStream).getOrThrow()
                             }
-                            AppUtil.showRestartNotification(ctx)
                             val exportTime = formatDateTime(metadata.exportTime)
                             ctx.toast(ctx.getString(R.string.user_data_imported, exportTime))
-                            // delay exit to ensure Notification and Toast has been created
+                            // the toast made before the process ends
                             delay(400L)
-                            AppUtil.exit()
+                            AppUtil.restart(ctx.applicationContext)
                             null
                         } catch (e: Exception) {
                             // reopen the clipboard and restart fcitx in case importing failed

@@ -13,7 +13,6 @@
 
     <!-- no network permission: one merged in from a dependency fails the build (AndroidAppConventionPlugin) -->
     <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Don't strip the Cropper library's queries with tools:node="removeAll": under AGP 9 it also
          dropped this one, so other input methods became invisible on Android 11+.

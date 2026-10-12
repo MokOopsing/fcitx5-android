@@ -26,10 +26,7 @@
     <string name="next">下一步</string>
     <string name="prev">上一步</string>
     <string name="done">完成</string>
-    <string name="setup_keyboard">完成鍵盤設定</string>
-    <string name="setup_channel">設定精靈</string>
     <string name="pinyin_dict">拼音詞庫</string>
-    <string name="reloading">正在重新載入</string>
     <string name="importing">正在匯入</string>
     <string name="import_error">匯入錯誤</string>
     <string name="dict_already_exists">詞庫已存在</string>
@@ -164,8 +161,6 @@
     <string name="saving">正在儲存</string>
     <string name="delete_all_pinned_items">要刪除所有置頂項目嗎？</string>
     <string name="vivo_keypress_workaround">解決 vivo Origin OS 按鍵檢測問題</string>
-    <string name="notification_permission_message">尚未賦予通知權限，因此無法在耗時較長的操作完成後給您發送通知。</string>
-    <string name="notification_permission_title">沒有通知權限</string>
     <string name="toolbar_num_row_on_password">輸入密碼時在工具欄上顯示數字列</string>
     <string name="space_long_press_behavior">空格鍵長按行為</string>
     <string name="space_behavior_none">無</string>
@@ -184,8 +179,6 @@
     <string name="delete_theme_msg">確定要刪除主題 “%1$s” 嗎？</string>
     <string name="capture_heap_dump">捕獲堆積記憶體傾印資料</string>
     <string name="edit_theme">編輯主題</string>
-    <string name="fcitx_daemon">Fcitx 常駐程式</string>
-    <string name="restarting_fcitx">重新啟動 Fcitx</string>
     <string name="removed_n_items">已移除 %1$d 個項目</string>
     <string name="added_n_items">已新增 %1$d 個項目</string>
     <string name="whether_reset_switch_preference">是否要將此偏好設定重設為預設選項？</string>
@@ -204,10 +197,6 @@
     <string name="exception_user_data_package_name_mismatch">使用者資料與目前應用程式不符合</string>
     <string name="user_data_imported">已匯入來自 %1$s 的使用者資料，正在重新啟動</string>
     <string name="confirm_import_user_data">匯入使用者資料將會覆寫本機設定與輸入歷史，並且需要重新啟動來使變動生效。是否繼續？</string>
-    <string name="restart_channel">重新啟動應用程式</string>
-    <string name="restart_notify_msg">應用程式已重新啟動，點此打開</string>
-    <string name="i_do_not_need_it">我不需要</string>
-    <string name="grant_permission">授予權限</string>
     <string name="clear_clp_db_confirm">剪貼簿資料庫將會被完全清空，包括已置頂條目。是否繼續？</string>
     <string name="clear_clp_db_not_all">部分剪貼簿資料未能清除，可能仍然存在，或在下次啟動時重新出現；再次清空，或重新啟動後再清空，或許有效。</string>
     <string name="expand_keypress_area">將按鍵範圍擴展至邊緣</string>

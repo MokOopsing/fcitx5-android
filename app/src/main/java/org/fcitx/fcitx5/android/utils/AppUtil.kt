@@ -4,14 +4,8 @@
  */
 package org.fcitx.fcitx5.android.utils
 
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
-import androidx.core.app.NotificationCompat
-import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.ui.main.ClipboardEditActivity
 import org.fcitx.fcitx5.android.ui.main.MainActivity
 import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
@@ -67,38 +61,14 @@ object AppUtil {
         exitProcess(0)
     }
 
-    private const val RESTART_CHANNEL_ID = "app-restart"
-
-    private const val RESTART_NOTIFY_ID = 0xdead
-
-    private fun createRestartNotificationChannel(ctx: Context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                RESTART_CHANNEL_ID,
-                ctx.getText(R.string.restart_channel),
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = RESTART_CHANNEL_ID }
-            ctx.notificationManager.createNotificationChannel(channel)
+    /**
+     * Ends the process and opens the settings again, in a new one: the app's files were replaced
+     * under it. The system starts the new process for the activity asked for just before.
+     */
+    fun restart(context: Context) {
+        context.startActivity<MainActivity> {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         }
-    }
-
-    fun showRestartNotification(ctx: Context) {
-        createRestartNotificationChannel(ctx)
-        NotificationCompat.Builder(ctx, RESTART_CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_baseline_sync_24)
-            .setContentTitle(ctx.getText(R.string.app_name))
-            .setContentText(ctx.getText(R.string.restart_notify_msg))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentIntent(
-                PendingIntent.getActivity(
-                    ctx,
-                    0,
-                    Intent(ctx, MainActivity::class.java),
-                    PendingIntent.FLAG_IMMUTABLE
-                )
-            )
-            .setAutoCancel(true)
-            .build()
-            .let { ctx.notificationManager.notify(RESTART_NOTIFY_ID, it) }
+        exit()
     }
 }

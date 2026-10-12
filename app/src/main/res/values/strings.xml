@@ -26,10 +26,7 @@
     <string name="next">Next</string>
     <string name="prev">Prev</string>
     <string name="done">Done</string>
-    <string name="setup_keyboard">Finish setting up the keyboard</string>
-    <string name="setup_channel">Setup Wizard</string>
     <string name="pinyin_dict">Pinyin Dictionaries</string>
-    <string name="reloading">Reloading</string>
     <string name="importing">Importing</string>
     <string name="import_error">Import Error</string>
     <string name="dict_already_exists">Dictionary already exists</string>
@@ -164,8 +161,6 @@
     <string name="saving">Saving</string>
     <string name="delete_all_pinned_items">Delete all pinned items?</string>
     <string name="vivo_keypress_workaround">vivo Origin OS keypress workaround</string>
-    <string name="notification_permission_message">Without the permission to post notifications, we are not able to notify you when some time-consuming operations are done.</string>
-    <string name="notification_permission_title">No Notification Permission</string>
     <string name="toolbar_num_row_on_password">Show number row on toolbar when inputting password</string>
     <string name="space_long_press_behavior">Space key long press behavior</string>
     <string name="space_behavior_none">None</string>
@@ -184,8 +179,6 @@
     <string name="delete_theme_msg">Do you really want to delete theme \"%1$s\"?</string>
     <string name="capture_heap_dump">Capture heap dump</string>
     <string name="edit_theme">Edit Theme</string>
-    <string name="fcitx_daemon">Fcitx Daemon</string>
-    <string name="restarting_fcitx">Restarting Fcitx</string>
     <string name="removed_n_items">Removed %1$d item(s)</string>
     <string name="added_n_items">Added %1$d item(s)</string>
     <string name="whether_reset_switch_preference">Would you like to reset this preference to default?</string>
@@ -204,10 +197,6 @@
     <string name="exception_user_data_package_name_mismatch">User data does not match current application</string>
     <string name="user_data_imported">User data on %1$s has been imported, restarting…</string>
     <string name="confirm_import_user_data">Import user data would override local settings and input history, and requires restarting the App for changes to take effect. Proceed?</string>
-    <string name="restart_channel">App restart</string>
-    <string name="restart_notify_msg">App has been restarted, click here to open</string>
-    <string name="i_do_not_need_it">I don\'t need it</string>
-    <string name="grant_permission">Grant permission</string>
     <string name="clear_clp_db_confirm">Clipboard database would be completely cleared, including pinned items. Proceed?</string>
     <string name="clear_clp_db_not_all">Some clipboard data could not be cleared. It may still be there or come back at the next start; clearing again, or after a restart, may help.</string>
     <string name="expand_keypress_area">Expand keypress area to the edge</string>

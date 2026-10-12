@@ -34,7 +34,7 @@ import javax.xml.parsers.DocumentBuilderFactory
  * - Configure dependency for [DataDescriptorPlugin] task (If have)
  * - Provide default configuration for `android {...}`
  * - Add desugar JDK libs
- * - Fail the build if the merged manifest asks for a network permission ([NoNetworkPermissionTask])
+ * - Fail the build if the merged manifest asks for a permission not on the list ([PermissionCheckTask])
  */
 @Suppress("unused")
 class AndroidAppConventionPlugin : AndroidBaseConventionPlugin() {
@@ -141,10 +141,10 @@ class AndroidAppConventionPlugin : AndroidBaseConventionPlugin() {
             // Check the merged manifest in its own path, so no APK or bundle is built without it
             onVariants { v ->
                 val permissionCheck = target.tasks.register(
-                    "checkNoNetworkPermission${v.name.capitalized()}", NoNetworkPermissionTask::class.java
+                    "checkPermissions${v.name.capitalized()}", PermissionCheckTask::class.java
                 )
                 v.artifacts.use(permissionCheck)
-                    .wiredWithFiles(NoNetworkPermissionTask::mergedManifest, NoNetworkPermissionTask::checkedManifest)
+                    .wiredWithFiles(PermissionCheckTask::mergedManifest, PermissionCheckTask::checkedManifest)
                     .toTransform(SingleArtifact.MERGED_MANIFEST)
             }
             // Make data descriptor depend on fcitx component if have
@@ -185,11 +185,12 @@ class AndroidAppConventionPlugin : AndroidBaseConventionPlugin() {
     }
 
     /**
-     * Fails the build if the merged manifest asks for a network permission, and otherwise passes it
-     * on unchanged. The app promises to have none (README, PRIVACY.md), and a dependency's manifest
-     * would merge one in without a line of this repository changing.
+     * Fails the build if the merged manifest asks for a permission not in [ALLOWED], and otherwise
+     * passes it on unchanged. The app asks for what it needs and no more, no network above all
+     * (README, PRIVACY.md), and a dependency's manifest would merge one in without a line of this
+     * repository changing.
      */
-    abstract class NoNetworkPermissionTask : DefaultTask() {
+    abstract class PermissionCheckTask : DefaultTask() {
         @get:InputFile
         @get:PathSensitive(PathSensitivity.NONE)
         abstract val mergedManifest: RegularFileProperty
@@ -205,10 +206,10 @@ class AndroidAppConventionPlugin : AndroidBaseConventionPlugin() {
             val found = PERMISSION_TAGS.flatMap { tag ->
                 val nodes = root.getElementsByTagName(tag)
                 (0 until nodes.length).map { (nodes.item(it) as Element).getAttributeNS(ANDROID_NS, "name") }
-            }.filter { it in NETWORK_PERMISSIONS }
+            }.filter { it !in ALLOWED }
             check(found.isEmpty()) {
-                "The merged manifest asks for ${found.joinToString()}, but the app has no network permission " +
-                    "(PRIVACY.md): build/outputs/logs/manifest-merger-*-report.txt names the dependency that adds it"
+                "The merged manifest asks for ${found.joinToString()}, which the app does not ask for (PRIVACY.md): " +
+                    "build/outputs/logs/manifest-merger-*-report.txt names the dependency that adds it"
             }
             manifest.copyTo(checkedManifest.get().asFile, overwrite = true)
         }
@@ -216,8 +217,8 @@ class AndroidAppConventionPlugin : AndroidBaseConventionPlugin() {
         companion object {
             private const val ANDROID_NS = "http://schemas.android.com/apk/res/android"
             private val PERMISSION_TAGS = listOf("uses-permission", "uses-permission-sdk-23")
-            private val NETWORK_PERMISSIONS =
-                setOf("android.permission.INTERNET", "android.permission.ACCESS_NETWORK_STATE")
+            // key feedback, and the microphone of the voice build's voice input
+            private val ALLOWED = setOf("android.permission.VIBRATE", "android.permission.RECORD_AUDIO")
         }
     }
 
