@@ -192,7 +192,9 @@ abstract class KeyView(ctx: Context, val theme: Theme, val def: KeyDef.Appearanc
 
     fun updateBounds() {
         val (x, y) = cachedLocation.also { appearanceView.getLocationInWindow(it) }
-        cachedBounds.set(x, y, x + appearanceView.width, y + appearanceView.height)
+        // across, the face drawn (less hMargin, none on keys without margins): popups are as wide as
+        // it; down, to the margin's foot, which popups align their bottoms with
+        cachedBounds.set(x + hMargin, y, x + appearanceView.width - hMargin, y + appearanceView.height)
         boundsValid = true
     }
 

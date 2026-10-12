@@ -4,7 +4,6 @@
  */
 package org.fcitx.fcitx5.android.input.popup
 
-import android.content.res.Configuration
 import android.graphics.Rect
 import android.view.View
 import android.view.ViewGroup
@@ -122,8 +121,8 @@ class PopupComponent :
     }
 
     /**
-     * Over the key [bounds], [width] wide, by default as wide as the key's face (its bounds less
-     * its margins) and its text, never narrower than [popupWidth]: a fixed width over a wider key
+     * Over the key [bounds], [width] wide, by default as wide as the key's face (the bounds across)
+     * and its text, never narrower than [popupWidth]: a fixed width over a wider key
      * (九键's, `.com`, any in landscape) left the key's pressed colour showing at both sides.
      */
     private fun place(popup: PopupEntryUi, bounds: Rect, width: Int = entryWidth(popup, bounds)) {
@@ -136,11 +135,8 @@ class PopupComponent :
     }
 
     private fun entryWidth(popup: PopupEntryUi, bounds: Rect): Int {
-        val prefs = ThemeManager.prefs
-        val landscape = context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-        val margin = context.dp((if (landscape) prefs.keyHorizontalMarginLandscape else prefs.keyHorizontalMargin).getValue())
         val text = ceil(popup.textWidth(popup.textView.text.toString())).toInt() + 2 * popupPadding
-        return maxOf(popupWidth, bounds.width() - 2 * margin, text)
+        return maxOf(popupWidth, bounds.width(), text)
     }
 
     private fun showKeyboard(viewId: Int, keyboard: KeyDef.Popup.Keyboard, bounds: Rect) {
