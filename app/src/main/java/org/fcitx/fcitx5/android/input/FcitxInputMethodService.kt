@@ -82,6 +82,7 @@ import org.fcitx.fcitx5.android.input.editing.InputConnectionEditor
 import org.fcitx.fcitx5.android.input.editing.KeyEventRelay
 import org.fcitx.fcitx5.android.input.editing.toEditorTraits
 import org.fcitx.fcitx5.android.input.keyboard.AddressKeys
+import org.fcitx.fcitx5.android.input.keyboard.LeftPreedit
 import org.fcitx.fcitx5.android.input.keyboard.PendingInputPolicy
 import org.fcitx.fcitx5.android.utils.InputMethodUtil
 import org.fcitx.fcitx5.android.utils.Locales
@@ -143,6 +144,8 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
 
     /** The IME's view of the cursor; owned by [editingSession]. */
     private val selection get() = editingSession.selection
+
+    private val leftPreedit = LeftPreedit()
 
     val currentInputSelection: CursorRange
         get() = selection.latest
@@ -768,10 +771,17 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         // initialSel{Start,End} is outdated. but it's the client app's responsibility to send
         // right cursor position, try to workaround this would simply introduce more bugs.
         selection.resetTo(attribute.initialSelStart, attribute.initialSelEnd)
-        // the screen turned (resetStateForNewConfiguration) restarts input with no
-        // onFinishInputView: the engine's input goes below, the editor's preedit with it. Not over
-        // a selection: an app that set new text and restarted has no preedit, and would lose it
-        if (restarting && attribute.initialSelStart == attribute.initialSelEnd) currentInputConnection?.let(::dropPreedit)
+        currentInputConnection?.let { ic ->
+            val now = SystemClock.elapsedRealtime()
+            val put = leftPreedit.putBack({ ic.getTextBeforeCursor(it, 0) }, attribute.initialSelStart, attribute.initialSelEnd, now)
+            if (put > 0) ic.deleteSurroundingText(put, 0)
+            // the screen turned (resetStateForNewConfiguration) restarts input with no
+            // onFinishInputView: the engine's input goes below, the editor's preedit with it. Not
+            // over a selection: an app that set new text and restarted has no preedit, and would lose it
+            if (restarting && attribute.initialSelStart == attribute.initialSelEnd) {
+                dropPreedit(ic)?.let { leftPreedit.dropped(it, now) }
+            }
+        }
         resetComposingState()
         val flags = CapabilityFlags.fromEditorInfo(attribute)
         capabilityFlags = flags
@@ -1073,13 +1083,16 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     }
 
     /** Takes a Chinese preedit out of the editor, as the engine drops its input: see [PendingInputPolicy.keepsPreeditOnLeaving]. */
-    private fun dropPreedit(ic: InputConnection) {
+    private fun dropPreedit(ic: InputConnection): String? {
         // only a preedit: with none, an empty composing text takes the selection's place
-        if (editingSession.composing.isNotEmpty() &&
-            !PendingInputPolicy.keepsPreeditOnLeaving(fcitx.runImmediately { inputMethodEntryCached.languageCode })
+        if (editingSession.composing.isEmpty() ||
+            PendingInputPolicy.keepsPreeditOnLeaving(fcitx.runImmediately { inputMethodEntryCached.languageCode })
         ) {
-            ic.setComposingText("", 1)
+            return null
         }
+        val text = editingSession.composingText.toString()
+        ic.setComposingText("", 1)
+        return text
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
