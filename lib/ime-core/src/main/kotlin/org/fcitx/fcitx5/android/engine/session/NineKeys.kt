@@ -7,6 +7,7 @@ package org.fcitx.fcitx5.android.engine.session
 import org.fcitx.fcitx5.android.engine.data.PinyinData
 import org.fcitx.fcitx5.android.engine.pinyin.NineKeyLetters
 import org.fcitx.fcitx5.android.engine.pinyin.SyllableGraph
+import org.fcitx.fcitx5.android.engine.pinyin.SyllableMatches
 import org.fcitx.fcitx5.android.engine.pinyin.SyllableGraph.Kind
 import org.fcitx.fcitx5.android.engine.pinyin.Syllables
 import org.fcitx.fcitx5.android.engine.pinyin.T9Segmenter
@@ -18,8 +19,8 @@ import org.fcitx.fcitx5.android.engine.pinyin.T9Segmenter
  */
 internal class NineKeys(private val data: PinyinData, private val letters: NineKeyLetters) {
 
-    /** A syllable taken at [at] for the keys [was], a separator [added] after it; [then] the input after. */
-    private class Taken(val at: Int, val was: String, val added: Boolean, val then: String)
+    /** A syllable taken at [at] for the keys [was], [length] letters, a separator [added] after it; [then] the input after. */
+    private class Taken(val at: Int, val was: String, val length: Int, val added: Boolean, val then: String)
 
     private val taken = ArrayList<Taken>() // the last last
 
@@ -27,6 +28,7 @@ internal class NineKeys(private val data: PinyinData, private val letters: NineK
     var offered: List<String> = emptyList()
         private set
     private var offeredAt = -1 // where in the input those digits start
+    private var offeredPresses: List<Int> = emptyList() // the presses each of offered stands for
 
     /** Which list [offered] is: see [Snapshot.syllablesId]. */
     var id = 0
@@ -41,10 +43,11 @@ internal class NineKeys(private val data: PinyinData, private val letters: NineK
     }
 
     // a list unlike the last gets another id: a pick from the last is stale
-    private fun show(syllables: List<String>, at: Int) {
-        if (syllables == offered && at == offeredAt) return
+    private fun show(syllables: List<String>, at: Int, presses: List<Int> = syllables.map { it.length }) {
+        if (syllables == offered && at == offeredAt && presses == offeredPresses) return
         offered = syllables
         offeredAt = at
+        offeredPresses = presses
         id = (id + 1) % Action.Syllable.IDS
     }
 
@@ -77,17 +80,26 @@ internal class NineKeys(private val data: PinyinData, private val letters: NineK
             if (graph.kind(e) != Kind.SYLLABLE) continue
             val m = graph.matches(e)
             val length = graph.text(e).length
-            // 嗯 as m, n, ng: the letters stand for those, as initials
-            for (i in 0 until m.size) if (m.flags(i) == 0 && Syllables.split(Syllables.spelling(m.syllable(i))) != null) found[m.syllable(i)] = length
+            // 嗯 as m, n, ng: the letters stand for those, as initials; read with a run of a key
+            // pressed again as keys and as a letter, the more presses
+            for (i in 0 until m.size) {
+                if (m.flags(i) and SyllableMatches.TAPPED.inv() == 0 && Syllables.split(Syllables.spelling(m.syllable(i))) != null) found.merge(m.syllable(i), length, ::maxOf)
+            }
         }
         val first = best[at]
         val order = found.keys.sortedWith(
             compareByDescending<Int> { it == first }.thenByDescending { found.getValue(it) }.thenByDescending { weights[it] },
         )
         // a letter typed as itself offers itself alone
-        val keys = if (input[at] in T9Segmenter.FIXED) input[at].lowercase() else letters.letters(input[at])
+        val digit = T9Segmenter.digitOf(input[at])
+        val keys = if (input[at] in T9Segmenter.FIXED) input[at].lowercase() else letters.letters(digit)
         val initials = keys.filter { it in INITIAL_LETTERS }.map { it.toString() }
-        show((order.map { Syllables.spelling(it) } + initials).take(Action.Syllable.MAX), at)
+        // a key pressed again: the letter it came to stands for all its presses, the others for the first
+        var run = 1
+        while (at + run < input.length && input[at + run] == T9Segmenter.again(digit)) run++
+        val cameTo = if (run > 1 && keys.isNotEmpty()) keys[(run - 1) % keys.length].toString() else null
+        val shown = (order.map { Syllables.spelling(it) } + initials).take(Action.Syllable.MAX)
+        show(shown, at, shown.map { s -> found.entries.firstOrNull { Syllables.spelling(it.key) == s }?.value ?: if (s == cameTo) run else 1 })
     }
 
     /**
@@ -98,27 +110,31 @@ internal class NineKeys(private val data: PinyinData, private val letters: NineK
         if (of != Action.Syllable.ANY && of != id) return false
         val spelling = offered.getOrNull(index) ?: return false
         val at = offeredAt
+        val was = input.substring(at, at + offeredPresses[index])
+        input.replace(at, at + was.length, spelling)
+        // the presses may have been more than its letters: a run of a key pressed again one
         val end = at + spelling.length
-        val was = input.substring(at, end)
-        input.replace(at, end, spelling)
         val added = end == input.length || input[end] != SyllableGraph.SEPARATOR
         if (added) input.insert(end, SyllableGraph.SEPARATOR)
-        taken += Taken(at, was, added, input.toString())
+        taken += Taken(at, was, spelling.length, added, input.toString())
         return true
     }
 
     /**
-     * Puts [c] into [input] as a letter typed as itself ([Action.Letter]), upper case: in place
-     * of the last key if [again] and it is the same key (a digit or such a letter) after
-     * [picked], what is picked already; else after it. Again with no such key (a candidate
+     * Puts [c] into [input] as a letter typed as itself ([Action.Letter]), upper case, after the
+     * last key; but [again] after the same key's digit after [picked], what is picked already, a
+     * press of its own ([T9Segmenter.again]: the decoder reads the run as keys or as the letter it
+     * came to), and after the same letter typed as itself, in its place. Again with no such key (a candidate
      * picked in between, which the keyboard did not see) it is its key, any of its letters, as a
      * press after a pause. False for what is no letter.
      */
     fun letter(input: StringBuilder, c: Char, again: Boolean, picked: Int): Boolean {
         if (c !in 'a'..'z') return false
         val last = input.length - 1
-        val same = last >= picked && T9Segmenter.isKey(input[last]) && letters.sameKey(input[last], c)
+        val same = last >= picked && T9Segmenter.isKey(input[last]) && letters.sameKey(T9Segmenter.digitOf(input[last]), c)
         when {
+            // a press of its own, the decoder to read the run as keys or as the letter it came to
+            again && same && input[last] !in T9Segmenter.FIXED -> input.append(T9Segmenter.again(T9Segmenter.digitOf(input[last])))
             again && same -> input.setCharAt(last, c.uppercaseChar())
             // which of its keys was pressed is not told: the letter itself where it is on more than one
             again -> input.append(if (letters.keysOf(c).length == 1) letters.key(c) else c.uppercaseChar())
@@ -136,9 +152,8 @@ internal class NineKeys(private val data: PinyinData, private val letters: NineK
         // the input itself, not its length: a letter typed as itself replaces the last key in place
         if (last == null || last.then != input.toString()) return -1
         taken.removeAt(taken.size - 1)
-        val end = last.at + last.was.length
-        input.replace(last.at, end, last.was)
-        if (last.added) input.deleteCharAt(end)
+        input.replace(last.at, last.at + last.length, last.was)
+        if (last.added) input.deleteCharAt(last.at + last.was.length)
         return last.at
     }
 

@@ -37,6 +37,7 @@ class PinyinSessionT9Test {
                 .unigram("高", -3f, 0f)
                 .unigram("你好", -2.5f, 0f)
                 .unigram("米糕", -5f, 0f)
+                .unigram("爸爸", -4f, 0f)
                 .entry("你", syl("ni"))
                 .entry("米", syl("mi"))
                 .entry("哦", syl("o"))
@@ -44,6 +45,7 @@ class PinyinSessionT9Test {
                 .entry("高", syl("gao"))
                 .entry("你好", syl("ni", "hao"))
                 .entry("米糕", syl("mi", "gao"))
+                .entry("爸爸", syl("ba", "ba"))
                 .build().toByteArray(),
         ),
     )
@@ -52,6 +54,13 @@ class PinyinSessionT9Test {
         PinyinSession(data, T9Segmenter(abbreviations = false), spell = true, user = user, prediction = false, refiner = refiner)
 
     private fun Session.type(keys: String): Snapshot = keys.map { apply(Key(it)) }.last()
+
+    // [digit] pressed [times] fast, as the keyboard sends it: the key, then each press again its next letter
+    private fun Session.press(digit: Char, times: Int, keys: NineKeyLetters = NineKeyLetters.STANDARD): Snapshot {
+        var s = apply(Key(digit))
+        for (n in 1 until times) s = apply(Action.Letter(keys.letters(digit)[n % keys.letters(digit).length], again = true))
+        return s
+    }
 
     @Test
     fun digitsShowAsThePinyinOfTheBestReading() {
@@ -99,16 +108,19 @@ class PinyinSessionT9Test {
     }
 
     @Test
-    fun aKeyPressedAgainIsTheLetterItTypesThere() {
+    fun aRunOfAKeyPressedAgainIsReadAsKeysAndAsTheLetterItCameTo() {
+        // 6 four times fast: m, as no four keys read
         val session = session()
-        session.type("6")
-        // 6 four times fast: m, in place of the 6
-        val m = session.apply(Action.Letter('m', again = true))
-        assertEquals(listOf("m"), m.syllables.filter { it.length == 1 })
+        val m = session.press('6', 4)
+        assertTrue("m" in m.syllables)
         val s = session.type("4426")
         assertEquals("米糕", s.candidates[0])
         assertEquals("mi gao", s.preedit)
-        assertTrue(s.syllables.none { it == "ni" })
+        // 2 four times fast at a pace of keys, not letters: baba, which was 'a' (B, 2026-10-10)
+        val baba = session().press('2', 4)
+        assertEquals("爸爸", baba.candidates[0])
+        assertEquals("ba ba", baba.preedit)
+        assertTrue(baba.preedit.all { it in 'a'..'z' || it == ' ' })
     }
 
     @Test
@@ -164,8 +176,7 @@ class PinyinSessionT9Test {
     @Test
     fun aSyllableTakenOverALetterTypedAsItselfGivesItBack() {
         val session = session()
-        session.type("6")
-        session.apply(Action.Letter('m', again = true))
+        session.press('6', 4)
         session.type("4")
         val taken = session.apply(Action.Syllable(0))
         assertEquals("mi", taken.preedit)
@@ -180,9 +191,10 @@ class PinyinSessionT9Test {
     fun theKeyboardSendsALetterTypedAsItselfPastThePlane() {
         val keyboard = Keyboard(session(), nineKeys = true)
         keyboard.onEvent(EngineEvent.CHAR, '6'.code)
-        val m = keyboard.onEvent(EngineEvent.CHAR, Keyboard.letterKey('m', again = true))
-        assertTrue(m.handled)
-        assertTrue(m.syllables.none { it == "n" })
+        val n = keyboard.onEvent(EngineEvent.CHAR, Keyboard.letterKey('n', again = true))
+        assertTrue(n.handled)
+        // 6 pressed again: the run read as n too
+        assertTrue("n" in n.syllables)
         assertTrue(Keyboard.letterKey('z', again = true) in Keyboard.LETTERS && Keyboard.letterKey('a', again = false) == Keyboard.LETTERS.first)
         // a keyboard of letters has no use for them
         val letters = Keyboard(session(), nineKeys = false)
@@ -330,9 +342,7 @@ class PinyinSessionT9Test {
         // 6's letters offered as initials, h with them
         assertTrue(s.syllables.containsAll(listOf("m", "n", "h")))
         // pressed again soon, a letter of the same key goes in place of the last
-        val session = session()
-        session.apply(Key('6'))
-        val h = session.apply(Action.Letter('h', again = true))
+        val h = session().press('6', 4, keys)
         assertEquals("h", h.preedit)
     }
 

@@ -546,7 +546,7 @@ class PinyinSession(
         // digits no reading took stay as typed
         val shown = lastRead.restShown.filter { it != ' ' && it != SyllableGraph.SEPARATOR }
         // a letter typed as itself (九键) is upper case in the input; no other input has one
-        val rest = if (nineKeys == null || shown.isEmpty()) input.substring(readFrom()).lowercase() else shown
+        val rest = if (nineKeys == null || shown.isEmpty()) T9Segmenter.plain(input.substring(readFrom())).lowercase() else shown
         val text = pieces.joinToString("") { it.text } + rest
         // text as typed is no words: nothing to go on from
         dropContext()
@@ -742,11 +742,11 @@ class PinyinSession(
                 nineKeys?.note((listOf(from) + reading.ends.dropLast(1)).map { readFrom() + it }, reading.syllables)
                 raw = false
             } else if (raw) {
-                parts[parts.size - 1] = parts.last() + graph.text(from, to).lowercase()
+                parts[parts.size - 1] = parts.last() + T9Segmenter.plain(graph.text(from, to)).lowercase()
                 ends[ends.size - 1] = to
             } else {
                 // as rest in commitRaw
-                parts += graph.text(from, to).lowercase()
+                parts += T9Segmenter.plain(graph.text(from, to)).lowercase()
                 ends += to
                 raw = true
             }
@@ -768,6 +768,8 @@ class PinyinSession(
         // digits say nothing: the syllable read, a fuzzy one too (9664 as zhong with z for zh), and
         // of one still being typed as many letters as were typed
         !segmenter.typesLetters && graph.kind(edge) == Kind.SYLLABLE -> Syllables.spelling(syllable)
+        // a run of a key pressed again may be one letter
+        segmenter is T9Segmenter -> Syllables.spelling(syllable).take(segmenter.lettersOf(graph.text(edge), syllable))
         !segmenter.typesLetters -> Syllables.spelling(syllable).take(graph.text(edge).length)
         spell && graph.kind(edge) == Kind.SYLLABLE -> Syllables.spelling(syllable)
         else -> graph.text(edge)

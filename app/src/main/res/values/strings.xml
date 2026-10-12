@@ -445,7 +445,7 @@
     <string name="im_prediction">Suggest the next word</string>
     <string name="im_prediction_summary">After a word is typed, offer the words likely to follow it</string>
     <string name="t9_multi_tap">Multi-tap letters</string>
-    <string name="t9_multi_tap_summary">A key pressed again quickly is its next letter; after a pause, a key of its own</string>
+    <string name="t9_multi_tap_summary">A key pressed again quickly may also be its next letter (twice, the second); the context decides, so typing fast works as ever</string>
     <string name="t9_multi_tap_off">Off</string>
     <string name="t9_multi_tap_fast">Fast (0.4 s)</string>
     <string name="t9_multi_tap_medium">Medium (0.6 s)</string>

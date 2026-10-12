@@ -57,9 +57,9 @@ import splitties.views.existingOrNewId
  * A syllable is sent to the engine as a character of [Keyboard.SYLLABLES], saying which of
  * which list it is ([Keyboard.syllableKey]).
  *
- * A digit key pressed again soon is its next letter ([MultiTap], as [AppPrefs.Keyboard.t9MultiTap]
- * sets), sent as a character of [Keyboard.LETTERS] in place of the last ([Keyboard.letterKey]);
- * its preview shows the letter. Its long press offers the digit and its letters, a letter chosen
+ * A digit key pressed again soon may be its next letter ([MultiTap], as [AppPrefs.Keyboard.t9MultiTap]
+ * sets), sent as a character of [Keyboard.LETTERS] ([Keyboard.letterKey]), which the engine reads
+ * as a press of its own, the run as keys or as that letter; its preview shows the letter. Its long press offers the digit and its letters, a letter chosen
  * typed as itself after what is typed.
  */
 @SuppressLint("ViewConstructor")

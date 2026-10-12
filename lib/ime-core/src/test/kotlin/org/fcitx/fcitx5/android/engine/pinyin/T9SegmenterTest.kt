@@ -165,4 +165,24 @@ class T9SegmenterTest {
         assertFalse(empty.reads('3'))
         assertTrue(empty.reads('2'))
     }
+
+    /** 八点开会 at a pace of 0.4 s a key came out 备案拉回: a run read only as the letter it came to (B). */
+    @Test
+    fun aRunOfAKeyPressedAgainReadsAsKeysAndAsTheLetterItCameTo() {
+        val a2 = T9Segmenter.again('2')
+        val a4 = T9Segmenter.again('4')
+        // 7 then 4 4 fast: shi as keys, or s and h on the way to sha, shang
+        val shi = segmenter.segment("74$a4")
+        assertTrue("shi" in shi.read(0, 3))
+        assertTrue("shang" in shi.read(0, 3, Kind.PARTIAL) + shi.read(0, 3, Kind.EXTENDED))
+        // 2 four times fast: baba as keys, a run going on past a syllable read as keys alone
+        val baba = segmenter.segment("2$a2$a2$a2")
+        assertTrue("ba" in baba.read(0, 2) && "ba" in baba.read(2, 4))
+        // or the letter it came to, round to a again: 啊 whole
+        assertTrue("a" in baba.read(0, 4))
+        assertEquals(2, segmenter.lettersOf("74$a4", Syllables.id("shang")))
+        assertEquals(3, segmenter.lettersOf("74$a4", Syllables.id("shi")))
+        assertEquals("744", T9Segmenter.plain("74$a4"))
+        assertTrue(T9Segmenter.isKey(a4) && T9Segmenter.digitOf(a4) == '4')
+    }
 }

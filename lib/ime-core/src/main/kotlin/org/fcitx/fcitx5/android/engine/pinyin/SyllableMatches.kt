@@ -19,6 +19,9 @@ class SyllableMatches internal constructor(private val syllables: IntArray, priv
 
     fun flags(i: Int): Int = flags[i]
 
+    /** These with [flag] on each. */
+    internal fun with(flag: Int) = SyllableMatches(syllables, IntArray(size) { flags[it] or flag })
+
     /** @return the index of [syllable], or -1 */
     fun indexOf(syllable: Int): Int = syllables.binarySearch(syllable).let { if (it >= 0) it else -1 }
 
@@ -39,6 +42,9 @@ class SyllableMatches internal constructor(private val syllables: IntArray, priv
         /** A letter slipped onto the key next to it: `nihap` for nihao. */
         const val NEIGHBOUR = 8
 
+        /** A run of a key pressed again (九键 连按) read as the letter it came to, not as that many keys. */
+        const val TAPPED = 16
+
         internal val EMPTY = SyllableMatches(IntArray(0), IntArray(0))
 
         private fun describe(flags: Int) = buildString {
@@ -46,6 +52,7 @@ class SyllableMatches internal constructor(private val syllables: IntArray, priv
             if (flags and TYPO != 0) append('!')
             if (flags and COMPLETION != 0) append('…')
             if (flags and NEIGHBOUR != 0) append('?')
+            if (flags and TAPPED != 0) append('*')
         }
     }
 }

@@ -316,19 +316,18 @@ class FcitxTest {
     }
 
     /**
-     * 连按 on the nine keys: the keyboard sends a key pressed again as a character past the BMP
-     * (Keyboard.letterKey), which fcitx must hand the engine whole. 6 then m in its place is mi
-     * alone, never ni.
+     * A letter chosen from a nine-key's long press: the keyboard sends it as a character past the
+     * BMP (Keyboard.letterKey), which fcitx must hand the engine whole. m then 4 is mi alone,
+     * never ni.
      */
     @Test
     fun aLetterTypedAsItselfOnTheNineKeysReachesTheEngine(): Unit = runBlocking {
         fcitx.setEnabledIme(arrayOf(Engines.T9))
-        sendString("6")
-        fcitx.sendKey(0x01000000 + Keyboard.letterKey('m', again = true))
+        fcitx.sendKey(0x01000000 + Keyboard.letterKey('m', again = false))
         sendString("4")
         awaitQuiet()
         val candidates = fcitx.getCandidates(0, 32).map { it.text }
-        Timber.i("candidates for 6, m, 4 are $candidates")
+        Timber.i("candidates for m, 4 are $candidates")
         Assert.assertTrue("米 among $candidates", "米" in candidates)
         Assert.assertFalse("no 你 among $candidates", "你" in candidates)
         fcitx.reset()

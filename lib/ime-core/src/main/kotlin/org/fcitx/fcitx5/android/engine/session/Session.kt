@@ -97,9 +97,10 @@ sealed class Action {
     }
 
     /**
-     * Types [letter] as itself, not as any letter of its key: on the nine keys, a key pressed
-     * again soon (连按) or a letter chosen from its long press. [again]: in place of the last
-     * key, if that was the same key and is not yet picked; else after it.
+     * Types [letter] as itself, not as any letter of its key: on the nine keys, a letter chosen
+     * from a key's long press. [again]: the key pressed again soon (连按), [letter] the one the run
+     * came to; after the same key not yet picked a press of its own, read as a key or with the run
+     * as the letter, the context to pick (see [org.fcitx.fcitx5.android.engine.pinyin.T9Segmenter]).
      */
     data class Letter(val letter: Char, val again: Boolean = false) : Action()
 

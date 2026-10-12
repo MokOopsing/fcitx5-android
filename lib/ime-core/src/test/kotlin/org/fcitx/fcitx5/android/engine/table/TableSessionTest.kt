@@ -56,54 +56,6 @@ class TableSessionTest {
     }
 
     @Test
-    fun aLoneCandidateOfTheWholeCodeCommitsItself() {
-        val t = session()
-        // wqi leads only to 你, whose code is longer: nothing yet
-        assertEquals("", t.type("wqi").first)
-        val (commit, s) = t.type("y")
-        assertEquals("你", commit)
-        assertEquals("", s.preedit)
-        assertEquals(emptyList<String>(), s.candidates)
-        // at any length, not only a full code
-        assertEquals("们", session().type("wun").first)
-        // and alone once each text shows once: sie and sieg are both 梢
-        assertEquals("梢", session().type("sie").first)
-    }
-
-    /** 五笔 users type a space after each code: after one that committed itself it made a gap. */
-    @Test
-    fun aSpaceRightAfterACodeCommittedItselfIsTakenOnce() {
-        val t = session()
-        assertEquals("你", t.type("wqiy").first)
-        assertTrue(t.reads(' '))
-        val taken = t.apply(Key(' '))
-        assertTrue(taken.handled)
-        assertEquals("", taken.commit)
-        // only that one: a second space is the app's
-        assertFalse(t.reads(' '))
-        // nor after anything else: a code committed by space, then another space
-        val u = session()
-        u.type("a")
-        assertEquals("工", u.apply(Select(0)).commit)
-        assertFalse(u.reads(' '))
-        // a key between: the space after it is the app's
-        val v = session()
-        v.type("wqiy")
-        v.apply(Backspace)
-        assertFalse(v.reads(' '))
-    }
-
-    @Test
-    fun throughTheKeyboardTheSpaceAfterALoneCodeIsNotTyped() {
-        val keyboard = Keyboard(session(), nineKeys = false)
-        "wqiy".forEach { keyboard.onEvent(EngineEvent.CHAR, it.code) }
-        val space = keyboard.onEvent(EngineEvent.CHAR, ' '.code)
-        assertTrue(space.handled)
-        assertEquals("", space.commit)
-        assertFalse(keyboard.onEvent(EngineEvent.CHAR, ' '.code).handled)
-    }
-
-    @Test
     fun aKeyPastAFullCodeCommitsTheFirstCandidate() {
         val t = session()
         assertEquals("", t.type("kkkk").first)

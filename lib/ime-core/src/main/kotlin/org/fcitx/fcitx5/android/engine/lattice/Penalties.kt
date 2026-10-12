@@ -53,4 +53,11 @@ data class Penalties(
      * model decides between them.
      */
     val nasal: Float = -2f,
+    /**
+     * A run of a key pressed again (九键 连按) read as the letter it came to, not as that many keys.
+     * ime-eval t9 sets, 2026-10-12, each repeat fast: 0 read 2.7 to 4 points fewer right than 连按
+     * off, -2 as many (86.1, 51.2, 48.5 against 86.1, 51.5, 48.7); typed letter by letter, -2 read
+     * more right than off (89.4, 58.8), -3 far fewer (80.1, 48.0).
+     */
+    val tapped: Float = -2f,
 )

@@ -193,7 +193,7 @@ class Keyboard(private val session: Session, private val nineKeys: Boolean, priv
          */
         val LETTERS = 0xF0000 until 0xF0000 + 2 * ALPHABET
 
-        /** The character for [letter] typed as itself, [again] in place of the last key: see [Action.Letter]. */
+        /** The character for [letter] typed as itself, [again] a key pressed again soon: see [Action.Letter]. */
         fun letterKey(letter: Char, again: Boolean): Int {
             require(letter in 'a'..'z') { "letter $letter" }
             return LETTERS.first + (if (again) ALPHABET else 0) + (letter - 'a')
