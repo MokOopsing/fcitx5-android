@@ -120,20 +120,9 @@ class OfflineTransducerModel::Impl {
         env_(ORT_LOGGING_LEVEL_ERROR),
         sess_opts_(GetSessionOptions(config)),
         allocator_{} {
-    {
-      auto buf = ReadFile(mgr, config.transducer.encoder_filename);
-      InitEncoder(buf.data(), buf.size());
-    }
-
-    {
-      auto buf = ReadFile(mgr, config.transducer.decoder_filename);
-      InitDecoder(buf.data(), buf.size());
-    }
-
-    {
-      auto buf = ReadFile(mgr, config.transducer.joiner_filename);
-      InitJoiner(buf.data(), buf.size());
-    }
+    Load(mgr, config.transducer.encoder_filename, &Impl::InitEncoder);
+    Load(mgr, config.transducer.decoder_filename, &Impl::InitDecoder);
+    Load(mgr, config.transducer.joiner_filename, &Impl::InitJoiner);
   }
 
   std::pair<Ort::Value, Ort::Value> RunEncoder(Ort::Value features,
@@ -226,6 +215,50 @@ class OfflineTransducerModel::Impl {
   }
 
  private:
+  template <typename Manager>
+  void Load(Manager *mgr, const std::string &filename,
+            void (Impl::*init)(void *, size_t)) {
+    auto buf = ReadFile(mgr, filename);
+    (this->*init)(buf.data(), buf.size());
+  }
+
+#if __ANDROID_API__ >= 9
+  // youmo: an ORT-format model (".ort") is used where it lies, its asset kept
+  // open as long as the session. Stored uncompressed, the asset is mapped from
+  // the APK: pages the system can drop and read again, where a copy on the
+  // heap, onnxruntime's tensors made of it and their prepacked weights took
+  // some 250 MB of the encoder's 155. Prepacking copies the weights, so it is
+  // off; on the int8 encoder it saved nothing measurable.
+  void Load(AAssetManager *mgr, const std::string &filename,
+            void (Impl::*init)(void *, size_t)) {
+    if (!EndsWith(filename, ".ort")) {
+      Load<AAssetManager>(mgr, filename, init);
+      return;
+    }
+    Asset asset(AAssetManager_open(mgr, filename.c_str(), AASSET_MODE_BUFFER),
+                AAsset_close);
+    const void *data = asset ? AAsset_getBuffer(asset.get()) : nullptr;
+    if (!data) {
+      SHERPA_ONNX_LOGE("Cannot map '%s'", filename.c_str());
+      SHERPA_ONNX_EXIT(-1);
+    }
+    if (AAsset_isAllocated(asset.get())) {
+      // compressed in the APK: still safe, the copy is the asset's, but on the heap
+      SHERPA_ONNX_LOGE("'%s' is compressed, so not mapped", filename.c_str());
+    }
+    if (assets_.empty()) {
+      sess_opts_.AddConfigEntry("session.use_ort_model_bytes_directly", "1");
+      sess_opts_.AddConfigEntry("session.use_ort_model_bytes_for_initializers",
+                                "1");
+      sess_opts_.AddConfigEntry("session.disable_prepacking", "1");
+    }
+    size_t length = AAsset_getLength(asset.get());
+    // kept before the session is made on it, so that it outlives the session
+    assets_.push_back(std::move(asset));
+    (this->*init)(const_cast<void *>(data), length);
+  }
+#endif
+
   void InitEncoder(void *model_data, size_t model_data_length) {
     if (model_data) {
       encoder_sess_ = std::make_unique<Ort::Session>(
@@ -336,6 +369,13 @@ class OfflineTransducerModel::Impl {
   Ort::Env env_;
   Ort::SessionOptions sess_opts_;
   Ort::AllocatorWithDefaultOptions allocator_;
+
+#if __ANDROID_API__ >= 9
+  // youmo: the mapped models, declared before the sessions that read them so
+  // that they are closed after them
+  using Asset = std::unique_ptr<AAsset, decltype(&AAsset_close)>;
+  std::vector<Asset> assets_;
+#endif
 
   std::unique_ptr<Ort::Session> encoder_sess_;
   std::unique_ptr<Ort::Session> decoder_sess_;

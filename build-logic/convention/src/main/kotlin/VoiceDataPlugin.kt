@@ -48,8 +48,12 @@ import javax.inject.Inject
  *   apart by spaces as the dict tool's `hotwords` writes them (HotwordSpelling.spelled), and the
  *   model's BPE vocabulary, which sherpa-onnx encodes them with, read out of its SentencePiece model.
  *
+ * The transducer goes in as onnxruntime's own format (`.ort`), converted from sherpa-onnx's export
+ * by the release `voice-models-*` of this fork (its manifest.txt says how): the recognizer uses it
+ * where it lies in the APK, mapped, rather than reading it onto the heap (lib/sherpa-onnx README).
+ *
  * Downloaded once, SHA-256 checked (DownloadTask), into the voice variants'
- * assets under `voice/`, uncompressed: read whole into memory as the recognizer loads them.
+ * assets under `voice/`, uncompressed: mapped, or for the VAD read whole, as the recognizer loads them.
  */
 class VoiceDataPlugin : Plugin<Project> {
 
@@ -61,13 +65,16 @@ class VoiceDataPlugin : Plugin<Project> {
         private const val MODEL_URL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/$MODEL_NAME.tar.bz2"
         private const val MODEL_SHA256 = "5d02c36d7b44e886b7c8f0d8e051f8713acab96c264bb6ef9e718be39a6a2224"
 
-        /** the archive's files and the names they are given in the assets */
-        internal val MODEL_FILES = mapOf(
-            "encoder-epoch-99-avg-1.int8.onnx" to "encoder.onnx",
-            "decoder-epoch-99-avg-1.onnx" to "decoder.onnx",
-            "joiner-epoch-99-avg-1.int8.onnx" to "joiner.onnx",
-            "tokens.txt" to "tokens.txt",
-        )
+        /** the archive's files the assets take as they are; its bpe.model is read for bpe.vocab */
+        internal val MODEL_FILES = listOf("tokens.txt")
+
+        // the archive's encoder, decoder and joiner converted by onnxruntime 1.28's
+        // convert_onnx_models_to_ort, the version the recognizer is built with
+        private const val ORT_RELEASE = "voice-models-20261012"
+        private const val ORT_URL = "https://github.com/Sraw/youmo-ime/releases/download/$ORT_RELEASE/x-asr-ort.tar.zst"
+        private const val ORT_SHA256 = "ab0d8bdc6076c5fb48e725fafd2066ea59a1a605a05d3ea8e84a79e885b53929"
+        internal const val ORT_DIR = "x-asr-ort"
+        internal val ORT_FILES = listOf("encoder.ort", "decoder.ort", "joiner.ort")
         private const val VAD_URL = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx"
         private const val VAD_SHA256 = "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"
     }
@@ -88,6 +95,16 @@ class VoiceDataPlugin : Plugin<Project> {
             cmake.set(target.sdkCmake)
             outputDir.set(target.layout.buildDirectory.dir("voice-sources"))
         }
+        val ortArchive = target.tasks.register<DownloadTask>("downloadVoiceOrt") {
+            url.set(ORT_URL)
+            sha256.set(ORT_SHA256)
+            outputFile.set(downloadsDir.file("$ORT_RELEASE-x-asr-ort.tar.zst"))
+        }
+        val ortDir = target.tasks.register<ExtractTask>("extractVoiceOrt") {
+            archive.set(ortArchive.flatMap { it.outputFile })
+            cmake.set(target.sdkCmake)
+            outputDir.set(target.layout.buildDirectory.dir("voice-ort"))
+        }
         val vad = target.tasks.register<DownloadTask>("downloadVoiceVad") {
             url.set(VAD_URL)
             sha256.set(VAD_SHA256)
@@ -102,6 +119,7 @@ class VoiceDataPlugin : Plugin<Project> {
         }
         val assets = target.tasks.register<CopyVoiceModels>("copyVoiceModels") {
             model.set(modelDir.flatMap { it.outputDir })
+            ort.set(ortDir.flatMap { it.outputDir })
             this.vad.set(vad.flatMap { it.outputFile })
             this.hotwords.set(hotwords.flatMap { it.outputFile })
             outputDir.set(target.layout.buildDirectory.dir("generated/voice-assets"))
@@ -112,7 +130,7 @@ class VoiceDataPlugin : Plugin<Project> {
             dependencies.add(target.dependencies.project(mapOf("path" to ":lib:sherpa-onnx")))
         }
         target.extensions.configure<ApplicationExtension> {
-            androidResources.noCompress += ".onnx"
+            androidResources.noCompress += listOf(".onnx", ".ort")
         }
         components.onVariants(components.selector().withFlavor(DIMENSION to FLAVOR)) { variant ->
             variant.sources.assets?.addGeneratedSourceDirectory(assets, CopyVoiceModels::outputDir)
@@ -151,12 +169,16 @@ class VoiceDataPlugin : Plugin<Project> {
         }
     }
 
-    /** The model and its tokens, the VAD and the hotwords, as `voice/` in the assets. */
+    /** The model (ORT) and its tokens, the VAD and the hotwords, as `voice/` in the assets. */
     @DisableCachingByDefault(because = "linking is quicker than the cache would be")
     abstract class CopyVoiceModels : DefaultTask() {
         @get:InputDirectory
         @get:PathSensitive(PathSensitivity.RELATIVE)
         abstract val model: DirectoryProperty
+
+        @get:InputDirectory
+        @get:PathSensitive(PathSensitivity.RELATIVE)
+        abstract val ort: DirectoryProperty
 
         @get:InputFile
         @get:PathSensitive(PathSensitivity.NAME_ONLY)
@@ -175,7 +197,8 @@ class VoiceDataPlugin : Plugin<Project> {
             out.deleteRecursively()
             out.mkdirs()
             val dir = model.get().asFile.resolve(MODEL_NAME)
-            for ((name, asset) in MODEL_FILES) link(dir.resolve(name), out.resolve(asset))
+            for (name in MODEL_FILES) link(dir.resolve(name), out.resolve(name))
+            for (name in ORT_FILES) link(ort.get().asFile.resolve(ORT_DIR).resolve(name), out.resolve(name))
             vad.get().asFile.copyTo(out.resolve("silero_vad.onnx"))
             out.resolve("bpe.vocab").writeText(vocabulary(dir.resolve("bpe.model").readBytes()))
             hotwords.get().asFile.copyTo(out.resolve("hotwords.txt"))

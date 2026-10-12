@@ -28,7 +28,10 @@ class VoiceDataPluginTest {
     fun theModelsAreLinkedIntoTheAssetsNotCopied() {
         val sources = folder.newFolder("voice-sources")
         val archive = sources.resolve(VoiceDataPlugin.MODEL_NAME).apply { mkdirs() }
-        for (name in VoiceDataPlugin.MODEL_FILES.keys) archive.resolve(name).writeText(name)
+        for (name in VoiceDataPlugin.MODEL_FILES) archive.resolve(name).writeText(name)
+        val ort = folder.newFolder("voice-ort")
+        val ortFiles = ort.resolve(VoiceDataPlugin.ORT_DIR).apply { mkdirs() }
+        for (name in VoiceDataPlugin.ORT_FILES) ortFiles.resolve(name).writeText(name)
         archive.resolve("bpe.model").writeBytes(sentencePieceModel("▁中", -1.5f))
         val vad = folder.newFile("silero_vad.onnx").apply { writeText("vad") }
         val hotwords = folder.newFile("hotwords.txt").apply { writeText("新 词\n") }
@@ -36,15 +39,15 @@ class VoiceDataPluginTest {
         val project = ProjectBuilder.builder().withProjectDir(folder.newFolder("app")).build()
         val task = project.tasks.register("copyVoiceModels", VoiceDataPlugin.CopyVoiceModels::class.java).get()
         task.model.set(sources)
+        task.ort.set(ort)
         task.vad.set(vad)
         task.hotwords.set(hotwords)
         task.outputDir.set(folder.root.resolve("voice-assets"))
         task.copy()
 
         val out = folder.root.resolve("voice-assets/voice")
-        for ((name, asset) in VoiceDataPlugin.MODEL_FILES) {
-            assertTrue(asset, Files.isSameFile(archive.resolve(name).toPath(), out.resolve(asset).toPath()))
-        }
+        for (name in VoiceDataPlugin.MODEL_FILES) assertTrue(name, Files.isSameFile(archive.resolve(name).toPath(), out.resolve(name).toPath()))
+        for (name in VoiceDataPlugin.ORT_FILES) assertTrue(name, Files.isSameFile(ortFiles.resolve(name).toPath(), out.resolve(name).toPath()))
         assertEquals("vad", out.resolve("silero_vad.onnx").readText())
         assertEquals("▁中\t-1.5\n", out.resolve("bpe.vocab").readText())
         // copied as the dict tool wrote it: its MainTest holds the spelling

@@ -173,9 +173,9 @@ object VoiceEngine {
         featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 80),
         modelConfig = OfflineModelConfig(
             transducer = OfflineTransducerModelConfig(
-                encoder = "$DIR/encoder.onnx",
-                decoder = "$DIR/decoder.onnx",
-                joiner = "$DIR/joiner.onnx",
+                encoder = "$DIR/encoder.ort",
+                decoder = "$DIR/decoder.ort",
+                joiner = "$DIR/joiner.ort",
             ),
             tokens = "$DIR/tokens.txt",
             numThreads = THREADS,

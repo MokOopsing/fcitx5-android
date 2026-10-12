@@ -27,6 +27,16 @@ upstream's AAR, so that it is ours to change.
 - **Hotwords graph:** `CreateStream(hotwords)` keeps the graph of the last hotwords it was given and
   returns it again for the same ones, rather than building the pack's hotwords into a new graph for
   each stream.
+- **Models mapped in place:** a transducer model in onnxruntime's ORT format (`.ort`) loaded from
+  the Android assets is not copied: its asset stays open, mapped from the APK (stored uncompressed),
+  and onnxruntime reads its weights where they lie (`session.use_ort_model_bytes_directly`,
+  `use_ort_model_bytes_for_initializers`). Prepacking copies the weights, so it is off
+  (`session.disable_prepacking`; with it on, onnxruntime crashes on bytes used in place). On redroid,
+  `VoiceEngineTest`'s native heap fell from 550 to 325 MB (median), 749 to 520 MB at the peak, and the
+  tests ran in 15 s rather than 20. The ORT files are the release `voice-models-*`
+  (`VoiceDataPlugin`); converted for x86 they give the evaluation sets' error rates exactly, and on
+  arm64 (onnxruntime 1.28 under qemu, as Neoverse N1 and N2) the ARM files' outputs equal the ONNX
+  models', prepacked or not.
 
 Each change is marked `youmo` in the source. Their C++ unit tests run on this machine with
 `lib/sherpa-onnx/host-test.sh`; the app's `VoiceEngineTest` covers them through the JNI.
