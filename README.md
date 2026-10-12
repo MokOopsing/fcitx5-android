@@ -57,8 +57,8 @@
 
 | 版本 | 内容 | 大小 |
 |---|---|---|
-| `text` 文字版 | 只有打字，只申请振动权限 | 约 260 MB（0.1.0 为 400 MB） |
-| `voice` 语音版 | 多了离线语音输入，多申请录音权限 | 约 440 MB（0.1.0 为 580 MB） |
+| `text` 文字版 | 只有打字，只申请振动权限 | 约 260 MB |
+| `voice` 语音版 | 多了离线语音输入，多申请录音权限 | 约 440 MB |
 
 - 需要 Android 6.0 以上的 64 位 ARM 手机（arm64-v8a），近几年的手机都是。
 - 安装包大，是因为语言模型、句子模型和词库都在包里，离线就能用；准确率优先于体积。
@@ -161,8 +161,8 @@ Builds are on [Releases](https://github.com/Sraw/youmo-ime/releases), two per re
 
 | Build | What | Size |
 |---|---|---|
-| `text` | Typing only; asks only for vibration | about 260 MB (0.1.0: 400 MB) |
-| `voice` | Adds offline voice input; asks for the microphone too | about 440 MB (0.1.0: 580 MB) |
+| `text` | Typing only; asks only for vibration | about 260 MB |
+| `voice` | Adds offline voice input; asks for the microphone too | about 440 MB |
 
 - Needs a 64-bit ARM phone (arm64-v8a) on Android 6.0 or later, as phones of the last several years are.
 - The APKs are large because the language models, sentence models and dictionary are inside, to work offline; accuracy comes before size.
