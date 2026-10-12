@@ -16,9 +16,10 @@ object Versions {
     const val defaultNDK = "28.0.13004108"
     const val defaultBuildTools = "36.1.0"
 
-    // NOTE: increase this value to bump version code
-    const val baseVersionCode = 11
-    const val baseVersionName = "0.1.3"
+    // NOTE: increase this value to bump version code. 12 for 0.1.0, the first release: past the
+    // test builds before it, which carried upstream's 11, so they update in place
+    const val baseVersionCode = 12
+    const val baseVersionName = "0.1.0"
 
     private val abiIds = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2, "x86" to 3, "x86_64" to 4)
     val supportedABIs = abiIds.keys

@@ -45,7 +45,7 @@
 
 ### 下载
 
-安装包会发布在 [Releases](https://github.com/Sraw/youmo-ime/releases)；在那之前请按下文自行构建。
+安装包在 [Releases](https://github.com/Sraw/youmo-ime/releases)：`text` 是纯文字版，`voice` 多了离线语音输入。也可以按下文自行构建。
 
 包名是 `io.github.sraw.youmo`，可以和上游的 Fcitx5（`org.fcitx.fcitx5.android`）同时安装。
 从本分支改名前的版本换过来，可以在旧版的“高级”设置里导出用户数据，再到新版里导入：设置、主题、剪贴板会带过来；
@@ -170,7 +170,7 @@ See `lib/ime-eval` (`release-report.sh`) for how these are measured.
 
 ### Download
 
-Builds will be published on [Releases](https://github.com/Sraw/youmo-ime/releases); until then, build it yourself as below.
+Builds are on [Releases](https://github.com/Sraw/youmo-ime/releases): `text` is text only, `voice` adds offline voice input. Or build it yourself as below.
 
 The package name is `io.github.sraw.youmo`, so it installs alongside upstream Fcitx5 (`org.fcitx.fcitx5.android`).
 To move from this fork's builds before the renaming, export your user data in the old app's Advanced settings and import it in the new one.

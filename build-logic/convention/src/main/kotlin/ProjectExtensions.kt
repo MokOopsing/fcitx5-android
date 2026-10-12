@@ -46,36 +46,22 @@ val Project.buildToolsVersion
 
 val Project.buildVersionName
     get() = ep("BUILD_VERSION_NAME", "buildVersionName") {
-        // the app's releases are tagged v<version>, or <version> as upstream's are; the data releases'
-        // tags (engine-data-*, words-* ...) are not versions
-        val described = runCmd("git describe --tags --long --match v[0-9]* --match [0-9]*", Versions.baseVersionName)
+        // the app's releases are tagged v<version>; the data releases' tags (engine-data-*, words-* ...)
+        // and upstream fcitx5-android's bare ones (0.1.3), which a clone that fetched it has, are not
+        val described = runCmd("git describe --tags --long --match v[0-9]*", "")
         appVersionName(described, Versions.baseVersionName)
     }
 
 /**
- * [described], as `git describe --long` gives it (`<tag>-<commits>-g<hash>`), or [base] where its
- * tag is a bare version below [base]: one of upstream fcitx5-android's releases (0.1.x), which a
- * clone has once it fetched upstream, and not this app's.
+ * The version [described] names, as `git describe --long` gives it (`v<version>-<commits>-g<hash>`):
+ * `0.1.0` at the tag, `0.1.0-5-gabc1234` past it; [base] with no tag.
  */
 internal fun appVersionName(described: String, base: String): String {
-    val tag = DESCRIBED.matchEntire(described)?.groupValues?.get(1) ?: return described
-    return if (!tag.startsWith("v") && isBelow(tag, base)) base else described
+    val (version, commits, hash) = DESCRIBED.matchEntire(described)?.destructured ?: return base
+    return if (commits == "0") version else "$version-$commits-g$hash"
 }
 
-private val DESCRIBED = Regex("(.+)-\\d+-g[0-9a-f]+")
-
-// by number, part by part: 0.1.10 is past 0.1.3; what follows the numbers (-rc1) is not compared
-private fun isBelow(version: String, base: String): Boolean {
-    fun parts(v: String) = v.takeWhile { it.isDigit() || it == '.' }.split('.').mapNotNull { it.toIntOrNull() }
-    val a = parts(version)
-    val b = parts(base)
-    for (i in 0 until maxOf(a.size, b.size)) {
-        val x = a.getOrElse(i) { 0 }
-        val y = b.getOrElse(i) { 0 }
-        if (x != y) return x < y
-    }
-    return false
-}
+private val DESCRIBED = Regex("v(.+)-(\\d+)-g([0-9a-f]+)")
 
 val Project.buildCommitHash
     get() = ep("BUILD_COMMIT_HASH", "buildCommitHash") {
