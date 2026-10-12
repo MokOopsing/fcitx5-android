@@ -17,6 +17,8 @@ import org.fcitx.fcitx5.android.core.CapabilityFlags
 @Suppress("ConstPropertyName", "TopLevelPropertyNaming")
 const val DeleteSurroundingFlag = "org.fcitx.fcitx5.android.DELETE_SURROUNDING"
 
+private val EMAIL_VARIATIONS = setOf(InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS, InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS)
+
 /** Decodes the bits of [EditorInfo] that [EditorKeyPolicy] and [EditingSession] act on. */
 fun EditorInfo.toEditorTraits(): EditorTraits {
     val type = inputType and InputType.TYPE_MASK_CLASS
@@ -25,6 +27,7 @@ fun EditorInfo.toEditorTraits(): EditorTraits {
     return EditorTraits(
         isRawKeyInput = type == InputType.TYPE_NULL,
         isUri = type == InputType.TYPE_CLASS_TEXT && variation == InputType.TYPE_TEXT_VARIATION_URI,
+        isEmail = type == InputType.TYPE_CLASS_TEXT && variation in EMAIL_VARIATIONS,
         isSensitive = CapabilityFlags.fromEditorInfo(this).hasAny(CapabilityFlag.PasswordOrSensitive),
         acceptsDeleteSurrounding =
             privateImeOptions?.split(',')?.any { it.trim() == DeleteSurroundingFlag } == true,

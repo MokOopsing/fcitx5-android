@@ -23,13 +23,15 @@ class SymbolKey(
     val symbol: String,
     percentWidth: Float = 0.1f,
     variant: Variant = Variant.Normal,
-    popup: Array<Popup>? = null
+    popup: Array<Popup>? = null,
+    viewId: Int = -1,
 ) : KeyDef(
     Appearance.Text(
         displayText = symbol,
         textSize = 23f,
         percentWidth = percentWidth,
-        variant = variant
+        variant = variant,
+        viewId = viewId,
     ),
     setOf(
         Behavior.Press(KeyAction.FcitxKeyAction(symbol))
@@ -38,6 +40,22 @@ class SymbolKey(
         Popup.Preview(symbol),
         Popup.Keyboard.Preset(symbol)
     )
+)
+
+/**
+ * What an address is made of ([AddressKeys]), committed as it is: through the engine `/` would
+ * be 、 in Chinese. Its long press offers [more], hidden till an address field shows it.
+ */
+class AddressKey(text: String, viewId: Int, percentWidth: Float = 0.1f, more: List<String> = emptyList()) : KeyDef(
+    Appearance.Text(
+        displayText = text,
+        textSize = if (text.length > 1) 16f else 23f,
+        percentWidth = percentWidth,
+        variant = Variant.Alternative,
+        viewId = viewId,
+    ),
+    setOf(Behavior.Press(KeyAction.CommitAction(text))),
+    if (more.isEmpty()) arrayOf(Popup.Preview(text)) else arrayOf(Popup.Preview(text), Popup.Keyboard.Explicit(more.toTypedArray())),
 )
 
 class AlphabetKey(

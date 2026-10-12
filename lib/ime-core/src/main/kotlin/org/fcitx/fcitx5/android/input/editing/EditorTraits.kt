@@ -19,6 +19,8 @@ data class EditorTraits(
     val isRawKeyInput: Boolean = false,
     /** A URL field. Browsers use the arrow keys there to accept an address-bar suggestion. */
     val isUri: Boolean = false,
+    /** An email address field. */
+    val isEmail: Boolean = false,
     /** A password, or a field that asks not to be learned from: its text is not read, not even to step over an emoji. */
     val isSensitive: Boolean = false,
     /**

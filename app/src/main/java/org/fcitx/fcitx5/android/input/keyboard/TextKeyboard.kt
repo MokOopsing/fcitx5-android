@@ -10,6 +10,7 @@ import android.view.View
 import androidx.annotation.Keep
 import androidx.core.view.ViewCompat
 import androidx.core.view.allViews
+import androidx.core.view.isVisible
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.InputMethodEntry
 import org.fcitx.fcitx5.android.core.KeyState
@@ -77,9 +78,13 @@ class TextKeyboard(
                 // and 123 open quick phrase and Unicode input, which have no key in this row
                 LayoutSwitchKey("符", PickerWindow.Key.Symbol.name, 0.12f, longPress = KeyAction.QuickPhraseAction),
                 LayoutSwitchKey("123", NumberKeyboard.Name, 0.12f, longPress = KeyAction.UnicodeAction),
-                SymbolKey(",", 0.1f, KeyDef.Appearance.Variant.Alternative),
+                SymbolKey(",", 0.1f, KeyDef.Appearance.Variant.Alternative, viewId = R.id.button_comma),
+                // an address field's in place of the comma and the full stop (AddressKeys), hidden else
+                AddressKey("/", R.id.button_slash),
+                AddressKey("@", R.id.button_at),
                 SpaceKey(),
-                SymbolKey(".", 0.1f, KeyDef.Appearance.Variant.Alternative),
+                SymbolKey(".", 0.1f, KeyDef.Appearance.Variant.Alternative, viewId = R.id.button_period),
+                AddressKey(AddressKeys.DOMAINS.first(), R.id.button_domain, 0.14f, AddressKeys.DOMAINS),
                 LanguageKey(),
                 ReturnKey()
             )
@@ -91,6 +96,21 @@ class TextKeyboard(
     val lang: ImageKeyView by lazy { findViewById(R.id.button_lang) }
     val space: TextKeyView by lazy { findViewById(R.id.button_space) }
     val `return`: ImageKeyView by lazy { findViewById(R.id.button_return) }
+
+    /** What the bottom row has either side of the space, as the field is: see [AddressKeys]. */
+    var address: AddressKeys = AddressKeys.NONE
+        set(value) {
+            field = value
+            showAddressKeys()
+        }
+
+    private fun showAddressKeys() {
+        findViewById<View>(R.id.button_comma).isVisible = address == AddressKeys.NONE
+        findViewById<View>(R.id.button_period).isVisible = address == AddressKeys.NONE
+        findViewById<View>(R.id.button_slash).isVisible = address == AddressKeys.URL
+        findViewById<View>(R.id.button_at).isVisible = address == AddressKeys.EMAIL
+        findViewById<View>(R.id.button_domain).isVisible = address != AddressKeys.NONE
+    }
 
     private val showLangSwitchKey = AppPrefs.getInstance().keyboard.showLangSwitchKey
 
@@ -110,6 +130,7 @@ class TextKeyboard(
     }
 
     init {
+        showAddressKeys()
         updateLangSwitchKey(showLangSwitchKey.getValue())
         showLangSwitchKey.registerOnChangeListener(showLangSwitchKeyListener)
         popupOverridesPref.registerOnChangeListener(popupOverridesListener)

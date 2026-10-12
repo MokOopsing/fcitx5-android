@@ -52,6 +52,13 @@ class EditorInfoTraitsTest {
         )
     }
 
+    @Test
+    fun eitherEmailVariationIsAnEmailField() {
+        assertTrue(info { inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS }.isEmail)
+        assertTrue(info { inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_WEB_EMAIL_ADDRESS }.isEmail)
+        assertFalse(info { inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI }.isEmail)
+    }
+
     /** A password, or a field that asks not to be learned from: what an arrow must not read. */
     @Test
     fun aPasswordOrAFieldNotToLearnFromIsSensitive() {
