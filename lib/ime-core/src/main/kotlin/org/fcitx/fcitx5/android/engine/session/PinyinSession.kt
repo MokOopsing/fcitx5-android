@@ -539,7 +539,8 @@ class PinyinSession(
 
     // a candidate with a coarse word the user never typed waits past the first page: see CoarseWords
     private fun coarseAfterFirstPage(listed: List<Candidate>): List<Candidate> {
-        val (held, rest) = listed.partition(::isCoarse)
+        val typedOnce = HashMap<String, Boolean>()
+        val (held, rest) = listed.partition { isCoarse(it, typedOnce) }
         return if (held.isEmpty()) listed else rest.take(pageSize) + held + rest.drop(pageSize)
     }
 
@@ -552,7 +553,7 @@ class PinyinSession(
 
     // one of its words coarse, or words in turn spelling one the user never typed: 射 then 精 is
     // 射精 as well, and once typed it is read as 射, 精 still
-    private fun isCoarse(c: Candidate): Boolean {
+    private fun isCoarse(c: Candidate, typedOnce: MutableMap<String, Boolean>): Boolean {
         val words = c.words
         for (i in words.indices) {
             if (coarse.unasked(words[i], user, data.vocabulary.size)) return true
@@ -560,7 +561,8 @@ class PinyinSession(
             for (j in i until words.size) {
                 if (words[j] == NO_WORD || run.length >= coarse.longest) break
                 run.append(text(words[j]))
-                if (j > i && coarse.has(run.toString()) && !typed(run.toString())) return true
+                val text = run.toString()
+                if (j > i && coarse.has(text) && !typedOnce.getOrPut(text) { typed(text) }) return true
             }
         }
         return false

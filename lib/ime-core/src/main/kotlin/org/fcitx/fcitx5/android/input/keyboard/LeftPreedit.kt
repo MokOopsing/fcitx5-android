@@ -9,28 +9,33 @@ package org.fcitx.fcitx5.android.input.keyboard
  * which the app may have put back: most make their activity anew on turning, and saved the field's
  * text, `ni hao` with it, before the input method heard of it. Taking it out reached the field
  * going away; the new one starts with it as plain text before the cursor. Found there just after,
- * it is taken out of that one.
+ * in the field of the same app and id, it is taken out of that one. An app that keeps its activity
+ * restarts input in the field it was taken out of, where text before the cursor is the user's.
  */
 class LeftPreedit(private val within: Long = WITHIN) {
 
     private var text = ""
+    private var field = ""
     private var at = 0L
 
-    /** The preedit [text] was taken out at [now] (milliseconds). */
-    fun dropped(text: String, now: Long) {
+    /** The preedit [text] was taken out of [field] (its app and id) at [now] (milliseconds). */
+    fun dropped(text: String, field: String, now: Long) {
         this.text = text
+        this.field = field
         at = now
     }
 
     /**
-     * How many characters before the cursor of a field starting at [now] are the preedit put back:
-     * [before] gives so many, the selection is [selStart]..[selEnd]. Asked once: a later field's
-     * text is its own.
+     * How many characters before the cursor of [field], a new field starting at [now], are the
+     * preedit put back: [before] gives so many, the selection is [selStart]..[selEnd]. Asked once
+     * in that field; another (the window's first, before its field is focused) leaves it.
      */
-    fun putBack(before: (Int) -> CharSequence?, selStart: Int, selEnd: Int, now: Long): Int {
+    fun putBack(field: String, before: (Int) -> CharSequence?, selStart: Int, selEnd: Int, now: Long): Int {
+        if (text.isEmpty() || now - at > within) text = ""
+        if (text.isEmpty() || field != this.field) return 0
         val left = text
         text = ""
-        if (left.isEmpty() || now - at > within || selStart != selEnd) return 0
+        if (selStart != selEnd) return 0
         return if (before(left.length)?.toString() == left) left.length else 0
     }
 

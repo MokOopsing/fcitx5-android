@@ -773,13 +773,21 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         selection.resetTo(attribute.initialSelStart, attribute.initialSelEnd)
         currentInputConnection?.let { ic ->
             val now = SystemClock.elapsedRealtime()
-            val put = leftPreedit.putBack({ ic.getTextBeforeCursor(it, 0) }, attribute.initialSelStart, attribute.initialSelEnd, now)
-            if (put > 0) ic.deleteSurroundingText(put, 0)
-            // the screen turned (resetStateForNewConfiguration) restarts input with no
-            // onFinishInputView: the engine's input goes below, the editor's preedit with it. Not
-            // over a selection: an app that set new text and restarted has no preedit, and would lose it
-            if (restarting && attribute.initialSelStart == attribute.initialSelEnd) {
-                dropPreedit(ic)?.let { leftPreedit.dropped(it, now) }
+            val field = "${attribute.packageName}/${attribute.fieldId}"
+            if (restarting) {
+                // the screen turned (resetStateForNewConfiguration) restarts input with no
+                // onFinishInputView: the engine's input goes below, the editor's preedit with it.
+                // Not over a selection: an app that set new text and restarted has no preedit
+                if (attribute.initialSelStart == attribute.initialSelEnd) {
+                    dropPreedit(ic)?.let { leftPreedit.dropped(it, field, now) }
+                }
+            } else {
+                val (start, end) = attribute.initialSelStart to attribute.initialSelEnd
+                val put = leftPreedit.putBack(field, { ic.getTextBeforeCursor(it, 0) }, start, end, now)
+                if (put > 0) {
+                    ic.deleteSurroundingText(put, 0)
+                    selection.resetTo(start - put, end - put)
+                }
             }
         }
         resetComposingState()
