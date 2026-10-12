@@ -14,13 +14,17 @@
 
 ### 特点
 
-- **自己的拼音引擎**：全拼、双拼（8 种方案），按整句解码；简拼、半截输入、相邻键打错的纠正；按前文给出联想。
+- **自己的拼音引擎**：全拼、双拼（8 种方案）、九键，按整句解码；简拼、半截输入、相邻键打错的纠正；按前文给出联想。
+  九键的快速重按同时按"几次按键"和"连按到的字母"两种读法解码，由语言模型选；按键字母可以自定义。
+- **新词**：近几年的新词由本项目自己从网页里找出、逐个校对后编进词典（显眼包、破防、红温……）。
+- **英文键盘**：自己的词表和语言模型，自动纠错（含常见拼错）、补全、下一个词的预测，会学习你打的词；拼音里也能直接打出 iPhone、APP 这类英文词。
 - **神经网络重排**：
   - 每次按键，4M 参数的模型（4.5 MB）在解码器的前两个整句里重排；
   - 停顿时，25M 参数的模型（25 MB）在前五个整句里精排；
   - 两个模型都会读输入框里光标前的文字作为上下文（密码框等敏感输入框不读）。
-- **越用越顺手**：用户词库、调频；可以导入词库，支持自定义短语；长按候选可以删除或置顶词组。
-- **码表输入**：五笔、仓颉、自然码、二笔等，用自己的码表引擎，也可以导入码表。
+- **越用越顺手**：用户词库、调频；可以导入词库（.txt、.dict、搜狗 .scel），支持自定义短语；长按候选可以删除或置顶词组。
+- **码表输入**：五笔、仓颉、自然码、二笔、五笔拼音，用自己的码表引擎，和拼音共用词库。
+- **离线语音输入**（`voice` 版）：按住说话，中英混说。
 - **不联网**：不申请网络权限，全部在手机上运行，输入的内容不会离开手机（[隐私政策](PRIVACY.md)）。
 - **其他**：Material 3 界面、可自定义长按字符、主题、剪贴板管理（复制链接时自动去掉跟踪参数）、表情与符号、实体键盘下的悬浮候选栏。
 
@@ -30,12 +34,14 @@
 
 | 测试集 | 解码器 | + 模型 |
 |---|---|---|
-| 主集（日常与书面句子） | 88.5 | 91.1 |
-| 聊天 | 69.5 | 73.3 |
-| 小集（246 句） | 64.2 | 68.7 |
-| 大集（取 1/10，22317 句） | 74.1 | 78.8 |
+| 主集（日常与书面句子，548 句） | 88.3 | 90.9 |
+| 网页（近期网页，模型没读过，3642 句） | 72.9 | 76.5 |
+| 聊天（留出的一半，1064 句） | 68.7 | 72.7 |
+| 对话（590 句） | 67.6 | 71.2 |
+| 新词（405 句） | 79.5 | 80.0 |
 
-测法见 `lib/ime-eval`。这些数是词典里还并着万象拼音的词时测的，去掉后待重测。
+2026-10-12 在提交 747991fb 上测，和 App 默认一样开着相邻键纠错。九键打主集，加模型后首选 88.8%。
+测法见 `lib/ime-eval`（`release-report.sh`）。
 
 ### 下载
 
@@ -53,6 +59,8 @@
   [Common Crawl](https://commoncrawl.org) 一次抓取里中文类聊天网页（遵守其使用条款）的 n-gram。混好的模型放在本仓库的
   `engine-data-*` release 里，由 `lib/ime-dict-tool/engine-data.sh` 在发版前生成。
   近几年的新词由本项目自己从该次抓取的中文网页里找出、逐个校对（`lexicon/`），打成词包发布在 `words-*` release 里，构建时编进词典的单独一层。
+- 英文词表与语言模型：从 [FineWeb](https://huggingface.co/datasets/HuggingFaceFW/fineweb) sample-10BT 的英文网页（ODC-By 1.0）统计，
+  发布在 `english-data-*` release 里，构建时编译。
 - 笔画表（拼音里以 `u` 开头按笔画找字）：来自 [rime-stroke](https://github.com/rime/rime-stroke)（LGPL-3.0-only），构建时编进安装包。
 - 句子模型：本项目自己训练（Apache-2.0）。先在 FineWeb-2 中文网页上训练语言模型，再用 Qwen3.5-9B-Base（Apache-2.0）给候选列表打分做蒸馏。
   文件发布在 [sentence-models-20261001](https://github.com/Sraw/youmo-ime/releases/tag/sentence-models-20261001)。
@@ -113,7 +121,7 @@ signKeyPwd=...
 ### 致谢
 
 [fcitx5-android](https://github.com/fcitx5-android/fcitx5-android)、[Fcitx5](https://github.com/fcitx/fcitx5)、[libime](https://github.com/fcitx/libime)、
-[fcitx5-chinese-addons](https://github.com/fcitx/fcitx5-chinese-addons)、[FineWeb-2](https://huggingface.co/datasets/HuggingFaceFW/fineweb-2)、[Common Crawl](https://commoncrawl.org)、[Qwen](https://github.com/QwenLM)。
+[fcitx5-chinese-addons](https://github.com/fcitx/fcitx5-chinese-addons)、[FineWeb](https://huggingface.co/datasets/HuggingFaceFW/fineweb)、[FineWeb-2](https://huggingface.co/datasets/HuggingFaceFW/fineweb-2)、[Common Crawl](https://commoncrawl.org)、[Qwen](https://github.com/QwenLM)。
 
 ---
 
@@ -131,13 +139,17 @@ small neural models rerank the n-gram decoder's whole-sentence candidates.
 
 ### Features
 
-- **Its own pinyin engine**: full pinyin and shuangpin (8 schemes), decoded as whole sentences; abbreviations, half-typed syllables and slipped neighbouring keys; next-word suggestions from what you have typed.
+- **Its own pinyin engine**: full pinyin, shuangpin (8 schemes) and nine keys, decoded as whole sentences; abbreviations, half-typed syllables and slipped neighbouring keys; next-word suggestions from what you have typed.
+  On nine keys a key pressed again quickly is decoded both as that many presses and as the letter it came to, and the language model picks; each key's letters can be changed.
+- **New words**: the words of the last few years, found in web pages and curated one by one by this project, are in the dictionary.
+- **English keyboard**: its own words and language model, autocorrection (common misspellings too), completions and next-word predictions, learning the words you type; Latin words such as iPhone and APP type straight from pinyin.
 - **Neural reranking**:
   - at every key, a 4M-parameter model (4.5 MB) reorders the decoder's best two sentences;
   - when you pause, a 25M-parameter model (25 MB) reorders the best five;
   - both read the text before the cursor in the input field as context (never in password or other sensitive fields).
-- **Learns as you type**: user words and frequencies, imported dictionaries, custom phrases; long-press a candidate to remove or pin it.
-- **Code tables**: Wubi, Cangjie, Ziranma, Erbi and more, on its own table engine; tables can be imported.
+- **Learns as you type**: user words and frequencies, imported dictionaries (.txt, .dict, Sogou .scel), custom phrases; long-press a candidate to remove or pin it.
+- **Code tables**: Wubi, Cangjie, Ziranma, Erbi and Wubi-Pinyin, on its own table engine, sharing the pinyin lexicon.
+- **Offline voice input** (the `voice` build): hold to talk, Chinese and English mixed.
 - **No network**: it asks for no network permission and runs entirely on the phone; what you type never leaves it ([privacy policy](PRIVACY.md)).
 - **More**: Material 3 interface, configurable long-press characters, themes, clipboard management (tracking parameters stripped from copied links), emoji and symbols, a floating candidate bar with a physical keyboard.
 
@@ -147,12 +159,14 @@ Top-1 accuracy (%). "Decoder" is the n-gram decoder alone; "+ models" adds the 4
 
 | Set | Decoder | + models |
 |---|---|---|
-| Main (everyday and written sentences) | 88.5 | 91.1 |
-| Chat | 69.5 | 73.3 |
-| Small set (246 sentences) | 64.2 | 68.7 |
-| Large set (a tenth, 22,317 sentences) | 74.1 | 78.8 |
+| Main (everyday and written sentences, 548) | 88.3 | 90.9 |
+| Web (recent pages the models never read, 3,642) | 72.9 | 76.5 |
+| Chat (the held-out half, 1,064) | 68.7 | 72.7 |
+| Dialog (590) | 67.6 | 71.2 |
+| New words (405) | 79.5 | 80.0 |
 
-See `lib/ime-eval` for how these are measured. They were measured while the dictionary still had rime_wanxiang's words in it, and are to be measured again.
+Measured on 2026-10-12 at commit 747991fb, with neighbouring-key correction on as in the app by default. On nine keys the main set is 88.8% first with the models.
+See `lib/ime-eval` (`release-report.sh`) for how these are measured.
 
 ### Download
 
@@ -171,6 +185,8 @@ Settings, themes and the clipboard come along. The old app's backups leave out t
   this repository's `engine-data-*` releases, made before a release by `lib/ime-dict-tool/engine-data.sh`.
   The words of the last few years are the project's own: found in that crawl's Chinese pages and curated one by one (`lexicon/`), packed and
   published as `words-*` releases, and compiled into a layer of the dictionary at build time.
+- English words and language model: counted from the English pages of [FineWeb](https://huggingface.co/datasets/HuggingFaceFW/fineweb) sample-10BT (ODC-By 1.0),
+  published as `english-data-*` releases and compiled at build time.
 - Stroke table (pinyin's lookup by strokes after `u`): from [rime-stroke](https://github.com/rime/rime-stroke) (LGPL-3.0-only), compiled into the APK at build time.
 - Sentence models: this project's own (Apache-2.0). A language model is first trained on FineWeb-2's Chinese pages, then distilled from Qwen3.5-9B-Base's (Apache-2.0) scores of candidate lists.
   The files are published at [sentence-models-20261001](https://github.com/Sraw/youmo-ime/releases/tag/sentence-models-20261001).
@@ -232,4 +248,4 @@ signKeyPwd=...
 ### Thanks
 
 [fcitx5-android](https://github.com/fcitx5-android/fcitx5-android), [Fcitx5](https://github.com/fcitx/fcitx5), [libime](https://github.com/fcitx/libime),
-[fcitx5-chinese-addons](https://github.com/fcitx/fcitx5-chinese-addons), [FineWeb-2](https://huggingface.co/datasets/HuggingFaceFW/fineweb-2), [Common Crawl](https://commoncrawl.org), [Qwen](https://github.com/QwenLM).
+[fcitx5-chinese-addons](https://github.com/fcitx/fcitx5-chinese-addons), [FineWeb](https://huggingface.co/datasets/HuggingFaceFW/fineweb), [FineWeb-2](https://huggingface.co/datasets/HuggingFaceFW/fineweb-2), [Common Crawl](https://commoncrawl.org), [Qwen](https://github.com/QwenLM).

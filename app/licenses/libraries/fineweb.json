@@ -1,0 +1,11 @@
+{
+    "uniqueId": "HuggingFaceFW/fineweb",
+    "artifactVersion": "sample-10BT, the first 300M words (english-data-20261011)",
+    "description": "English web text from CommonCrawl, by Hugging Face; the English keyboard's words and trigram model in english.data are counted from it. Use of it is also subject to CommonCrawl's Terms of Use.",
+    "name": "FineWeb",
+    "website": "https://huggingface.co/datasets/HuggingFaceFW/fineweb",
+    "tag": "native",
+    "licenses": [
+        "ODC-By-1.0"
+    ]
+}

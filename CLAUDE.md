@@ -17,7 +17,7 @@ Free to restructure; upstream compatibility is not a constraint.
   same signatures. Its decisions (`input/voice/` in ime-core) are tested like the rest.
 - Pattern to follow (see `PendingInputPolicy`, `LayoutSwitchPolicy`, `BackspaceSwipeBehavior`):
   pure class, preferences passed in as arguments, no `AppPrefs`, no `Context`.
-- Deliberately **not** done (measured, see `dev/PLAN.md` P6 if present): an `ImeHost` interface
+- Deliberately **not** done (measured, see `dev/archive/PLAN.md` P6 if present): an `ImeHost` interface
   over the service, injecting `AppPrefs` everywhere, a DI framework change.
 
 ## Commands
