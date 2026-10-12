@@ -103,7 +103,6 @@ android {
 fcitxComponent {
     includeLibs = listOf(
         "fcitx5",
-        "fcitx5-lua",
         "fcitx5-chinese-addons"
     )
     installPrebuiltAssets = true
@@ -127,7 +126,6 @@ dependencies {
     implementation(project(":lib:ime-core"))
     ksp(project(":codegen"))
     implementation(project(":lib:fcitx5"))
-    implementation(project(":lib:fcitx5-lua"))
     implementation(project(":lib:fcitx5-chinese-addons"))
     implementation(libs.kotlinx.coroutines)
     implementation(libs.kotlinx.serialization.json)

@@ -612,18 +612,6 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_startupFcitx(
     const std::string data_home = fcitx::stringutils::joinPath(*extData_, "data");
     const std::string usr_share = fcitx::stringutils::joinPath(*appData_, "usr", "share");
     const std::string locale_dir = fcitx::stringutils::joinPath(usr_share, "locale");
-    const std::string lua_path = fcitx::stringutils::concat(
-            fcitx::stringutils::joinPath(data_home, "lua", "?.lua"), ";",
-            fcitx::stringutils::joinPath(data_home, "lua", "?", "init.lua"), ";",
-            fcitx::stringutils::joinPath(usr_share, "lua", "5.4", "?.lua"), ";",
-            fcitx::stringutils::joinPath(usr_share, "lua", "5.4", "?", "init.lua"), ";",
-            ";" // double semicolon, for default path defined in luaconf.h
-    );
-    const std::string lua_cpath = fcitx::stringutils::concat(
-            fcitx::stringutils::joinPath(data_home, "lua", "?.so"), ";",
-            fcitx::stringutils::joinPath(usr_share, "lua", "5.4", "?.so"), ";",
-            ";"
-    );
 
     // prevent StandardPath from resolving it's hardcoded installation path
     // setenv("SKIP_FCITX_PATH", "1", 1);
@@ -650,12 +638,9 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_startupFcitx(
     setenv("XDG_CONFIG_HOME", config_home.c_str(), 1);
     // user StandardPath::Type::Runtime
     setenv("XDG_RUNTIME_DIR", extCache_, 1);
-    setenv("LUA_PATH", lua_path.c_str(), 1);
-    setenv("LUA_CPATH", lua_cpath.c_str(), 1);
 
     const char *locale_dir_char = locale_dir.c_str();
     fcitx::registerDomain("fcitx5", locale_dir_char);
-    fcitx::registerDomain("fcitx5-lua", locale_dir_char);
     fcitx::registerDomain("fcitx5-chinese-addons", locale_dir_char);
     fcitx::registerDomain("fcitx5-android", locale_dir_char);
 

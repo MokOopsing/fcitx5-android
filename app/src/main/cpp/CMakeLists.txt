@@ -13,7 +13,6 @@ set(CMAKE_MODULE_PATH ${FCITX5_CMAKE_MODULES} ${CMAKE_MODULE_PATH})
 find_package(Fcitx5Core MODULE)
 find_package(Fcitx5Module MODULE)
 
-find_package(fcitx5-lua REQUIRED CONFIG)
 find_package(fcitx5-chinese-addons REQUIRED CONFIG)
 
 include("${FCITX_INSTALL_CMAKECONFIG_DIR}/Fcitx5Utils/Fcitx5CompilerSettings.cmake")
@@ -49,7 +48,6 @@ add_custom_target(copy-fcitx5-modules
         $<TARGET_PROPERTY:fcitx5::quickphrase,IMPORTED_LOCATION>
         $<TARGET_PROPERTY:fcitx5::spell,IMPORTED_LOCATION>
         $<TARGET_PROPERTY:fcitx5::unicode,IMPORTED_LOCATION>
-        $<TARGET_PROPERTY:fcitx5-lua::luaaddonloader,IMPORTED_LOCATION>
         $<TARGET_PROPERTY:fcitx5-chinese-addons::scel2org5,IMPORTED_LOCATION>
         $<TARGET_PROPERTY:fcitx5-chinese-addons::chttrans,IMPORTED_LOCATION>
         $<TARGET_PROPERTY:fcitx5-chinese-addons::fullwidth,IMPORTED_LOCATION>

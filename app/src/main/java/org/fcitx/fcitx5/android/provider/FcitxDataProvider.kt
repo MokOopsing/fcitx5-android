@@ -35,7 +35,6 @@ class FcitxDataProvider : DocumentsProvider() {
         private val TEXT_EXTENSIONS = arrayOf(
             "conf",
             "mb",
-            "lua",
             "yml",
             "yaml"
         )
