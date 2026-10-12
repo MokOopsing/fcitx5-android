@@ -13,7 +13,6 @@ import org.fcitx.fcitx5.android.engine.data.DataFormatException
 import org.fcitx.fcitx5.android.engine.data.SourceException
 import org.fcitx.fcitx5.android.engine.host.EngineEvent
 import org.fcitx.fcitx5.android.engine.host.Engines
-import org.fcitx.fcitx5.android.engine.host.UnreadableInputMethod
 import org.fcitx.fcitx5.android.engine.phrase.CustomPhrases
 import org.fcitx.fcitx5.android.engine.session.Choice
 import org.fcitx.fcitx5.android.engine.session.Offer
@@ -144,17 +143,10 @@ class EngineBridgeTest {
         val unloadable = EngineBridge.Unloadable { im, _ -> latched += im }
         assertThrows(IllegalStateException::class.java) { unloadable.callThrowing(Engines.PINYIN, IllegalStateException("a bug")) }
         assertThrows(IllegalArgumentException::class.java) { unloadable.callThrowing(Engines.PINYIN, IllegalArgumentException("a bug")) }
-        // worded as an UnreadableInputMethod, not one: the type latches, not the words
-        val worded = IllegalArgumentException("cannot read input method ${Engines.PINYIN}")
-        assertThrows(IllegalArgumentException::class.java) { unloadable.callThrowing(Engines.PINYIN, worded) }
         assertThrows(OutOfMemoryError::class.java) { unloadable.callThrowing(Engines.PINYIN, OutOfMemoryError()) }
         // the data mapped with no memory left to map it in
         assertThrows(IOException::class.java) { unloadable.callThrowing(Engines.PINYIN, IOException("Map failed", OutOfMemoryError())) }
-        // the same for a table the user added, wrapped as the engine throws for one it cannot read
-        val added = UnreadableInputMethod("mine", IOException("Map failed", OutOfMemoryError()))
-        assertThrows(UnreadableInputMethod::class.java) { unloadable.callThrowing("mine", added) }
         assertFalse(Engines.PINYIN in unloadable)
-        assertFalse("mine" in unloadable)
         assertEquals(emptyList<String>(), latched)
         assertEquals(1, unloadable.call(Engines.PINYIN) { 1 })
     }
@@ -176,16 +168,15 @@ class EngineBridgeTest {
         val unloadable = EngineBridge.Unloadable { im, _ -> latched += im }
         // the first event, as the addon sends it on activate
         fun Engines.reset(im: String) = unloadable.call(im) { onEvent(im, EngineEvent.RESET, 0) }
-        // no data in the app, and a table the user imported gone
+        // no data in the app
         Engines({ throw FileNotFoundException(it) }, null).use { engines ->
             assertThrows(FileNotFoundException::class.java) { engines.reset(Engines.PINYIN) }
-            assertThrows(UnreadableInputMethod::class.java) { engines.reset("mine") }
         }
         // data that is not the engine's
         Engines({ ByteBuffer.allocate(0) }, null).use { engines ->
             assertThrows(DataFormatException::class.java) { engines.reset(Engines.T9) }
         }
-        assertEquals(listOf(Engines.PINYIN, "mine", Engines.T9), latched)
+        assertEquals(listOf(Engines.PINYIN, Engines.T9), latched)
     }
 
     @Test

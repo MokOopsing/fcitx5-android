@@ -122,7 +122,6 @@ class AdvancedSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstance(
         more.addPreference(R.string.punctuation_map) {
             navigateWithAnim(SettingsRoute.Punctuation(getString(R.string.punctuation_map)))
         }
-        more.addPreference(R.string.table_im) { navigateWithAnim(SettingsRoute.TableInputMethods) }
         // the whole of the user's data in and out, as one file: where it lies on the phone is no
         // business of theirs (fcitx's global options and its data folder are not shown either)
         val userData = PreferenceCategory(ctx).apply {

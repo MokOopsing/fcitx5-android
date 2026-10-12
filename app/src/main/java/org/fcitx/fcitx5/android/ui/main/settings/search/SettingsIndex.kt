@@ -49,7 +49,6 @@ object SettingsIndex {
         managed(context, R.string.advanced, SettingsRoute.Advanced, AppPrefs.getInstance().advanced, this)
         managed(context, R.string.candidates_window, SettingsRoute.CandidatesWindow, AppPrefs.getInstance().candidates, this, R.string.advanced)
         page(R.string.punctuation_map, SettingsRoute.Punctuation(context.getString(R.string.punctuation_map)), R.string.advanced)
-        page(R.string.table_im, SettingsRoute.TableInputMethods, R.string.advanced)
         // drawn by hand on that page: its own ids, so a title changed there is still the one pointed at
         val advanced = listOf(context.getString(R.string.advanced))
         add(Entry(context.getString(AdvancedSettingsFragment.EXPORT_USER_DATA), context.getString(AdvancedSettingsFragment.EXPORT_USER_DATA_SUMMARY), advanced,

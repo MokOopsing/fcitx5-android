@@ -6,9 +6,6 @@ package org.fcitx.fcitx5.android.engine.table
 
 import org.fcitx.fcitx5.android.engine.data.CodeTable
 import org.fcitx.fcitx5.android.engine.data.CodeTableReader
-import org.fcitx.fcitx5.android.engine.data.DataFormatException
-import org.fcitx.fcitx5.android.engine.data.SourceException
-import java.io.BufferedReader
 import java.nio.ByteBuffer
 
 /** A code table's text made into what [CodeTable.load] reads. */
@@ -34,24 +31,6 @@ object TableText {
             if (code == null) uncoded++ else reader.builder.entry(code, phrase)
         }
         return uncoded
-    }
-
-    /**
-     * [reader]'s table with its phrases coded ([codePhrases]), as [CodeTable.load] reads it: what
-     * the engine builds and [check] tries, loaded once on the way as the engine loads it.
-     *
-     * @throws SourceException, at line 0 of [source], if its header or 组词规则 is one the engine
-     * cannot use (no 键码 or 码长, a rule that does not read)
-     */
-    fun build(reader: CodeTableReader, source: String): ByteArray = try {
-        val bytes = reader.builder.build().toByteArray()
-        val table = TableDictionary(CodeTable.load(ByteBuffer.wrap(bytes), verify = false))
-        // a phrase coded is an entry more: built again only then
-        if (codePhrases(reader, table) < reader.phrases.size) reader.builder.build().toByteArray() else bytes
-    } catch (e: DataFormatException) {
-        throw SourceException(source, 0, e.message ?: e.toString(), e)
-    } catch (e: IllegalArgumentException) {
-        throw SourceException(source, 0, e.message ?: e.toString(), e)
     }
 
     /** What [addWords] did to a table: the words it added that stayed, [fresh] or not, and those [dropped] as rare. */
@@ -154,26 +133,4 @@ object TableText {
 
     /** log10: a word added under a tenth as common as its code's commonest goes. */
     const val KEEP_WITHIN = 1f
-
-    /** The header key a table the engine built keeps its source's stamp under (TableRegistry): built again once that changes. */
-    internal const val STAMP = "androidengine.stamp"
-
-    // what check() leaves for that stamp's value, a path and two numbers: a few hundred bytes at most
-    private const val STAMP_ROOM = 1024
-
-    /**
-     * Reads [text] through as the engine will when its input method is first used, so that a
-     * table the user imports that cannot be typed with fails to import rather than to type.
-     *
-     * @throws SourceException where it cannot be read, if it lists nothing to type, or if its
-     * header or 组词规则 is one the engine cannot use (too long, say, with the [STAMP] it adds)
-     */
-    fun check(text: BufferedReader, source: String) {
-        val reader = CodeTableReader()
-        reader.read(text, source)
-        if (reader.entries == 0 && reader.phrases.isEmpty()) throw SourceException(source, 0, "nothing to type")
-        // with room for the stamp: a header just under the meta section's limit would import, then fail at the first key
-        reader.builder.header(STAMP, "0".repeat(STAMP_ROOM))
-        build(reader, source)
-    }
 }

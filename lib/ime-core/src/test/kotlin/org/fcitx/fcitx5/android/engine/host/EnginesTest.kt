@@ -613,58 +613,40 @@ class EnginesTest : EnginesFixture() {
 
     @Test
     fun aCandidateForgottenInAnyPinyinIsForgottenInTheTablesToo() {
-        // an added table with a log, not loaded: what it is to forget is kept for it to forget as it loads
-        val table = Engines.UserTable("[Table]\nFile=table/my.main.dict\n", { "1" }, { throw AssertionError("built to forget") })
+        val wubi = "engine-wubi"
         for ((im, keys) in listOf(Engines.PINYIN to "ni", Engines.T9 to "64", Engines.SHUANGPIN to "ni")) {
             val dir = folder.newFolder(im)
-            val tables = dir.resolve(Engines.USER_TABLES).apply { mkdirs() }
-            tables.resolve("my.user").writeText("")
-            Engines(::load, dir, userTables = { table }).use { engines ->
+            // a phrase 五笔 saved, its table not loaded: loaded to forget it
+            dir.resolve(Engines.userTable(wubi)).writeBytes(TableLog.FORMAT.header() + TableLog.saved("abcd", "拟"))
+            Engines(::load, dir).use { engines ->
                 engines.type(im, keys)
                 val at = engines.candidates(im, 0, 20).indexOfFirst { it.text == "拟" }
                 assertTrue(im, Offer.FORGET in engines.offers(im, at))
                 engines.onEvent(im, EngineEvent.FORGET, at)
             }
-            assertEquals(im, "拟\n", tables.resolve("my.user${Engines.FORGOTTEN}").readText())
+            Engines(::load, dir).use { assertFalse(im, "拟" in it.type(wubi, "abcd").candidates) }
         }
-    }
-
-    @Test
-    fun whatAnAddedTableForgetsAsItLoadsIsForgottenOnceThoughItsLogReportsTroubleAtEveryOpen() {
-        val dir = folder.newFolder("engine")
-        val tables = dir.resolve(Engines.USER_TABLES).apply { mkdirs() }
-        // 你好 saved, and a pick whose fields run short: skipped, and reported, at every open
-        val log = tables.resolve("my.user").apply {
-            writeBytes(TableLog.FORMAT.header() + TableLog.saved("abcd", "你好") + TableLog.FORMAT.record(1) { writeUTF("ab") })
-        }
-        tables.resolve("my.user${Engines.FORGOTTEN}").writeText("你好\n")
-        val table = Engines.UserTable("[Table]\nFile=table/my.main.dict\n", { "1" }, { "键码=abcd\n码长=4\n[数据]\nab 你\ncd 好\n".reader().buffered() })
-        val errors = ArrayList<IOException>()
-        fun offered() = Engines(::load, dir, { errors += it }, userTables = { table }).use { it.type("my", "abcd").candidates }
-        assertEquals(emptyList<String>(), offered())
-        assertEquals(1, errors.size)
-        // saved again since, as the table saves a phrase picked: not forgotten again for what the log reports as it opens
-        log.appendBytes(TableLog.saved("abcd", "你好"))
-        assertEquals(listOf("你好"), offered())
-        assertEquals(2, errors.size)
     }
 
     @Test
     fun aWordAddedAfterATableCodedTheListedOnesIsCodedThereAloneAndOfferedOnce() {
         val additions = Engines.Additions("", "d") { sequenceOf("你好 ni'hao 0") }
-        val text = "键码=abcd\n码长=4\n[组词规则]\ne2=p11+p12+p21+p22\n[数据]\nab 你\ncd 好\n"
-        val table = Engines.UserTable("[Table]\nFile=table/my.main.dict\n", { "1" }, { text.reader().buffered() })
-        Engines(::load, null, additions = { additions }, userTables = { table }).use { engines ->
-            // a dictionary's word, coded by the table's rule
-            assertEquals(listOf("你好"), engines.type("my", "abcd").candidates)
-            engines.onEvent("my", EngineEvent.RESET, 0)
+        val wubi = "engine-wubi"
+        Engines(::load, null, additions = { additions }).use { engines ->
+            // a dictionary's word, coded by the table's rule: its code's one candidate, it commits itself
+            assertEquals("你好", engines.type(wubi, "wqvb").commit)
             assertTrue(engines.addWord("好你", "hao ni"))
-            assertEquals(listOf("好你"), engines.type("my", "cdab").candidates)
-            engines.onEvent("my", EngineEvent.RESET, 0)
-            // listed before in another reading: coded already
+            assertEquals("好你", engines.type(wubi, "vbwq").commit)
+            // listed before in another reading: coded already, offered once
             assertTrue(engines.addWord("你好", "li hao"))
-            assertEquals(listOf("你好"), engines.type("my", "abcd").candidates)
+            assertEquals("你好", engines.type(wubi, "wqvb").commit)
         }
+    }
+
+    // the nine keys' 重输 with nothing typed: not the app's
+    @Test
+    fun nineKeysStartOverWithNothingTypedIsTheirs() {
+        assertTrue(Engines(::load, null).onEvent(Engines.T9, EngineEvent.ESCAPE, 0).handled)
     }
 
     private companion object {

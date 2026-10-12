@@ -4,6 +4,7 @@
  */
 package org.fcitx.fcitx5.android.engine.host
 
+import org.fcitx.fcitx5.android.engine.data.CodeTableReader
 import org.fcitx.fcitx5.android.engine.data.PinyinDataBuilder
 import org.fcitx.fcitx5.android.engine.session.Offer
 import org.junit.Assert.assertEquals
@@ -50,24 +51,30 @@ class UserLexiconTest : EnginesFixture() {
         onEvent(Engines.PINYIN, EngineEvent.RESET, 0)
     }
 
-    // pinyin's data the fixture's, or [pinyin]
-    private fun withTable(dir: File, additions: Engines.Additions?, pinyin: ByteArray? = null, table: Engines.UserTable = TABLE) = Engines(
-        { if (pinyin != null && it == Engines.PINYIN_DATA) ByteBuffer.wrap(pinyin) else load(it) },
+    // pinyin's data the fixture's, or [pinyin]; 五笔's [table], saving a phrase after [saveAfter] (as WUBI if null)
+    private fun withTable(dir: File, additions: Engines.Additions?, pinyin: ByteArray? = null, table: String = TABLE, saveAfter: Int? = null) = Engines(
+        {
+            when {
+                pinyin != null && it == Engines.PINYIN_DATA -> ByteBuffer.wrap(pinyin)
+                it == "${Engines.TABLE_DIR}/wbx.data" -> ByteBuffer.wrap(CodeTableReader().apply { read(table.reader().buffered(), "table") }.builder.build().toByteArray())
+                else -> load(it)
+            }
+        },
         dir,
         additions = { additions },
-        userTables = { table },
-    )
+        // a pick, not a code's one candidate committing itself
+    ).apply { settings = settings.copy(tables = mapOf("Wubi" to TableSettings(autoSelect = false, saveAutoPhraseAfter = saveAfter))) }
 
     private fun Engines.firstInTable(): String {
-        val first = type("my", "abcd").candidates.first()
-        onEvent("my", EngineEvent.RESET, 0)
+        val first = type(WUBI, "abcd").candidates.first()
+        onEvent(WUBI, EngineEvent.RESET, 0)
         return first
     }
 
     private fun Engines.pickInTable(text: String, code: String = "abcd") {
-        val at = type("my", code).candidates.indexOf(text)
-        assertEquals(text, onEvent("my", EngineEvent.PICK, at).commit)
-        onEvent("my", EngineEvent.RESET, 0)
+        val at = type(WUBI, code).candidates.indexOf(text)
+        assertEquals(text, onEvent(WUBI, EngineEvent.PICK, at).commit)
+        onEvent(WUBI, EngineEvent.RESET, 0)
     }
 
     @Test
@@ -128,8 +135,8 @@ class UserLexiconTest : EnginesFixture() {
         withTable(dir, additions).use { engines ->
             assertTrue(engines.addWord("你好", "ni hao"))
             // the table's own entry, then the dictionary's word, coded by the table's rule
-            assertEquals(listOf("妤", "你好"), engines.type("my", "abcd").candidates)
-            engines.onEvent("my", EngineEvent.RESET, 0)
+            assertEquals(listOf("妤", "你好"), engines.type(WUBI, "abcd").candidates)
+            engines.onEvent(WUBI, EngineEvent.RESET, 0)
             engines.pickInTable("你好")
             assertEquals("你好", engines.firstInTable())
             engines.removeWord(Engines.UserWord("你好", "ni hao", Engines.UserWord.Kind.ADDED))
@@ -222,18 +229,18 @@ class UserLexiconTest : EnginesFixture() {
 
     // ab then cd typed one by one: their phrase (了解 in LIAO_JIE_TABLE, 你好 in TABLE) is offered under abcd, seen, not saved yet
     private fun Engines.seePhrase() {
-        type("my", "ab ")
-        type("my", "cd ")
+        type(WUBI, "ab ")
+        type(WUBI, "cd ")
     }
 
     @Test
     fun aWordBlockedFromATableIsBlockedAsItsFirstCharacterNeverIsAlone() {
         withTable(folder.newFolder("engine"), null, LIAO_JIE_PINYIN, LIAO_JIE_TABLE).use { engines ->
             engines.seePhrase()
-            val at = engines.type("my", "abcd").candidates.indexOf("了解")
-            assertTrue(Offer.BLOCK in engines.offers("my", at))
-            engines.onEvent("my", EngineEvent.BLOCK, at)
-            engines.onEvent("my", EngineEvent.RESET, 0)
+            val at = engines.type(WUBI, "abcd").candidates.indexOf("了解")
+            assertTrue(Offer.BLOCK in engines.offers(WUBI, at))
+            engines.onEvent(WUBI, EngineEvent.BLOCK, at)
+            engines.onEvent(WUBI, EngineEvent.RESET, 0)
             // as the dictionary reads it: blocked as its pieces read (le jie), pinyin would still offer it for liaojie
             assertEquals(listOf("liao jie"), engines.userWords(Engines.UserWord.Kind.BLOCKED).map { it.pinyin })
         }
@@ -252,8 +259,7 @@ class UserLexiconTest : EnginesFixture() {
     @Test
     fun aDictionaryWordOutsideTheModelTypedInPinyinIsNotLearnedAsItsPiecesReadAsATableSavesIt() {
         // saved as typed in one by one: a pick would take the word pinyin shares with the table, not the phrase
-        val table = Engines.UserTable(LIAO_JIE_TABLE.conf + "SaveAutoPhraseAfter=1\n", LIAO_JIE_TABLE.stamp, LIAO_JIE_TABLE.text)
-        withTable(folder.newFolder("engine"), null, LIAO_JIE_UNSCORED, table).use { engines ->
+        withTable(folder.newFolder("engine"), null, LIAO_JIE_UNSCORED, LIAO_JIE_TABLE, saveAfter = 1).use { engines ->
             engines.pick("liaojie", "了解")
             engines.seePhrase()
             // saved: before the table's own 妤, as the word pinyin shares is not
@@ -265,12 +271,8 @@ class UserLexiconTest : EnginesFixture() {
     @Test
     fun aWordTheUserMadeInPinyinIsNotLearnedAsItsPiecesReadAsATableSavesIt() {
         // as LIAO_JIE_TABLE, with a rule to code three characters: 了解了 saved as typed in one by one
-        val table = Engines.UserTable(
-            LIAO_JIE_TABLE.conf + "SaveAutoPhraseAfter=1\n",
-            LIAO_JIE_TABLE.stamp,
-            { "键码=abcd\n码长=4\n[组词规则]\ne2=p11+p12+p21+p22\ne3=p11+p21+p31+p32\n[数据]\nab 了\nabcd 妤\ncd 解\n".reader().buffered() },
-        )
-        withTable(folder.newFolder("engine"), null, LIAO_JIE_PINYIN, table).use { engines ->
+        val table = "键码=abcd\n码长=4\n[组词规则]\ne2=p11+p12+p21+p22\ne3=p11+p21+p31+p32\n[数据]\nab 了\nabcd 妤\ncd 解\n"
+        withTable(folder.newFolder("engine"), null, LIAO_JIE_PINYIN, table, saveAfter = 1).use { engines ->
             // 了解 then 了: the user's own word 了解了, read liao jie le, which no dictionary has
             engines.type(Engines.PINYIN, "liaojiele")
             engines.onEvent(Engines.PINYIN, EngineEvent.PICK, engines.candidates(Engines.PINYIN, 0, 20).indexOfFirst { it.text == "了解" })
@@ -279,7 +281,7 @@ class UserLexiconTest : EnginesFixture() {
             engines.onEvent(Engines.PINYIN, EngineEvent.RESET, 0)
             assertEquals(listOf("liao jie le" to 1f), engines.userWords().filter { it.text == "了解了" }.map { it.pinyin to it.count })
             engines.seePhrase()
-            engines.type("my", "ab ")
+            engines.type(WUBI, "ab ")
             // read le jie le as typed in, then with a stray first as the user made it: learned once more so, not made anew as its pieces read
             assertEquals(listOf("liao jie le" to 2f), engines.userWords().filter { it.text == "了解了" }.map { it.pinyin to it.count })
         }
@@ -291,12 +293,12 @@ class UserLexiconTest : EnginesFixture() {
         withTable(dir, null, pinyin, LIAO_JIE_TABLE).use { engines ->
             engines.seePhrase()
             engines.pickInTable("了解")
-            engines.type("my", "cd ")
-            engines.type("my", "ab ")
+            engines.type(WUBI, "cd ")
+            engines.type(WUBI, "ab ")
             engines.pickInTable("解了", "cdab")
         }
         assertTrue(dir.resolve(Engines.USER_PINYIN).delete())
-        val told = dir.resolve(Engines.addedTableLog("my") + Engines.TOLD)
+        val told = dir.resolve(Engines.userTable(WUBI) + Engines.TOLD)
         assertTrue(told.delete())
         return withTable(dir, null, pinyin, LIAO_JIE_TABLE).use { engines ->
             // its picked phrase first: the table read its log, and told pinyin of it
@@ -472,19 +474,13 @@ class UserLexiconTest : EnginesFixture() {
     private companion object {
         const val MAX_PICKS = 10
 
-        // the code abcd is 妤's and, by the rule, 你好's: ordered by use, so a pick of 你好 puts it first
-        val TABLE = Engines.UserTable(
-            "[Table]\nFile=table/my.main.dict\nOrderPolicy=Freq\n",
-            { "1" },
-            { "键码=abcd\n码长=4\n[组词规则]\ne2=p11+p12+p21+p22\n[数据]\nab 你\nabcd 妤\ncd 好\n".reader().buffered() },
-        )
+        const val WUBI = "engine-wubi"
+
+        // the code abcd is 妤's and, by the rule, 你好's: ordered by use (as 五笔 is), so a pick of 你好 puts it first
+        const val TABLE = "键码=abcd\n码长=4\n[组词规则]\ne2=p11+p12+p21+p22\n[数据]\nab 你\nabcd 妤\ncd 好\n"
 
         // as TABLE, abcd 了解's by the rule
-        val LIAO_JIE_TABLE = Engines.UserTable(
-            TABLE.conf,
-            TABLE.stamp,
-            { "键码=abcd\n码长=4\n[组词规则]\ne2=p11+p12+p21+p22\n[数据]\nab 了\nabcd 妤\ncd 解\n".reader().buffered() },
-        )
+        const val LIAO_JIE_TABLE = "键码=abcd\n码长=4\n[组词规则]\ne2=p11+p12+p21+p22\n[数据]\nab 了\nabcd 妤\ncd 解\n"
 
         // 了解 a word of the base dictionary, read liao jie; 了 alone le
         val LIAO_JIE_PINYIN: ByteArray = PinyinDataBuilder()

@@ -20,7 +20,6 @@ import org.fcitx.fcitx5.android.engine.data.SourceException
 import org.fcitx.fcitx5.android.engine.host.EngineEvent
 import org.fcitx.fcitx5.android.engine.host.EngineSettings
 import org.fcitx.fcitx5.android.engine.host.Engines
-import org.fcitx.fcitx5.android.engine.host.UnreadableInputMethod
 import org.fcitx.fcitx5.android.engine.libime.LibimeFiles
 import org.fcitx.fcitx5.android.engine.phrase.CustomPhrases
 import org.fcitx.fcitx5.android.engine.session.Choice
@@ -90,7 +89,6 @@ object EngineBridge {
             onError = { Timber.w(it, "engine user data") },
             legacy = ::legacy,
             additions = { additions(pinyinDir()) },
-            userTables = ::userTable,
             kernel = NativeMatrixKernel,
         ).also { made = it }
 
@@ -158,11 +156,10 @@ object EngineBridge {
             failed.clear()
         }
 
-        // an asset or table that cannot be opened or is none, or a table the user imported that cannot be
-        // read; not memory run out mapping one, FileChannel.map's IOException "Map failed", even as the
-        // cause of an UnreadableInputMethod
+        // an asset or table that cannot be opened or is none; not memory run out mapping one,
+        // FileChannel.map's IOException "Map failed", even as a cause
         private fun cannotLoad(e: Throwable) =
-            (e is IOException || e is DataFormatException || e is UnreadableInputMethod) && chain(e).none { it is VirtualMachineError }
+            (e is IOException || e is DataFormatException) && chain(e).none { it is VirtualMachineError }
 
         // [e] and its causes, each once: initCause refuses only a throwable itself, so a chain may loop back
         private fun chain(e: Throwable): Sequence<Throwable> {
@@ -181,28 +178,6 @@ object EngineBridge {
     private fun dataDir() = File(fcitxHome(), "data")
 
     private fun pinyinDir() = File(dataDir(), "pinyin")
-
-    /**
-     * The table input method [im] the user imported (TableManager), as fcitx's table addon had it:
-     * `inputmethod/<im>.conf`, naming its table (libime's, or text), and what the user set of it,
-     * kept in fcitx's config home as `table/<im>.conf`.
-     */
-    private fun userTable(im: String): Engines.UserTable? {
-        val data = dataDir()
-        val conf = File(data, "inputmethod/$im.conf").takeIf { it.isFile } ?: return null
-        return Engines.UserTable(
-            conf.readText(),
-            { File(data, it).let { dict -> "${dict.length()} ${dict.lastModified()}" } },
-            { tableText(File(data, it)) },
-            File(fcitxHome(), "config/table/$im.conf").takeIf { it.isFile }?.readText().orEmpty(),
-        )
-    }
-
-    /** A table the user imported: libime's, as saved before the engine, or its text. */
-    private fun tableText(file: File): BufferedReader {
-        val bytes = file.readBytes()
-        return if (LibimeFiles.isTable(bytes)) LibimeFiles.table(bytes).reader().buffered() else bytes.inputStream().bufferedReader()
-    }
 
     /** What libime's pinyin learned, where fcitx kept it (FCITX_DATA_HOME), as text. */
     private fun legacy(): LibimeImport.Legacy? {

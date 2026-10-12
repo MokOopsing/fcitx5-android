@@ -14,7 +14,7 @@ import org.fcitx.fcitx5.android.engine.stroke.Strokes
 import java.io.FileNotFoundException
 import java.nio.ByteBuffer
 
-/** What [EnginesTest] and [EnginesTablesTest] type with: the data, served as the app's assets serve it ([load]). */
+/** What [EnginesTest] and the like type with: the data, served as the app's assets serve it ([load]). */
 open class EnginesFixture {
 
     private val pinyin = PinyinDataBuilder()
@@ -32,6 +32,7 @@ open class EnginesFixture {
     private val wubi = CodeTable.Builder()
         .header("键码", "abcdefghijklmnopqrstuvwxy")
         .header("码长", "4")
+        .rule("e2", "p11+p12+p21+p22")
         .entry("wqiy", "你")
         .entry("vbg", "好")
         .entry("vbgf", "妤")

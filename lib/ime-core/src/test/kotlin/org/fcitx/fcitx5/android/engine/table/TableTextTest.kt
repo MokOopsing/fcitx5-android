@@ -6,9 +6,7 @@ package org.fcitx.fcitx5.android.engine.table
 
 import org.fcitx.fcitx5.android.engine.data.CodeTable
 import org.fcitx.fcitx5.android.engine.data.CodeTableReader
-import org.fcitx.fcitx5.android.engine.data.SourceException
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertThrows
 import org.junit.Test
 import java.nio.ByteBuffer
 
@@ -39,17 +37,12 @@ class TableTextTest {
     }
 
     @Test
-    fun aTableIsBuiltWithItsPhrasesCodedAndFailsWhereTheEngineCannotUseIt() {
+    fun aTablesPhrasesAreCodedByItsRules() {
         val reader = read("键码=abcd\n码长=4\n[组词规则]\ne2=p11+p12+p21+p22\n[数据]\nab 工\ncd 作\n[词组]\n工作\n工无\n")
-        val table = CodeTable.load(ByteBuffer.wrap(TableText.build(reader, "table")))
         // 无 has no code, so 工无 has none
+        assertEquals(1, TableText.codePhrases(reader))
+        val table = reader.table()
         assertEquals(listOf("工作"), table.texts("abcd"))
         assertEquals(3, table.size)
-        assertEquals(1, CodeTable.load(ByteBuffer.wrap(TableText.build(read("键码=a\n码长=4\n[数据]\na 工\n"), "table"))).size)
-        val e = assertThrows(SourceException::class.java) { TableText.build(read("键码=a\n[数据]\na 工\n"), "table") }
-        assertEquals(0, e.line)
-        assertThrows(SourceException::class.java) {
-            TableText.build(read("键码=a\n码长=4\n[组词规则]\ne2=p11+\n[数据]\na 工\n[词组]\n工工\n"), "table")
-        }
     }
 }

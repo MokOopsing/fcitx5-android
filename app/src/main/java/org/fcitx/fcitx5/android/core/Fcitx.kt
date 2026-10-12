@@ -445,8 +445,8 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
             )
             with(FcitxApplication.getInstance().directBootAwareContext) {
                 val home = getExternalFilesDir(null) ?: filesDir
-                EngineMigration.run(File(home, "config"), File(home, "data"))
-                // what the user changed while fcitx was down (a table imported, say) is read anew
+                EngineMigration.run(File(home, "config"))
+                // what the user changed while fcitx was down (a dictionary imported, say) is read anew
                 try {
                     EngineBridge.reload()
                 } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {

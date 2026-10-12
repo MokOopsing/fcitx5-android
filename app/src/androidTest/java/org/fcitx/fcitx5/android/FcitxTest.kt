@@ -31,7 +31,6 @@ import org.fcitx.fcitx5.android.data.punctuation.PunctuationMapEntry
 import org.fcitx.fcitx5.android.engine.host.EngineSettings
 import org.fcitx.fcitx5.android.engine.host.Engines
 import org.fcitx.fcitx5.android.engine.host.Keyboard
-import org.fcitx.fcitx5.android.engine.table.TableConf
 import org.junit.After
 import org.junit.AfterClass
 import org.junit.Assert
@@ -225,39 +224,6 @@ class FcitxTest {
         /** Where Fcitx starts fcitx: its data/ and config/. */
         private fun fcitxHome(): File =
             FcitxApplication.getInstance().directBootAwareContext.let { it.getExternalFilesDir(null) ?: it.filesDir }
-
-        /** What the page of the imported table [name] saved, as fcitx's table addon kept it. */
-        private fun userTableConf(name: String) = File(fcitxHome(), "config/table/$name.conf")
-
-        /**
-         * Runs [block] with [name] imported as TableManager leaves a table, the text [table] and
-         * [options] in its `[Table]`; then gone again, with what its page and the engine made of it.
-         */
-        private suspend fun withImportedTable(name: String, options: String, table: String, block: suspend () -> Unit) {
-            val home = fcitxHome()
-            val conf = File(home, "data/inputmethod/$name.conf")
-            val text = File(home, "data/table/$name.txt")
-            val userDir = File(InstrumentationRegistry.getInstrumentation().targetContext.filesDir, "engine")
-            try {
-                conf.parentFile!!.mkdirs()
-                text.parentFile!!.mkdirs()
-                conf.writeText(
-                    "[InputMethod]\nName=$name\nLangCode=zh_CN\nAddon=androidengine\nConfigurable=True\n\n" +
-                        "[Table]\nFile=table/$name.txt\n$options"
-                )
-                text.writeText(table)
-                // fcitx lists what is in inputmethod/ as it refreshes
-                fcitx.reloadConfig()
-                block()
-            } finally {
-                // closes what the engine opened of it
-                fcitx.reloadEngine()
-                (listOf(conf, text, userTableConf(name)) + Engines.addedTableFiles(name).map { File(userDir, it) })
-                    .forEach { it.delete() }
-            }
-        }
-
-
     }
 
     private var enabledIme: List<String> = listOf()
@@ -564,19 +530,17 @@ class FcitxTest {
      */
     @Test
     fun aPickOfACharacterPastTheBmpIsCheckedByItsText(): Unit = runBlocking {
-        val name = "fcitxtest-extb"
-        // U+20000 and U+20001
-        withImportedTable(name, "", "KeyCode=z\nLength=2\n[Data]\nzz 𠀀\nzz 𠀁\n") {
-            fcitx.setEnabledIme(arrayOf(name))
-            sendString("zz")
-            awaitQuiet()
-            val shown = fcitx.getCandidates(0, 2).map { it.text }
-            Assert.assertEquals("both of 'zz': $shown", setOf("𠀀", "𠀁"), shown.toSet())
-            Assert.assertFalse("the second's text at the first's index", fcitx.select(0, shown[1]))
-            Assert.assertTrue("its own text at its index", fcitx.select(0, shown[0]))
-            Assert.assertEquals(shown[0], receiveFirstCommitString()?.data?.text)
-            fcitx.reset()
-        }
+        // 五笔's fae is 霰 and U+2298F
+        fcitx.setEnabledIme(arrayOf(WUBI))
+        sendString("fae")
+        awaitQuiet()
+        val shown = fcitx.getCandidates(0, 16).map { it.text }
+        val at = shown.indexOf("𢦏")
+        Assert.assertTrue("U+2298F among fae's: $shown", at >= 0)
+        Assert.assertFalse("another's text at its index", fcitx.select(at, shown[if (at == 0) 1 else 0]))
+        Assert.assertTrue("its own text at its index", fcitx.select(at, shown[at]))
+        Assert.assertEquals(shown[at], receiveFirstCommitString()?.data?.text)
+        fcitx.reset()
     }
 
     /**
@@ -651,40 +615,6 @@ class FcitxTest {
 
     // region code table input
 
-    /**
-     * An imported table's page shows and saves that table's options, in its own file and not over
-     * pinyin's. A change to the value fcitx has as an option's default is written out all the
-     * same (fcitx would comment it out, which the engine does not read); an option left alone is
-     * not written, so one past the page's range stays the table's.
-     */
-    @Test
-    fun anImportedTablesPageSavesItsOwnOptionsAndEachChangeSticks(): Unit = runBlocking {
-        val name = "fcitxtest-options"
-        val options = "AutoSelect=False\nHint=False\nOrderPolicy=Freq\nAutoPhraseLength=10\n"
-        withImportedTable(name, options, "KeyCode=z\nLength=2\n[Data]\nzz 你\n") {
-            val pinyin = fcitx.getImConfig(Engines.PINYIN)
-            val page = fcitx.getImConfig(name)["cfg"]
-            Assert.assertEquals("the table's own", "False", page["AutoSelect"].value)
-            Assert.assertEquals("Freq", page["OrderPolicy"].value)
-            // each the default of fcitx's option (EngineTableConfig)
-            page["AutoSelect"].value = "True"
-            page["Hint"].value = "True"
-            page["OrderPolicy"].value = "No"
-            fcitx.setImConfig(name, page)
-            val saved = fcitx.getImConfig(name)["cfg"]
-            for ((key, value) in listOf("AutoSelect" to "True", "Hint" to "True", "OrderPolicy" to "No")) {
-                Assert.assertEquals(key, value, saved[key].value)
-            }
-            val conf = File(fcitxHome(), "data/inputmethod/$name.conf").readText()
-            val read = TableConf.parse(conf, userTableConf(name).readText()).options
-            Assert.assertTrue("as the engine reads it", read.autoSelect)
-            Assert.assertTrue(read.hint)
-            Assert.assertFalse(read.orderByUse)
-            Assert.assertEquals("left alone", 10, read.autoPhraseLength)
-            Assert.assertEquals("pinyin's page", pinyin, fcitx.getImConfig(Engines.PINYIN))
-        }
-    }
-
     @Test
     fun wubiOffersCandidatesForAPartialCode(): Unit = runBlocking {
         fcitx.setEnabledIme(arrayOf(WUBI))
@@ -697,18 +627,15 @@ class FcitxTest {
 
     /**
      * A full code with one candidate commits it on its last key (唯一自动上屏): the code -> commit
-     * path. An imported table, as which of the shipped table's codes has one depends on its data.
+     * path. 五笔's aaog is 工业 alone.
      */
     @Test
     fun aFullCodeOfOneCandidateCommitsItself(): Unit = runBlocking {
-        val name = "fcitxtest-autoselect"
-        withImportedTable(name, "AutoSelect=True\nAutoSelectLength=-1\n", "KeyCode=z\nLength=2\n[Data]\nzz 你\n") {
-            fcitx.setEnabledIme(arrayOf(name))
-            sendString("zz")
-            Assert.assertEquals("你", receiveFirstCommitString()?.data?.text)
-            Assert.assertEquals("", awaitPanelPreedit(""))
-            fcitx.reset()
-        }
+        fcitx.setEnabledIme(arrayOf(WUBI))
+        sendString("aaog")
+        Assert.assertEquals("工业", receiveFirstCommitString()?.data?.text)
+        Assert.assertEquals("", awaitPanelPreedit(""))
+        fcitx.reset()
     }
 
     // endregion

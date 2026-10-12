@@ -4,7 +4,6 @@
  */
 package org.fcitx.fcitx5.android.engine.host
 
-import org.fcitx.fcitx5.android.engine.data.CodeTableReader
 import org.fcitx.fcitx5.android.engine.english.EnglishSession
 import org.fcitx.fcitx5.android.engine.english.EnglishText
 import org.fcitx.fcitx5.android.engine.english.EnglishUser
@@ -25,13 +24,11 @@ import org.fcitx.fcitx5.android.engine.session.PinyinSession
 import org.fcitx.fcitx5.android.engine.session.Session
 import org.fcitx.fcitx5.android.engine.session.Snapshot
 import org.fcitx.fcitx5.android.engine.stroke.StrokeLookup
-import org.fcitx.fcitx5.android.engine.table.TableConf
 import org.fcitx.fcitx5.android.engine.table.TableOptions
 import org.fcitx.fcitx5.android.engine.table.TableSession
 import org.fcitx.fcitx5.android.engine.user.LibimeImport
 import org.fcitx.fcitx5.android.engine.user.WordLists
 import org.fcitx.fcitx5.android.engine.user.WordPack
-import java.io.BufferedReader
 import java.io.Closeable
 import java.io.File
 import java.io.IOException
@@ -43,8 +40,7 @@ import java.util.concurrent.Executor
  * use. [load] gives a data file by its path in the app's assets; what the user picks, in pinyin
  * and in each table, is kept under [userDir] (in memory only if null). When pinyin's log is made
  * afresh, what libime's pinyin learned ([legacy], if the user had it) is read into it first. What the user added to
- * pinyin ([additions]) is read at first need, and again on [reload]; so are the table input methods
- * they added ([userTables]), asked for by a name the engine has none of. The sentence models'
+ * pinyin ([additions]) is read at first need, and again on [reload]. The sentence models'
  * int8 weights are multiplied by [kernel], if given (in C++, say); if not, by Kotlin.
  *
  * A facade over its collaborators, which it makes and wires: [EngineAssets] (the data read from
@@ -59,22 +55,8 @@ class Engines(
     private val onError: (IOException) -> Unit = {},
     private val legacy: () -> LibimeImport.Legacy? = { null },
     private val additions: () -> Additions? = { null },
-    private val userTables: (String) -> UserTable? = { null },
     private val kernel: MatrixKernel? = null,
 ) : Closeable {
-
-    /**
-     * A table input method the user added, as fcitx's table addon had it: its `.conf` ([TableConf])
-     * with what the user set of it over it ([settings]), and of the table file it names, the [text]
-     * ([CodeTableReader]), read only to build the table, which is kept built under the user
-     * directory until the file's [stamp] (its size and time, say) changes.
-     */
-    class UserTable(
-        val conf: String,
-        val stamp: (file: String) -> String,
-        val text: (file: String) -> BufferedReader,
-        val settings: String = "",
-    )
 
     /**
      * What the user added to pinyin, as libime kept it: its custom phrases file, and the lines
@@ -113,7 +95,7 @@ class Engines(
         forgetInTables = { tables.forgetInTables(it) }, dropSessions = ::dropSessions,
     )
 
-    private val tables = TableRegistry(load, userDir, onError, userTables, compactions, assets, lexicon)
+    private val tables = TableRegistry(load, userDir, onError, compactions, assets, lexicon)
 
     /** A word of the user's, as the settings list them; [pinyin] its syllables apart by spaces. */
     data class UserWord(val text: String, val pinyin: String, val kind: Kind, val count: Float = 0f) {
@@ -228,10 +210,9 @@ class Engines(
             if (value.modelLevel < ModelLevel.HIGH) assets.refiningModel.drop()
         }
 
-    /** [event] of [im]'s keyboard; nothing picked is learned unless [learning], nor by a table that does not learn. */
+    /** [event] of [im]'s keyboard; nothing picked is learned unless [learning]. */
     fun onEvent(im: String, event: Int, arg: Int, learning: Boolean = true): Snapshot {
         val keyboard = keyboards[im] ?: Keyboard(session(im), nineKeys = im == T9, english = im == ENGLISH).also { keyboards[im] = it }
-        // the field's alone: a table that does not learn still forgets and blocks as asked (TableSession.learns)
         return keyboard.onEvent(event, arg, learning)
     }
 
@@ -269,13 +250,12 @@ class Engines(
                 pinyinSession(ShuangpinSegmenter(s.scheme, s.fuzzy, s.typos), spell = true),
             )
             else -> {
-                val method = TABLES[im]
-                val table = if (method == null) tables.addedTable(im) else tables.table(im)
-                val own = method?.let { s.tables[it.group]?.applyTo(it.options) ?: it.options } ?: checkNotNull(table.options)
-                val options = own.copy(pageSize = s.pageSize)
+                val method = TABLES[im] ?: throw IllegalArgumentException("no input method $im")
+                val table = tables.table(im)
+                val options = (s.tables[method.group]?.applyTo(method.options) ?: method.options).copy(pageSize = s.pageSize)
                 // looking a character up by pinyin learns nothing: it is not how the user writes
                 val lookUp = if (options.pinyinKey == null) null else PinyinSession(assets.pinyinData, PinyinSegmenter(), prediction = false)
-                TableSession(table.dictionary, options, lookUp, table.user, tables.shared(table, im), learns = table.learns)
+                TableSession(table.dictionary, options, lookUp, table.user, tables.shared(table, im))
             }
         }
     }
@@ -317,7 +297,6 @@ class Engines(
     fun reload() {
         val before = lexicon.dropAdditions()
         dropSessions()
-        tables.unloadAdded()
         lexicon.reloadDictionaries(before)
     }
 
@@ -382,26 +361,6 @@ class Engines(
         /** Beside a table's log: its phrases saved before were told to pinyin (see shared). */
         const val TOLD = ".told"
 
-        /** Beside an added table's log: what was forgotten while the table did not read it, forgotten there as it next does. */
-        const val FORGOTTEN = ".forgotten"
-
-        /** Under the user directory: the tables the user added, built, and what each learned. */
-        const val USER_TABLES = "tables"
-
-        /**
-         * Under the user directory, what is kept of a table the user added: the table built, and
-         * what it learned, with what is kept beside that ([TOLD], [FORGOTTEN]). Gone with the
-         * table, lest another of its name find them.
-         */
-        fun addedTableFiles(im: String): List<String> =
-            addedTableLog(im).let { listOf(addedTableCache(im), it, it + TOLD, it + FORGOTTEN) }
-
-        // under the user directory, a table the user added, built
-        internal fun addedTableCache(im: String) = "$USER_TABLES/$im.table"
-
-        // under the user directory, what a table the user added learned
-        internal fun addedTableLog(im: String) = "$USER_TABLES/$im.user"
-
         /** Where what the user taught the table input method [im] is kept: `wubi.user` and so on. */
         fun userTable(im: String) = im.removePrefix("engine-") + ".user"
 
@@ -431,9 +390,3 @@ internal fun closeQuietly(closeable: Closeable, onError: (IOException) -> Unit) 
  * [libime] the name libime's table input method had.
  */
 class TableMethod(val file: String, val group: String, val options: TableOptions, val libime: String)
-
-/**
- * What [Engines] throws for a table input method the user added that it cannot read: its `.conf`
- * or table gone, unreadable, or no table. Not thrown again for it till [Engines.reload].
- */
-class UnreadableInputMethod(im: String, cause: Throwable) : IllegalArgumentException("cannot read input method $im", cause)

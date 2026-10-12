@@ -86,12 +86,6 @@
     <string name="system_default">Predeterminado del sistema</string>
     <string name="default_">Predeterminado</string>
     <string name="delete_all_pinned_items">¿Quiere eliminar todos los elementos anclados?</string>
-    <string name="table_file_does_not_exist_title">Tabla no disponible</string>
-    <string name="import_table">Importar tabla</string>
-    <string name="table_from_zip">Desde ZIP...</string>
-    <string name="table_select_files">Desde archivos separados...</string>
-    <string name="table_file_placeholder">Seleccionar archivo...</string>
-    <string name="table_dict_select_title">Diccionario de tablas (.dict o .txt)</string>
     <string name="space_behavior_none">Ninguno</string>
     <string name="space_behavior_enumerate">Enumerar métodos de entrada</string>
     <string name="delete_theme">Eliminar tema</string>
@@ -109,5 +103,4 @@
     <string name="restart_notify_msg">Se reinició la aplicación; pulse aquí para abrir</string>
     <string name="i_do_not_need_it">No lo necesito</string>
     <string name="grant_permission">Otorgar permiso</string>
-    <string name="update_table">Actualizar tabla</string>
     </resources>

@@ -396,35 +396,6 @@ class TableSessionTest {
     }
 
     @Test
-    fun aTableThatDoesNotLearnStillForgetsAndBlocksAsAsked() {
-        val forgotten = ArrayList<String>()
-        val blocks = ArrayList<String>()
-        val shared = object : SharedWords {
-            val coded = CodedWords(wubi, listOf("你们"))
-            override fun words(prefix: String) = coded.words(prefix)
-            override fun leadsAnywhere(prefix: String) = coded.leadsAnywhere(prefix)
-            override fun blocked(text: String) = text in blocks
-            override fun blockable(text: String) = true
-            override fun block(text: String) = blocks.add(text)
-            override fun forget(text: String) {
-                forgotten += text
-            }
-        }
-        val t = TableSession(wubi, TableOptions.WUBI, shared = shared, learns = false)
-        t.type("aaaa")
-        assertEquals("恭恭敬敬", t.apply(Select(1)).commit)
-        // the pick not counted
-        assertEquals("工", t.type("aaaa").second.candidates.first())
-        t.apply(Reset)
-        assertEquals(listOf("你们"), t.type("wqw").second.candidates)
-        assertEquals(setOf(Offer.FORGET, Offer.BLOCK), t.offers(0))
-        t.apply(Forget(0))
-        assertEquals(listOf("你们"), forgotten)
-        assertEquals(emptyList<String>(), t.apply(Block(0)).candidates)
-        assertEquals(listOf("你们"), blocks)
-    }
-
-    @Test
     fun orTypedCharacterByCharacterOftenEnough() {
         val t = session()
         repeat(2) {

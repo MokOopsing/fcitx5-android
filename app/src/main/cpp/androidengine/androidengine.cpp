@@ -338,7 +338,7 @@ const Method methods[] = {
         {EnglishName, "En", "English", "input-keyboard", "en", nullptr},
 };
 
-// the one of methods named [im]; null for a table the user imported
+// the one of methods named [im]; null for any other
 const Method *listed(const std::string &im) {
     for (const auto &m: methods) {
         if (im == m.name) return &m;
@@ -350,31 +350,6 @@ const Method *listed(const std::string &im) {
 TableOption tableOf(const std::string &im) {
     const auto *m = listed(im);
     return m ? m->table : nullptr;
-}
-
-// whether [im]'s page shows config_'s own keys: one listed that is no table
-bool showsConfigKeys(const std::string &im) {
-    const auto *m = listed(im);
-    return m && !m->table;
-}
-
-// what the user set of a table they imported, under [Table]: as fcitx's table addon kept it, and
-// where EngineBridge.userTable reads it
-std::string userTableConf(const std::string &im) { return "table/" + im + ".conf"; }
-
-/** The options of [im], a table the user imported, as the engine reads them (TableConf). */
-EngineTableConfig userTable(const std::string &im) {
-    // libime table's defaults, for what neither the table's .conf nor the user sets
-    auto options = engineTable(false, EngineOrderPolicy::No, -1, -1);
-    options.autoSelect.setValue(false);
-    RawConfig conf;
-    readAsIni(conf, StandardPathsType::PkgData, "inputmethod/" + im + ".conf");
-    RawConfig user;
-    readAsIni(user, userTableConf(im));
-    for (const auto *raw: {&conf, &user}) {
-        if (const auto table = raw->get("Table")) options.load(*table, true);
-    }
-    return options;
 }
 
 } // namespace
@@ -412,12 +387,7 @@ const Configuration *AndroidEngine::getConfigForInputMethod(const InputMethodEnt
     if (const auto option = tableOf(im)) {
         return &(config_.*option).value();
     }
-    if (!showsConfigKeys(im)) {
-        // filled as it is opened, as the pages below are
-        static EngineTableConfig userTablePage;
-        userTablePage = userTable(im);
-        return &userTablePage;
-    }
+    if (!listed(im)) return nullptr;
     RawConfig raw;
     config_.save(raw);
     if (im == "engine-shuangpin") {
@@ -438,29 +408,10 @@ void AndroidEngine::setConfigForInputMethod(const InputMethodEntry &entry, const
         EngineTableConfig value = option->value();
         value.load(config, true);
         option->setValue(value);
-    } else if (showsConfigKeys(im)) {
+    } else if (listed(im)) {
         // the page's keys are config_'s own
         config_.load(config, true);
     } else {
-        // a table the user imported: in its own file, read as the engine loads the table again
-        const auto shown = userTable(im);
-        auto options = shown;
-        options.load(config, true);
-        RawConfig before;
-        RawConfig after;
-        shown.save(before);
-        options.save(after);
-        RawConfig user;
-        readAsIni(user, userTableConf(im));
-        auto &section = user["Table"];
-        // what the page changed, written out: fcitx comments out an option's default, which
-        // TableConf skips, so the table's .conf would win; one left alone stays as the engine
-        // reads it, a value past the page's range (shown as the default) too
-        for (const auto &name: after.subItems()) {
-            const auto &value = after.get(name)->value();
-            if (value != before.get(name)->value()) section.setValueByPath(name, value);
-        }
-        safeSaveAsIni(user, userTableConf(im));
         return;
     }
     safeSaveAsIni(config_, ConfPath);

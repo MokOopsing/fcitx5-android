@@ -164,9 +164,6 @@ sealed class SettingsRoute : Parcelable {
     }
 
     @Serializable
-    data object TableInputMethods : SettingsRoute()
-
-    @Serializable
     data object PinyinCustomPhrase : SettingsRoute()
 
     @Serializable
@@ -248,9 +245,6 @@ sealed class SettingsRoute : Parcelable {
             fragment<QuickPhraseEditFragment, QuickPhraseEdit>(
                 typeMap = mapOf(typeOf<QuickPhraseEdit.Param>() to QuickPhraseEdit.Param.NavType)
             )
-            fragment<TableInputMethodFragment, TableInputMethods> {
-                label = ctx.getString(R.string.table_im)
-            }
             fragment<PinyinCustomPhraseFragment, PinyinCustomPhrase> {
                 label = ctx.getString(R.string.custom_phrases)
             }
