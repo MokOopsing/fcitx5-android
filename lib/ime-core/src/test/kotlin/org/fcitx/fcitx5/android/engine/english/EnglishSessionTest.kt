@@ -41,10 +41,10 @@ class EnglishSessionTest {
             session.type(typed)
             assertEquals("$meant ", session.apply(Action.Key(' ')).commit)
         }
-        // punctuation commits the correction too
+        // punctuation commits the correction too, and a space after itself
         val comma = session().also { it.type("teh") }.apply(Action.Key(','))
-        assertEquals("the", comma.commit)
-        assertFalse(comma.handled)
+        assertEquals("the, ", comma.commit)
+        assertTrue(comma.handled)
     }
 
     @Test
@@ -209,8 +209,8 @@ class EnglishSessionTest {
         val stop = session.apply(Action.Key('.'))
         assertEquals(". ", stop.commit)
         assertEquals(1, stop.deleteBefore)
-        // a space the user typed after that is theirs
-        assertFalse(session.apply(Action.Key(' ')).handled)
+        // a space typed after that is that one
+        assertEquals("", session.apply(Action.Key(' ')).commit)
     }
 
     @Test
@@ -221,8 +221,28 @@ class EnglishSessionTest {
         val stop = session.apply(Action.Key(' '))
         assertEquals(". ", stop.commit)
         assertEquals(1, stop.deleteBefore)
-        // not again: the space is after a full stop
+        // the space after the full stop is there already: one typed out of habit is taken as it
+        val habit = session.apply(Action.Key(' '))
+        assertTrue(habit.handled)
+        assertEquals("", habit.commit)
+        // then a space is the user's
         assertFalse(session.apply(Action.Key(' ')).handled)
+    }
+
+    @Test
+    fun punctuationEndingAWordEndsItWithASpace() {
+        val session = session()
+        session.type("hello")
+        val stop = session.apply(Action.Key('.'))
+        assertEquals("hello. ", stop.commit)
+        assertEquals(0, stop.deleteBefore)
+        // more punctuation goes before that space: "?!", "..."
+        val bang = session.apply(Action.Key('!'))
+        assertEquals("! ", bang.commit)
+        assertEquals(1, bang.deleteBefore)
+        // the next word after the space
+        session.type("hello")
+        assertEquals("hello ", session.apply(Action.Key(' ')).commit)
     }
 
     @Test

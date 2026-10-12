@@ -16,8 +16,8 @@ import kotlin.random.Random
 /**
  * English typed as a user types it into the app: each sentence a word at a time into one session,
  * the letters as written, an apostrophe left out where that is no word (dont for don't, which the
- * session is to put back; not its for it's), then space, or the punctuation after the word and a
- * space. With [noise], each key may slip ([slip]). What space commits is measured against the word meant, as are the candidates the
+ * session is to put back; not its for it's), then space, or the punctuation after the word, which
+ * the session follows with a space. With [noise], each key may slip ([slip]). What space commits is measured against the word meant, as are the candidates the
  * word typed shows and the words offered before it ([Snapshot.predicting]). A word committed
  * wrong is put right before the next, as the user would, so the next word follows the text meant.
  */
@@ -86,7 +86,7 @@ internal class EnglishRun(
             for (c in typed) shown = session.apply(Action.Key(c))
             if (shown != null && word in shown.candidates.take(3)) result.top3++
             val after = session.apply(Action.Key(punctuation.firstOrNull() ?: ' '))
-            val committed = after.commit.trimEnd(' ')
+            val committed = after.commit.trimEnd(' ').removeSuffix(punctuation.take(1))
             result.words++
             if (committed == word) result.right++ else result.misses += "$word\t$typed\t$committed"
             if (typed != keys) {
@@ -97,7 +97,6 @@ internal class EnglishRun(
             }
             meant.append(token).append(' ')
             offered = if (after.predicting) after.candidates else emptyList()
-            if (punctuation.isNotEmpty()) session.apply(Action.Key(' '))
             if (committed != word) {
                 session.apply(Action.Context(meant.toString()))
                 offered = emptyList()

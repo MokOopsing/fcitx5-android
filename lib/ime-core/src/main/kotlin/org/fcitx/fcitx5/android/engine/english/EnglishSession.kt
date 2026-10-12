@@ -146,21 +146,40 @@ class EnglishSession(
             val typed = typed()
             // space and punctuation end a word as meant; a digit or a symbol goes on with it as typed
             val word = if (c == ' ' || c in SWAPPED) correction ?: typed else typed
-            // space ends the word with a space of the session's own; anything else is the app's
+            // space ends the word with a space of the session's own, and punctuation with itself
+            // and one; anything else is the app's
             if (c == ' ') return commit(word, space = true).also { if (word != typed) corrected = typed to last }
-            if (c in SWAPPED) learn(word, 1f)
+            if (c in SWAPPED) {
+                learn(word, 1f)
+                clear()
+                return spaced("$word$c ", deleteBefore = 0)
+            }
             clear()
             last = ""
             wrote(word + c)
             return snapshot(commit = word, handled = false)
         }
-        val wordBefore = last.length >= 2 && last.last() == ' ' && last[last.length - 2].isLetterOrDigit()
+        return afterOwnSpace(c)
+    }
+
+    // [c] with no word typed: after the session's own space, it may take its place
+    private fun afterOwnSpace(c: Char): Snapshot {
+        // before the session's own space, if the cursor is still after it
+        val before = if (last.length >= 2 && last.last() == ' ') last[last.length - 2] else null
+        val word = before != null && before.isLetterOrDigit()
         val made = when {
-            !wordBefore -> null
-            // twice: a full stop
-            c == ' ' -> ". "
-            c in SWAPPED -> "$c "
+            before == null -> null
+            // twice after a word: a full stop
+            c == ' ' && word -> ". "
+            // after punctuation the space is there already
+            c == ' ' && before in SWAPPED -> " "
+            // in place of the space, and one after it: "word, " then "?" is "word? ", "?! " after "? "
+            c in SWAPPED && (word || before in SWAPPED) -> "$c "
             else -> null
+        }
+        if (made == " ") {
+            last = ""
+            return snapshot()
         }
         if (made == null) {
             clear()
@@ -168,12 +187,17 @@ class EnglishSession(
             wrote(c.toString())
             return snapshot(handled = false)
         }
-        last = made
         recent = recent.dropLast(1)
+        return spaced(made, deleteBefore = 1)
+    }
+
+    // [made], ending with a space of the session's own, in place of the [deleteBefore] before it
+    private fun spaced(made: String, deleteBefore: Int): Snapshot {
+        last = made
         wrote(made)
         candidates = predictions()
         page = 0
-        return snapshot(commit = made, deleteBefore = 1)
+        return snapshot(commit = made, deleteBefore = deleteBefore)
     }
 
     private fun backspace(): Snapshot {
