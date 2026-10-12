@@ -72,6 +72,15 @@ class MainActivity : AppCompatActivity() {
         checkNotificationPermission()
     }
 
+    override fun onResume() {
+        super.onResume()
+        // each time it comes back, not only made: the system's own settings open this activity
+        // (singleTask) over the setup, which went, and the launcher then only brings the task back
+        if (intent?.action != Intent.ACTION_VIEW && SetupActivity.shouldShowUp()) {
+            startActivity<SetupActivity>()
+        }
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -91,9 +100,6 @@ class MainActivity : AppCompatActivity() {
     private fun processIntent(intent: Intent?) {
         val action = intent?.action ?: return
         when (action) {
-            Intent.ACTION_MAIN -> if (SetupActivity.shouldShowUp()) {
-                startActivity<SetupActivity>()
-            }
             Intent.ACTION_VIEW -> intent.data?.let {
                 AlertDialog.Builder(this)
                     .setTitle(R.string.pinyin_dict)

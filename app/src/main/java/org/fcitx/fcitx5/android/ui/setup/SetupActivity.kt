@@ -12,6 +12,8 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
+import androidx.activity.addCallback
+import androidx.annotation.VisibleForTesting
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationCompat
@@ -44,9 +46,17 @@ class SetupActivity : AppCompatActivity() {
             windowInsets
         }
         setContentView(binding.root)
+        // left by back as by skip: MainActivity, shown again, would bring it back at once
+        onBackPressedDispatcher.addCallback(this) {
+            skipped = true
+            finish()
+        }
         skipButton = binding.skipButton.apply {
             text = getString(R.string.skip)
-            setOnClickListener { finish() }
+            setOnClickListener {
+                skipped = true
+                finish()
+            }
         }
         prevButton = binding.prevButton.apply {
             text = getString(R.string.prev)
@@ -68,7 +78,6 @@ class SetupActivity : AppCompatActivity() {
         // skip to undone page
         firstUndonePage()?.let { viewPager.currentItem = it.ordinal }
         updateButtons()
-        shown = true
         createNotificationChannel()
     }
 
@@ -141,9 +150,13 @@ class SetupActivity : AppCompatActivity() {
     }
 
     companion object {
-        private var shown = false
+        // skipped in this process: not shown again till it restarts. Shown once was not enough to keep
+        // it away: a user leaving it for the system's settings (a tap on the keyboard's name opens the
+        // app's) came back to the app with nothing to select the keyboard
+        @VisibleForTesting
+        internal var skipped = false
         private const val CHANNEL_ID = "setup"
         private const val NOTIFY_ID = 233
-        fun shouldShowUp() = !shown && SetupPage.hasUndonePage()
+        fun shouldShowUp() = !skipped && SetupPage.hasUndonePage()
     }
 }
