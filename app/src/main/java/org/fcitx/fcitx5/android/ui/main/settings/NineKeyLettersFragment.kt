@@ -48,8 +48,9 @@ class NineKeyLettersFragment : Fragment() {
         get() = NineKeyLetters.parse(pref.getValue())
         set(value) {
             pref.setValue(value.serialize())
-            // the engine reads them with the addon's config: fcitx running reads it again now
-            FcitxDaemon.getFirstConnectionOrNull()?.runIfReady { reloadConfig() }
+            // the engine reads them again as it reads the user's words: not all of fcitx's config,
+            // whose reload left the candidates unshown
+            FcitxDaemon.getFirstConnectionOrNull()?.runIfReady { reloadEngine() }
         }
 
     private lateinit var content: LinearLayout
@@ -129,7 +130,6 @@ class NineKeyLettersFragment : Fragment() {
         val default = NineKeyLetters.STANDARD.letters(digit)
         val field = EditText(ctx).apply {
             setText(current.letters(digit))
-            setSelection(text.length)
             hint = getString(R.string.t9_letters_field_hint, default)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
             filters = arrayOf(InputFilter { source, start, end, _, _, _ ->
@@ -161,6 +161,8 @@ class NineKeyLettersFragment : Fragment() {
             }
         }
         builder.show()
+        // after the dialog focused it, which put the cursor at the start
+        field.post { field.setSelection(field.text.length) }
     }
 
     private fun confirmResetAll() {

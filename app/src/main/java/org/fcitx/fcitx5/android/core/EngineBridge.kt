@@ -353,22 +353,23 @@ object EngineBridge {
 
     /**
      * The addon's config, flattened as [EngineSettings.parse] reads it, with the nine keys' letters
-     * the keyboard draws (the app's preference: fcitx reloads its config when they change); on the
-     * fcitx thread too.
+     * the keyboard draws (the app's preference, read again by [reload]); on the fcitx thread too.
      */
     @JvmStatic
     fun configure(settings: String) {
-        val nineKeys = NineKeyLetters.parse(AppPrefs.getInstance().keyboard.t9Letters.getValue())
-        engines.settings = EngineSettings.parse(settings).copy(nineKeys = nineKeys)
+        engines.settings = EngineSettings.parse(settings).copy(nineKeys = nineKeys())
     }
 
+    private fun nineKeys() = NineKeyLetters.parse(AppPrefs.getInstance().keyboard.t9Letters.getValue())
+
     /**
-     * Reads [additions] again, the sessions made anew; nothing to
-     * do while the engine is not made. An input method that could not load is tried again.
+     * Reads [additions] and the nine keys' letters again, the sessions made anew; nothing to do
+     * while the engine is not made. An input method that could not load is tried again.
      */
     @JvmStatic
     fun reload() {
         unloadable.clear()
+        made?.let { it.settings = it.settings.copy(nineKeys = nineKeys()) }
         made?.reload()
     }
 

@@ -19,7 +19,7 @@ enum class AddressKeys(val first: String?) {
 
     companion object {
         /** The ends of addresses the full stop's place offers, the commonest first. */
-        val DOMAINS = listOf(".com", ".cn", ".net", ".org", ".com.cn", ".io", ".edu")
+        val DOMAINS = listOf(".com", ".cn", ".net", ".org")
 
         fun of(traits: EditorTraits): AddressKeys = when {
             traits.isUri -> URL

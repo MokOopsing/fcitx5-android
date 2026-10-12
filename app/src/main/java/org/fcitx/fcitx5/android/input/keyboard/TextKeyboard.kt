@@ -37,6 +37,8 @@ class TextKeyboard(
     companion object {
         const val Name = "Text"
 
+        private val ADDRESS_KEYS = setOf(R.id.button_slash, R.id.button_at, R.id.button_dot, R.id.button_domain)
+
         val Layout: List<List<KeyDef>> = listOf(
             listOf(
                 AlphabetKey("Q", "1"),
@@ -323,6 +325,8 @@ class TextKeyboard(
                 it.altText.text = transformPunctuation(swipeOverride(it.def) ?: it.def.altText)
             } else {
                 it.def as KeyDef.Appearance.Text
+                // an address's keys commit as they are, and say so: . not 。
+                if (it.id in ADDRESS_KEYS) return@forEach
                 it.mainText.text = it.def.displayText.let { str ->
                     if (str[0].run { isLetter() || isWhitespace() }) return@forEach
                     transformPunctuation(str)
