@@ -6,11 +6,13 @@ package org.fcitx.fcitx5.android.input.preedit
 
 import android.content.Context
 import android.graphics.Paint
+import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.ShapeDrawable
 import android.graphics.drawable.shapes.RectShape
 import android.text.Spanned
 import android.text.SpannedString
 import android.text.style.DynamicDrawableSpan
+import android.util.TypedValue
 import android.view.View
 import android.widget.TextView
 import androidx.annotation.ColorInt
@@ -41,9 +43,7 @@ open class PreeditUi(
         override fun getDrawable() = drawable
     }
 
-    private val cursorSpan by lazy {
-        CursorSpan(ctx, theme.keyTextColor, upView.paint.fontMetricsInt)
-    }
+    private var cursorSpan: CursorSpan? = null
 
     private fun createTextView() = textView {
         setTextColor(theme.keyTextColor)
@@ -66,6 +66,37 @@ open class PreeditUi(
     private fun updateTextView(view: TextView, str: CharSequence, visible: Boolean) {
         view.text = str
         view.visibility = if (visible) View.VISIBLE else View.GONE
+    }
+
+    fun setFontSize(sizeSp: Int) {
+        upView.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp.toFloat())
+        downView.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp.toFloat())
+        cursorSpan = null
+    }
+
+    fun setBackgroundColorAndCornerRadii(
+        color: Int,
+        topLeft: Int,
+        topRight: Int,
+        bottomRight: Int,
+        bottomLeft: Int
+    ) {
+        val topLeftRadius = ctx.dp(topLeft).toFloat()
+        val topRightRadius = ctx.dp(topRight).toFloat()
+        val bottomRightRadius = ctx.dp(bottomRight).toFloat()
+        val bottomLeftRadius = ctx.dp(bottomLeft).toFloat()
+        val radii = floatArrayOf(
+            topLeftRadius, topLeftRadius,
+            topRightRadius, topRightRadius,
+            bottomRightRadius, bottomRightRadius,
+            bottomLeftRadius, bottomLeftRadius
+        )
+        listOf(upView, downView).forEach { view ->
+            view.background = GradientDrawable().apply {
+                setColor(color)
+                setCornerRadii(radii)
+            }
+        }
     }
 
     fun update(inputPanel: FcitxEvent.InputPanelEvent.Data) {
@@ -98,8 +129,11 @@ open class PreeditUi(
             upString
         } else buildSpannedString {
             if (upCursor > 0) append(upString, 0, upCursor)
-            append('|')
-            setSpan(cursorSpan, upCursor, upCursor + 1, Spanned.SPAN_INCLUSIVE_EXCLUSIVE)
+            append('‏') //hide cursor by mokapsing
+            val span = cursorSpan ?: CursorSpan(
+                ctx, theme.keyTextColor, upView.paint.fontMetricsInt
+            ).also { cursorSpan = it }
+            setSpan(span, upCursor, upCursor + 1, Spanned.SPAN_INCLUSIVE_EXCLUSIVE)
             append(upString, upCursor, upString.length)
         }
         updateTextView(upView, upStringWithCursor, hasUp)

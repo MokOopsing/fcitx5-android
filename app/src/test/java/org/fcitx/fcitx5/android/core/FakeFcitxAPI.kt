@@ -10,10 +10,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.fcitx.fcitx5.android.daemon.FcitxConnection
-import org.fcitx.fcitx5.android.engine.host.Engines
 
 /**
- * In-memory stand-in for the engine, so that code written against [FcitxAPI] runs on the JVM
+ * In-memory stand-in for Fcitx, so that code written against [FcitxAPI] runs on the JVM
  * without JNI. Configuration is stored and read back, [addons] and [candidates] are plain
  * fields to set up a scenario, and everything else that changes engine state is appended to
  * [calls] so a test can assert what was asked of the engine.
@@ -55,78 +54,6 @@ class FakeFcitxAPI : FcitxAPI {
 
     override suspend fun reloadConfig() {
         calls += "reloadConfig()"
-    }
-
-    override suspend fun reloadEngine() {
-        calls += "reloadEngine()"
-    }
-
-    /** The user's words, as the engine would list them: kept as given, the pinyin not read. */
-    val userWords = ArrayList<Engines.UserWord>()
-
-    override suspend fun userWords(): List<Engines.UserWord> = userWords.toList()
-
-    override suspend fun userWords(kind: Engines.UserWord.Kind): List<Engines.UserWord> = userWords.filter { it.kind == kind }
-
-    override suspend fun userWordCounts(): Map<Engines.UserWord.Kind, Int> =
-        Engines.UserWord.Kind.entries.associateWith { kind -> userWords.count { it.kind == kind } }
-
-    // no dictionary to read it by
-    override suspend fun pinyinOf(text: String): String? = null
-
-    // no model: each char a word of its own
-    override suspend fun wordBoundaries(texts: List<String>) = texts.associateWith { IntArray(it.length + 1) { i -> i } }
-
-    // all alike: the recognizer's order kept
-    override suspend fun logProbs(texts: List<String>) = FloatArray(texts.size)
-
-    override suspend fun addUserWord(text: String, pinyin: String): Boolean {
-        calls += "addUserWord($text, $pinyin)"
-        userWords += Engines.UserWord(text, pinyin, Engines.UserWord.Kind.ADDED)
-        return true
-    }
-
-    override suspend fun blockUserWord(text: String, pinyin: String): Boolean {
-        calls += "blockUserWord($text, $pinyin)"
-        userWords += Engines.UserWord(text, pinyin, Engines.UserWord.Kind.BLOCKED)
-        return true
-    }
-
-    override suspend fun removeUserWords(words: List<Engines.UserWord>) {
-        calls += "removeUserWords(${words.joinToString(",") { it.text }})"
-        userWords -= words.toSet()
-    }
-
-    val englishWords = ArrayList<Engines.UserWord>()
-
-    override suspend fun englishWords(): List<Engines.UserWord> = englishWords.toList()
-
-    override suspend fun addEnglishWord(text: String): Boolean {
-        calls += "addEnglishWord($text)"
-        englishWords += Engines.UserWord(text, "", Engines.UserWord.Kind.LEARNED, 2f)
-        return true
-    }
-
-    override suspend fun forgetEnglishWords(texts: List<String>) {
-        calls += "forgetEnglishWords(${texts.joinToString(",")})"
-        englishWords.removeAll { it.text in texts }
-    }
-
-    override suspend fun importUserWords(lines: Sequence<String>): Engines.Imported {
-        // once: a file's lines may be read only once
-        val count = lines.count()
-        calls += "importUserWords($count)"
-        return Engines.Imported(0, 0, count)
-    }
-
-    // as Engines.exportWords writes them, for importUserWords to read back
-    override suspend fun exportUserWords(): List<String> = userWords.map {
-        val line = "${it.text} ${it.pinyin.replace(' ', '\'')}"
-        if (it.kind == Engines.UserWord.Kind.BLOCKED) "!$line" else line
-    }
-
-    override suspend fun engineContext(before: String) {
-        calls += "engineContext($before)"
     }
 
     override suspend fun sendKey(key: String, states: UInt, code: Int, up: Boolean, timestamp: Int) {
@@ -182,14 +109,6 @@ class FakeFcitxAPI : FcitxAPI {
     override suspend fun activateIme(ime: String) {
         calls += "activateIme($ime)"
         availableIme.find { it.uniqueName == ime }?.let { inputMethodEntryCached = it }
-    }
-
-    override suspend fun enumerateIme(forward: Boolean) {
-        calls += "enumerateIme($forward)"
-        val enabled = enabledIme.takeIf { it.isNotEmpty() } ?: return
-        val at = enabled.indexOfFirst { it.uniqueName == inputMethodEntryCached.uniqueName }
-        val step = if (forward) 1 else -1
-        inputMethodEntryCached = enabled[(at + step).mod(enabled.size)]
     }
 
     override suspend fun currentIme() = inputMethodEntryCached

@@ -80,7 +80,6 @@
     <string name="default_">Predeterminado</string>
     <string name="delete_all_pinned_items">¿Quiere eliminar todos los elementos anclados?</string>
     <string name="space_behavior_none">Ninguno</string>
-    <string name="space_behavior_enumerate">Enumerar métodos de entrada</string>
     <string name="delete_theme">Eliminar tema</string>
     <string name="delete_theme_msg">¿Realmente quiere eliminar el tema «%1$s»?</string>
     <string name="edit_theme">Editar tema</string>

@@ -104,7 +104,8 @@ FCITX_ADDON_DECLARE_FUNCTION(AndroidFrontend, setDeleteSurroundingCallback,
 
 FCITX_ADDON_DECLARE_FUNCTION(AndroidFrontend, setToastCallback,
                              void(const ToastCallback &))
-
+FCITX_ADDON_DECLARE_FUNCTION(AndroidFrontend, sendHardShift,
+                             bool())
 FCITX_ADDON_DECLARE_FUNCTION(AndroidFrontend, setPagedCandidateCallback,
                              void(const PagedCandidateCallback &))
 

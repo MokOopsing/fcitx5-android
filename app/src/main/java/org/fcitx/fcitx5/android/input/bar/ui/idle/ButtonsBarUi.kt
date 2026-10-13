@@ -28,8 +28,8 @@ class ButtonsBarUi(override val ctx: Context, private val theme: Theme) : Ui {
         justifyContent = JustifyContent.SPACE_AROUND
     }
 
-    // spread out where the bar has room; where it has not (a narrow screen, side padding, the
-    // emoji and voice beside it), scrolled rather than squeezed below a button's 40dp
+    // Spread buttons across the available width; on narrow screens, scroll rather than shrinking
+    // them below 40dp.
     override val root = view(::HorizontalScrollView) {
         isFillViewport = true
         add(buttons, lParams(wrapContent, matchParent))

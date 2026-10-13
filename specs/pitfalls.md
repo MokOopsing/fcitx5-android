@@ -1,105 +1,58 @@
 # Pitfalls
 
-Things that cost hours before. Each says how it shows and what to do.
+Things that have cost time before; keep these in mind when debugging.
 
-## Build
+## Build and interfaces
 
-### Kotlin IC and interface delegation
+### Kotlin incremental compilation and delegated interfaces
 
-After adding a method to `FcitxAPI` (or any interface implemented elsewhere with `by`), the
-incremental Kotlin build can leave a delegating class (`object : FcitxAPI by fcitx` in another
-file) without the new method. It compiles; the app crashes with `AbstractMethodError` the first
-time the method is called. Unit tests and Robolectric miss it (they use `FakeFcitxAPI`).
-Before building an APK to test or ship after such a change, delete
-`app/build/intermediates/built_in_kotlinc/<variant>` (and `app/build/kotlin/compile<Variant>Kotlin`
-if present). Check with `javap`/`dexdump` that the delegate has the method.
+After adding or removing a method from `FcitxAPI` (or another interface implemented with `by`),
+incremental Kotlin compilation can leave delegating classes stale. If a runtime
+`AbstractMethodError` appears after an interface change, clean the affected app Kotlin outputs and
+rebuild; do not treat a successful incremental build as proof that all delegates are current.
 
-### The engine data rebuilds
+### detekt is syntax-focused
 
-Editing anything under `build-logic` changes the data task's implementation, so the next build
-compiles `pinyin.data` and the tables again (minutes, ~4 GB). Editing ime-core reruns it only if the
-change reaches the dict tool's code (`ToolFingerprint`): `engine/data`, `pinyin`, parts of `user`,
-`table`. Expected, not a bug.
+Type resolution does not work in this setup, so detekt is not a substitute for Kotlin compilation
+or tests.
 
-### Memory
+## Android behavior
 
-The data compile, a native rebuild and an emulator do not fit together in 15 GB. A stray
-`KotlinCompileDaemon` (Xmx3g, idle for hours) came from build-logic once; it now compiles in
-process. If memory looks high, `pgrep -fa KotlinCompileDaemon`.
+### Cursor reports can lag
 
-### detekt sees syntax only
+Editors may report selection changes late (for example a WebView or long document). Use
+`EditingSession`/`CursorTracker` predictions rather than computing the next edit from a stale
+selection callback. Deletions use code points so one key press removes a whole emoji.
 
-Type resolution does not work in this setup, so detekt rules that need types do not run. Do not
-take a clean detekt as proof of type-level correctness.
+### `EditorInfo` changes behavior
 
-## Android behaviour
+Password, URL, email, search, no-suggestions, and no-personalized-learning flags affect the keyboard
+(`EditorTraits`, `FieldPolicy`, `AddressKeys`, and the return key action). Test password and address
+fields as well as ordinary text fields.
 
-### The cursor reports lag
+### Restore requires restarting Fcitx
 
-Editors report selection changes late (a WebView, a long document much later). Never compute the
-next edit from the last report: `EditingSession` keeps the IME's own prediction and reconciles
-(`CursorTracker`); arrow-key runs step from where the presses put the cursor (`ArrowKeys`).
-Deletions are asked in code points so one press removes a whole emoji (`CodePoints`).
+Fcitx holds config and user-data files open. Replacing them under a running process can leave it
+writing to stale files; stop and restart the Fcitx instance around restore.
 
-### Rotation with Chinese half-typed
+### Rime schemas are not bundled
 
-Most apps recreate their activity on rotation and save the field's text, preedit included, before
-the input method hears of it; the new field starts with `ni hao` as plain text. `LeftPreedit` takes
-it out again, only in the same app and field, within a short window. Changes to input start/finish
-must keep that working.
-
-### `EditorInfo` decides a lot
-
-Password, URL, email, search, no-suggestions and no-personalized-learning flags change what the
-keyboard does (`EditorTraits`, `FieldPolicy`, `AddressKeys`, the Return key's action). Test a change
-in a password field and an address field, not only a plain one.
-
-### Restoring user data needs a new process
-
-fcitx holds the config and the engine holds its logs open; replacing them under a running process
-leaves it writing to the old files. A restore stops fcitx, replaces, then restarts the process.
-
-### Direct boot
-
-Before the first unlock there is no credential-protected storage: `EngineBridge.userDir()` is null,
-learning stays in memory, and the keyboard reads the preferences copied to device-protected storage.
-A new preference the keyboard needs at a lock screen must be in that copy.
+A clean install can expose a healthy Rime engine while offering no schema or candidates. Verify the
+native availability test separately from a manual typing test with a user-installed schema.
 
 ## Device testing
 
-- `adb shell input text` goes around the input method: useless for testing typing. Tap keys.
-- `uiautomator dump` does not see the keyboard's keys, popups or the candidate long-press menu (the
-  IME window is not in its tree), and icon-only controls have no text. Use coordinates, screenshots,
-  and the field's text read back.
-- `am force-stop` of the app makes the system switch to another input method (the setup wizard then
-  shows on the next launch). Use `ime set` again, or restart the activity instead.
-- The debug build has a `.debug` package suffix: its IME id differs from the release's.
-- `connectedAndroidTest` uninstalls the test APK at the end, and instrumentation restarts the app
-  process at the start.
-- The first `dumpsys meminfo` of the process can read high (237 MB, then 124 MB stable): sample
-  several times before concluding.
-- Coordinates measured on one screen size, orientation or theme are wrong on another.
-
-## Data and formats
-
-- `Syllables` is append-only; data files store syllable ids ([engine.md](engine.md#data-files-and-compatibility)).
-- A data format change without a version bump is read as garbage by an old reader, or crashes on a
-  key press. Bump, and refuse what cannot be read.
-- User logs must stay readable by the next build and skippable by the previous one.
-- Data releases are pinned by SHA-256; a re-uploaded asset with the same name fails the build. Make
-  a new release instead.
+- `adb shell input text` bypasses the input method. Tap or inject key events to test typing.
+- `uiautomator dump` does not see the keyboard window, popups, or candidate menus. Use measured
+  coordinates, screenshots, and the field's text.
+- `am force-stop` can make Android switch input methods. Re-select the IME before testing again.
+- Debug builds have a `.debug` package suffix and a different IME id from release.
+- `connectedAndroidTest` may uninstall the test APK afterward; instrumentation restarts the app
+  process on startup.
+- Coordinates measured on one screen size, orientation, or theme may be wrong on another.
 
 ## Tests
 
-- A class that reads `AppPrefs` in its initialiser fails in a JVM test until
-  `AppPrefs.init(...)` is called; the message says so.
-- `isReturnDefaultValues = false`: reaching an android.jar stub throws. Use Robolectric for that test.
-- `FakeFcitxAPI` simulates no input; a test that needs the engine to type belongs in ime-core
-  against `Engines` / a `Session`, or in the instrumented tests.
-
-## Shell on the dev machine
-
-- zsh does not split a variable on spaces: `A="adb -s host:port"; $A shell …` fails. Put multi-word
-  commands in a bash script or an array.
-- `pgrep -f <pattern>` inside a wait loop matches the loop's own shell. Wait on a file marker or a
-  PID instead.
+- A class that reads `AppPrefs` in its initializer needs `AppPrefs.init(...)` in a JVM test.
+- `unitTests.isReturnDefaultValues = false` is intentional; framework-dependent behavior belongs
+  under Robolectric.

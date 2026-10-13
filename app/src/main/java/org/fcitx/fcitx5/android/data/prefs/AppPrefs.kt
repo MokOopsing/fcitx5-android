@@ -13,7 +13,6 @@ import androidx.preference.PreferenceManager
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.InputFeedbacks.InputFeedbackMode
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceUi.Levels.Level
-import org.fcitx.fcitx5.android.engine.pinyin.NineKeyLetters
 import org.fcitx.fcitx5.android.input.candidates.expanded.ExpandedCandidateStyle
 import org.fcitx.fcitx5.android.input.candidates.floating.FloatingCandidatesMode
 import org.fcitx.fcitx5.android.input.candidates.floating.FloatingCandidatesOrientation
@@ -22,10 +21,8 @@ import org.fcitx.fcitx5.android.input.keyboard.KeyboardHeightPercentBase
 import org.fcitx.fcitx5.android.input.keyboard.LangSwitchBehavior
 import org.fcitx.fcitx5.android.input.keyboard.SpaceLongPressBehavior
 import org.fcitx.fcitx5.android.input.keyboard.SwipeSymbolDirection
-import org.fcitx.fcitx5.android.input.keyboard.T9MultiTap
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.fcitx.fcitx5.android.input.popup.EmojiModifier
-import org.fcitx.fcitx5.android.input.voice.VoiceFeature
 import org.fcitx.fcitx5.android.utils.DeviceUtil
 import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.vibrator
@@ -34,7 +31,6 @@ import timber.log.Timber
 class AppPrefs(private val sharedPreferences: SharedPreferences) {
 
     inner class Internal : ManagedPreferenceInternal(sharedPreferences) {
-        val firstRun = bool("first_run", true)
         val lastSymbolLayout = string("last_symbol_layout", PickerWindow.Key.Symbol.name)
         val lastPickerType = string("last_picker_type", PickerWindow.Key.Emoji.name)
         val symbolPanelLocked = bool("symbol_panel_locked", false)
@@ -47,12 +43,36 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
 
         /**
          * See [org.fcitx.fcitx5.android.input.popup.PopupOverrides] for the format. A letter's first
-         * is also what swiping it types, drawn in its corner.
+         * is also what swiping it types and normally what is drawn in its corner.
          */
         val popupOverrides = string("popup_overrides", "")
 
+        /** See [org.fcitx.fcitx5.android.input.keyboard.KeyLabelOverrides]. */
+        val keyLabelOverrides = string("key_label_overrides", "")
+
+        /** See [org.fcitx.fcitx5.android.input.preedit.PreeditFontSizeOverrides]. */
+        val preeditFontSizeOverrides = string("preedit_font_size_overrides", "")
+
         /** Whether [resetHiddenSettings] ran: on the first start of a version with it, and so once. */
         val hiddenSettingsReset = bool("hidden_settings_reset", false)
+    }
+
+    inner class KeyboardAppearance :
+        ManagedPreferenceCategory(R.string.configure_look, sharedPreferences) {
+        init {
+            section(R.string.section_preedit)
+        }
+
+        val preeditFontSize =
+            int(R.string.preedit_font_size, "preedit_font_size", 16, 8, 64, "sp")
+        val preeditCornerTopLeft =
+            int(R.string.preedit_corner_top_left, "preedit_corner_top_left", 0, 0, 48, "dp")
+        val preeditCornerTopRight =
+            int(R.string.preedit_corner_top_right, "preedit_corner_top_right", 0, 0, 48, "dp")
+        val preeditCornerBottomRight =
+            int(R.string.preedit_corner_bottom_right, "preedit_corner_bottom_right", 0, 0, 48, "dp")
+        val preeditCornerBottomLeft =
+            int(R.string.preedit_corner_bottom_left, "preedit_corner_bottom_left", 0, 0, 48, "dp")
     }
 
     inner class Advanced : ManagedPreferenceCategory(R.string.advanced, sharedPreferences) {
@@ -120,40 +140,22 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
                 listOf(Level(R.string.level_short, 200), Level(R.string.level_medium, 300), Level(R.string.level_long, 450))
             )
         }
-        // voice input, in a build that has it, as Sogou's long press on the space
         val spaceKeyLongPressBehavior = enumList(
             R.string.space_long_press_behavior,
             "space_long_press_behavior",
-            if (VoiceFeature.AVAILABLE) SpaceLongPressBehavior.Voice else SpaceLongPressBehavior.None,
-            entryValues = SpaceLongPressBehavior.entries.filter { it != SpaceLongPressBehavior.Voice || VoiceFeature.AVAILABLE }
+            SpaceLongPressBehavior.SimulateShiftKey
         )
         val spaceSwipeMoveCursor =
             switch(R.string.space_swipe_move_cursor, "space_swipe_move_cursor", true)
         val autoPairs = switch(R.string.auto_pairs, "auto_pairs", true)
 
-        /** Shown on the 九键 page (InputMethodSettings), not here: one input method's alone. */
-        val t9MultiTap = ManagedPreference.PStringLike(
-            sharedPreferences, T9MultiTap.KEY, T9MultiTap.Medium,
-            object : ManagedPreference.StringLikeCodec<T9MultiTap> {
-                override fun decode(raw: String) = T9MultiTap.entries.firstOrNull { it.name == raw }
-            },
-        ).apply { register() }
-
-        /**
-         * What each of 九键's digit keys types ([NineKeyLetters.serialize], empty as on a phone):
-         * set on its own page from the 九键 page, read by the keyboard and the engine alike.
-         */
-        val t9Letters = ManagedPreference.PString(sharedPreferences, "t9_letters", "").apply { register() }
-
-        /** Shown on the English page (InputMethodSettings), not here: English's alone. */
-        val englishAutoCaps = ManagedPreference.PBool(sharedPreferences, ENGLISH_AUTO_CAPS, true).apply { register() }
         val showLangSwitchKey =
             switch(R.string.show_lang_switch_key, "show_lang_switch_key", true)
         val langSwitchKeyBehavior = hidden {
             enumList(
                 R.string.lang_switch_key_behavior,
                 "lang_switch_key_behavior",
-                LangSwitchBehavior.Enumerate
+                LangSwitchBehavior.SwitchRimeSchema
             ) { showLangSwitchKey.getValue() }
         }
 
@@ -517,6 +519,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
 
     val internal = Internal().register()
     val keyboard = Keyboard().register()
+    val keyboardAppearance = KeyboardAppearance().register()
     val candidates = Candidates().register()
     val clipboard = Clipboard().register()
     val symbols = Symbols().register()
@@ -539,8 +542,9 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             listOf(
                 internal.verboseLog,
                 internal.editorInfoInspector,
-                // the long-press and swipe characters: a password may be typed with them before the first unlock
+                // long-press, swipe, and display-only key labels: a password may be typed before the first unlock
                 internal.popupOverrides,
+                internal.keyLabelOverrides,
                 advanced.ignoreSystemCursor,
                 advanced.disableAnimation,
                 advanced.vivoKeypressWorkaround
@@ -578,8 +582,6 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
 
     companion object {
         private var instance: AppPrefs? = null
-
-        const val ENGLISH_AUTO_CAPS = "english_auto_caps"
 
         /**
          * MUST call before use

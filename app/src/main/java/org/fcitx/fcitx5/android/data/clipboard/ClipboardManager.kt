@@ -208,7 +208,9 @@ object ClipboardManager : ClipboardManager.OnPrimaryClipChangedListener,
         withContext(Dispatchers.IO) {
             val path = context.getDatabasePath(CLIPBOARD_DATABASE)
             // the import's, for the start after it: a successful import exits the app before anything opens the file
-            val marker = importedClipboardMarker(path.parentFile)
+            val marker = importedClipboardMarker(
+                requireNotNull(path.parentFile) { "Clipboard database has no parent directory: $path" }
+            )
             // whether it may hold the user's clips: read before the open, which makes the file it does not find
             val heldClips = path.isFile && path.length() > 0
             var startedOver = false

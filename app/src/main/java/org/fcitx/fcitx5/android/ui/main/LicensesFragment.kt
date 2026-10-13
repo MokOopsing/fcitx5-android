@@ -13,7 +13,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.fcitx.fcitx5.android.R
-import org.fcitx.fcitx5.android.input.voice.VoiceFeature
 import org.fcitx.fcitx5.android.ui.common.PaddingPreferenceFragment
 import org.fcitx.fcitx5.android.utils.addPreference
 import org.fcitx.fcitx5.android.utils.openUrl
@@ -22,11 +21,6 @@ class LicensesFragment : PaddingPreferenceFragment() {
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         val res = resources
-        // the engine's data: whose text its words and model are counted from
-        val engineData = listOf(
-            VoiceFeature.Credit(getString(R.string.engine_data_libime), "LGPL-2.1-or-later", "https://github.com/fcitx/libime"),
-            VoiceFeature.Credit(getString(R.string.engine_data_fineweb), "ODC-By-1.0", "https://huggingface.co/datasets/HuggingFaceFW/fineweb-2"),
-        )
         lifecycleScope.launch {
             // a few hundred libraries' entries: read and parsed off the main thread
             val libraries = withContext(Dispatchers.IO) {
@@ -42,11 +36,6 @@ class LicensesFragment : PaddingPreferenceFragment() {
                     }
             }
             preferenceScreen = preferenceManager.createPreferenceScreen(requireContext()).apply {
-                (engineData + VoiceFeature.credits(requireContext())).forEach { credit ->
-                    addPreference(title = credit.title, summary = credit.licence) {
-                        requireContext().openUrl(credit.url)
-                    }
-                }
                 libraries.forEach {
                     addPreference(
                         title = "${it.uniqueId}:${it.artifactVersion}",

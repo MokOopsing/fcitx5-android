@@ -59,9 +59,6 @@ open class CustomGestureView(ctx: Context) : FrameLayout(ctx) {
     @Volatile
     private var longPressTriggered = false
 
-    /** the finger on this key, by the id the keyboard's touch gives it */
-    var touchPointer = MotionEvent.INVALID_POINTER_ID
-        private set
     var longPressEnabled
         get() = recognizer.longPressEnabled
         set(value) {
@@ -168,8 +165,6 @@ open class CustomGestureView(ctx: Context) : FrameLayout(ctx) {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 if (!isEnabled) return false
-                // split from the keyboard's touch, the event keeps the finger's id
-                touchPointer = event.getPointerId(0)
                 drawableHotspotChanged(x, y)
                 isPressed = true
                 InputFeedbacks.hapticFeedback(this)

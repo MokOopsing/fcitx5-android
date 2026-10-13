@@ -5,20 +5,12 @@
 package org.fcitx.fcitx5.android.ui.main.settings.search
 
 import android.content.Context
-import androidx.preference.Preference
-import androidx.preference.PreferenceGroup
-import androidx.preference.PreferenceManager
-import androidx.preference.PreferenceScreen
+import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.FcitxApplication
-import org.fcitx.fcitx5.android.core.RawConfig
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
-import org.fcitx.fcitx5.android.engine.host.Engines
 import org.fcitx.fcitx5.android.ui.main.settings.PlaceholderStrings
 import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
-import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodSettings
-import org.fcitx.fcitx5.android.ui.search.SettingsSearch.Entry
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -26,52 +18,38 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/** A search result for an input method's option opens the page that has it. */
 @RunWith(RobolectricTestRunner::class)
 class SettingsIndexTest {
 
     private fun context(): Context = PlaceholderStrings(RuntimeEnvironment.getApplication())
 
-    private fun entries(ctx: Context) = buildList<Entry<SettingsIndex.Target>> { SettingsIndex.inputMethods(ctx, this) }
-
-    /** [uniqueName]'s page, as InputMethodConfigFragment draws it. */
-    private fun pageOf(ctx: Context, uniqueName: String): PreferenceScreen =
-        InputMethodSettings.create(PreferenceManager(ctx), InputMethodSettings.of(uniqueName)!!, RawConfig(), save = {})
-
-    /** The keys of the settings on [uniqueName]'s page. */
-    private fun keysOn(ctx: Context, uniqueName: String): Set<String> {
-        fun PreferenceGroup.keys(): List<String> = (0 until preferenceCount).flatMap {
-            val pref = getPreference(it)
-            if (pref is PreferenceGroup) pref.keys() else listOfNotNull(pref.key)
-        }
-        return pageOf(ctx, uniqueName).keys().toSet()
+    @Test
+    fun inputMethodSearchOpensTheRimeList() {
+        val entries = SettingsIndex.build(context())
+        assertEquals(1, entries.count { it.target.route == SettingsRoute.InputMethodList })
+        assertTrue(entries.none { it.target.route is SettingsRoute.InputMethodConfig })
     }
 
     @Test
-    fun everyOptionFoundOpensAnInputMethodsPageThatHasIt() {
+    fun preeditAndKeyLabelsAreIndexedUnderTheirSettingsPages() {
         val ctx = context()
-        val options = entries(ctx).filter { it.target.key != null }
-        assertTrue(options.isNotEmpty())
-        val pages = mutableMapOf<String, PreferenceScreen>()
-        for (entry in options) {
-            val route = entry.target.route as? SettingsRoute.InputMethodConfig
-            assertNotNull("$entry", route)
-            val screen = pages.getOrPut(route!!.uniqueName) { pageOf(ctx, route.uniqueName) }
-            // the setting SearchHighlight finds by the key is the one the result is titled after
-            assertEquals("$entry", entry.title, screen.findPreference<Preference>(entry.target.key!!)?.title?.toString())
-        }
-    }
+        val entries = SettingsIndex.build(ctx)
+        val themeAndSize = ctx.getString(R.string.theme_and_size)
+        val sizeAndKeys = ctx.getString(R.string.configure_look)
+        val keyboard = ctx.getString(R.string.virtual_keyboard)
+        val keys = ctx.getString(R.string.section_keys)
 
-    @Test
-    fun everyBuiltInTableHasItsOwnPageAndOptionsFound() {
-        val ctx = context()
-        val all = entries(ctx)
-        // the engine's own list: a table added there is held to this too
-        for (table in Engines.TABLES.keys) {
-            val on = all.filter { (it.target.route as? SettingsRoute.InputMethodConfig)?.uniqueName == table }
-            assertEquals(table, 1, on.count { it.target.key == null })
-            assertEquals(table, keysOn(ctx, table), on.mapNotNull { it.target.key }.toSet())
+        val keyLabels = entries.single { it.title == ctx.getString(R.string.key_labels) }
+        assertEquals(listOf(keyboard, keys), keyLabels.path)
+        assertEquals(SettingsRoute.KeyLabelOverrides, keyLabels.target.route)
+
+        val preeditOverrides = entries.single {
+            it.title == ctx.getString(R.string.preedit_font_size_overrides)
         }
+        assertEquals(
+            listOf(themeAndSize, sizeAndKeys, ctx.getString(R.string.section_preedit)),
+            preeditOverrides.path
+        )
     }
 
     /**

@@ -185,8 +185,7 @@ value class CapabilityFlags constructor(val flags: ULong) {
 
         /**
          * Whether [info] is a password's, its characters hidden or shown: fcitx is told a shown
-         * one is only [CapabilityFlag.Sensitive], so what the keyboard keeps out of a password
-         * (pairs, voice) asks here.
+         * one is only [CapabilityFlag.Sensitive], so automatic pair insertion is disabled too.
          */
         fun isPassword(info: EditorInfo): Boolean =
             fromEditorInfo(info).has(CapabilityFlag.Password) ||

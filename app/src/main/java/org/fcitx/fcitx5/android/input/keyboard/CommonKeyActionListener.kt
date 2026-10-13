@@ -15,9 +15,6 @@ import org.fcitx.fcitx5.android.input.broadcast.PreeditEmptyStateComponent
 import org.fcitx.fcitx5.android.input.dependency.context
 import org.fcitx.fcitx5.android.input.dependency.fcitx
 import org.fcitx.fcitx5.android.input.dependency.inputMethodService
-import org.fcitx.fcitx5.android.input.dependency.inputView
-import org.fcitx.fcitx5.android.input.popup.PopupComponent
-import org.fcitx.fcitx5.android.input.dialog.AddMoreInputMethodsPrompt
 import org.fcitx.fcitx5.android.input.dialog.InputMethodPickerDialog
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.BeginSelectionSwipeAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.CommitAction
@@ -32,7 +29,6 @@ import org.fcitx.fcitx5.android.input.keyboard.KeyAction.SpaceLongPressAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.SymAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction.UnicodeAction
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
-import org.fcitx.fcitx5.android.input.voice.VoiceFeature
 import org.fcitx.fcitx5.android.input.wm.InputWindowManager
 import org.fcitx.fcitx5.android.utils.switchToNextIME
 import org.mechdancer.dependency.Dependent
@@ -49,8 +45,6 @@ class CommonKeyActionListener :
     private val service by manager.inputMethodService()
     private val preeditState: PreeditEmptyStateComponent by manager.must()
     private val windowManager: InputWindowManager by manager.must()
-    private val inputView by manager.inputView()
-    private val popup: PopupComponent by manager.must()
 
     private var lastPickerType by AppPrefs.getInstance().internal.lastPickerType
 
@@ -91,17 +85,6 @@ class CommonKeyActionListener :
                 }
                 is LangSwitchAction -> {
                     when (langSwitchKeyBehavior) {
-                        LangSwitchBehavior.Enumerate -> {
-                            service.postFcitxJob {
-                                if (enabledIme().size < 2) {
-                                    service.lifecycleScope.launch {
-                                        service.showDialog(AddMoreInputMethodsPrompt.build(context))
-                                    }
-                                } else {
-                                    enumerateIme()
-                                }
-                            }
-                        }
                         LangSwitchBehavior.ToggleActivate -> {
                             service.postFcitxJob {
                                 toggleIme()
@@ -110,13 +93,33 @@ class CommonKeyActionListener :
                         LangSwitchBehavior.NextInputMethodApp -> {
                             service.switchToNextIME()
                         }
+                        LangSwitchBehavior.SimulateShiftKey -> service.postFcitxJob {
+                            simulateShift()
+                        }
+                        LangSwitchBehavior.ToggleRimeAscii -> service.postFcitxJob {
+                            statusArea().firstOrNull { it.name == "fcitx-rime-im" }?.let {
+                                it.menu?.firstOrNull()?.let { targetAction ->
+                                    activateAction(targetAction.id)
+                                }
+                            }
+                        }
+                        LangSwitchBehavior.SwitchRimeSchema -> {
+                            service.finishComposing()
+                            service.postFcitxJob {
+                                reset()
+                                val rimeStatusArea = statusArea().firstOrNull { it.name == "fcitx-rime-im" }
+                                rimeStatusArea?.menu
+                                    ?.find { it.name == "fcitx-rime-next-schema" }
+                                    ?.let { activateAction(it.id) }
+                            }
+                        }
                     }
                 }
                 is ShowInputMethodPickerAction -> showInputMethodPicker()
                 is BeginSelectionSwipeAction -> backspaceSwipe.onTouchDown()
                 is MoveSelectionAction -> {
-                    // something typed: candidates with nothing typed are the words that may come
-                    // next (pinyin's 联想, English's), which the swipe deletes before as ever
+                    // Candidates without preedit may still belong to the engine; remove them before
+                    // applying the swipe to the text before the cursor.
                     val composing = !preeditState.isEmpty
                     when (backspaceSwipe.onMove(composing)) {
                         BackspaceSwipeBehavior.MoveEffect.ExtendSelection ->
@@ -146,20 +149,33 @@ class CommonKeyActionListener :
                         windowManager.attachWindow(key)
                     }
                 }
-                is SpaceLongPressAction -> {
-                    when (val behavior = spaceKeyLongPressBehavior) {
+                SpaceLongPressAction -> {
+                    when (spaceKeyLongPressBehavior) {
                         SpaceLongPressBehavior.None -> {}
-                        SpaceLongPressBehavior.Enumerate -> service.postFcitxJob {
-                            enumerateIme()
-                        }
                         SpaceLongPressBehavior.ToggleActivate -> service.postFcitxJob {
                             toggleIme()
                         }
                         SpaceLongPressBehavior.ShowPicker -> showInputMethodPicker()
-                        // hold to talk: the keyboard stays, the key's finger followed till it lifts
-                        SpaceLongPressBehavior.Voice -> if (behavior.talks(VoiceFeature.AVAILABLE, service.inPasswordField)) {
-                            VoiceFeature.hold(inputView, popup.root, action.pointer) { text ->
-                                listener.onKeyAction(KeyAction.CommitAction(text), KeyActionListener.Source.Keyboard)
+                        SpaceLongPressBehavior.SimulateShiftKey -> service.postFcitxJob {
+                            simulateShift()
+                        }
+                        SpaceLongPressBehavior.ToggleRimeAscii -> service.postFcitxJob {
+                            statusArea().firstOrNull {it.name == "fcitx-rime-im" }?.let {
+                                it.menu?.firstOrNull()?.let {
+                                    (id) -> activateAction(id)
+                                }
+                            }
+                        }
+                        SpaceLongPressBehavior.SwitchRimeSchema -> {
+                            service.finishComposing()
+                            service.postFcitxJob {
+                                reset()
+                                statusArea().firstOrNull { it.name == "fcitx-rime-im" }?.let {
+                                    //it.menu?.getOrNull(it.menu.size - 4)?.let {
+                                    it.menu?.find { targetAction -> targetAction.name == "fcitx-rime-next-schema" }?.let {
+                                        targetAction -> activateAction(targetAction.id)
+                                    }
+                                }
                             }
                         }
                     }

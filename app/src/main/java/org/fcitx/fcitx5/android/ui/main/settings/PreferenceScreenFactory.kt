@@ -4,7 +4,10 @@
  */
 package org.fcitx.fcitx5.android.ui.main.settings
 
+import android.content.ActivityNotFoundException
 import android.content.Context
+import android.os.Build
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentManager
 import androidx.preference.DialogPreference
@@ -33,8 +36,12 @@ import org.fcitx.fcitx5.android.utils.config.ConfigDescriptor.ConfigKey
 import org.fcitx.fcitx5.android.utils.config.ConfigDescriptor.ConfigList
 import org.fcitx.fcitx5.android.utils.config.ConfigDescriptor.ConfigString
 import org.fcitx.fcitx5.android.utils.config.ConfigType
+import org.fcitx.fcitx5.android.utils.LongClickPreference
+import org.fcitx.fcitx5.android.utils.buildDocumentsProviderIntent
+import org.fcitx.fcitx5.android.utils.buildPrimaryStorageIntent
 import org.fcitx.fcitx5.android.utils.navigateWithAnim
 import org.fcitx.fcitx5.android.utils.parcelableArray
+import org.fcitx.fcitx5.android.utils.toast
 import timber.log.Timber
 
 object PreferenceScreenFactory {
@@ -99,21 +106,9 @@ object PreferenceScreenFactory {
             }
         }
 
-        fun pinyinDictionary() = Preference(context).apply {
-            setOnPreferenceClickListener {
-                navigate(SettingsRoute.PinyinDict(""))
-            }
-        }
-
         fun punctuationEditor(title: String, lang: String?) = Preference(context).apply {
             setOnPreferenceClickListener {
                 navigate(SettingsRoute.Punctuation(title, lang))
-            }
-        }
-
-        fun pinyinCustomPhrase() = Preference(context).apply {
-            setOnPreferenceClickListener {
-                navigate(SettingsRoute.PinyinCustomPhrase)
             }
         }
 
@@ -154,13 +149,15 @@ object PreferenceScreenFactory {
             }
             is ConfigEnumList -> listPreference(ConfigType.TyEnum)
             is ConfigExternal -> when (descriptor.knownType) {
-                ConfigExternal.ETy.PinyinDict -> pinyinDictionary()
                 ConfigExternal.ETy.Punctuation -> punctuationEditor(
                     descriptor.description ?: descriptor.name,
                     // fcitx://config/addon/punctuation/punctuationmap/zh_CN
                     descriptor.uri?.substringAfterLast('/')
                 )
-                ConfigExternal.ETy.PinyinCustomPhrase -> pinyinCustomPhrase()
+                ConfigExternal.ETy.RimeUserDataDir -> rimeUserDataDir(
+                    context,
+                    descriptor.description ?: descriptor.name
+                )
                 else -> stubPreference()
             }
             is ConfigInt -> {
@@ -235,6 +232,37 @@ object PreferenceScreenFactory {
         screen.addPreference(subPref)
         descriptor.customTypeDef?.values?.forEach {
             general(context, fragmentManager, cfg?.findByName(it.name), screen, it, subStore, save)
+        }
+    }
+
+    private fun rimeUserDataDir(context: Context, title: String) = LongClickPreference(context).apply {
+        this.title = title
+        summary = context.getString(R.string.rime_user_data_dir_summary)
+        setOnPreferenceClickListener {
+            AlertDialog.Builder(context)
+                .setTitle(title)
+                .setMessage(R.string.open_rime_user_data_dir)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(android.R.string.ok) { _, _ ->
+                    try {
+                        context.startActivity(buildDocumentsProviderIntent())
+                    } catch (e: ActivityNotFoundException) {
+                        Timber.w(e, "Unable to open the Rime user data directory")
+                        context.toast(R.string.rime_user_data_dir_unavailable)
+                    }
+                }
+                .show()
+            true
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            setOnPreferenceLongClickListener {
+                try {
+                    context.startActivity(buildPrimaryStorageIntent("data/rime"))
+                } catch (e: ActivityNotFoundException) {
+                    Timber.w(e, "Unable to open the Rime user data directory directly")
+                    context.toast(R.string.rime_user_data_dir_unavailable)
+                }
+            }
         }
     }
 

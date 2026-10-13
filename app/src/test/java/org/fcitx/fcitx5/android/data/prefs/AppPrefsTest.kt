@@ -44,7 +44,7 @@ class AppPrefsTest {
         val prefs = AppPrefs(sp)
         prefs.resetHiddenSettings()
         assertFalse(prefs.advanced.ignoreSystemCursor.getValue())
-        assertEquals(LangSwitchBehavior.Enumerate, prefs.keyboard.langSwitchKeyBehavior.getValue())
+        assertEquals(LangSwitchBehavior.SwitchRimeSchema, prefs.keyboard.langSwitchKeyBehavior.getValue())
         assertEquals(0, prefs.candidates.windowRadius.getValue())
         sp.edit { putBoolean("ignore_system_cursor", true) }
         prefs.resetHiddenSettings()

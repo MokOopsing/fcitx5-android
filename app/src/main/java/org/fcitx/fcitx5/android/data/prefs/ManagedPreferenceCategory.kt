@@ -112,7 +112,7 @@ abstract class ManagedPreferenceCategory(
         noinline enableUiOn: (() -> Boolean)? = null
     ): ManagedPreference.PStringLike<T> where T : Enum<T>, T : ManagedPreferenceEnum {
         val codec = object : ManagedPreference.StringLikeCodec<T> {
-            // one the list does not offer (a voice build's Voice in a text build) reads as the default
+            // a preference not offered by this build reads as its default
             override fun decode(raw: String): T? = enumValueOf<T>(raw).takeIf { it in entryValues }
         }
         val entryLabels = entryValues.map { it.stringRes }

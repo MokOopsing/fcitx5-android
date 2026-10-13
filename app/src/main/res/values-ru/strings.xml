@@ -26,7 +26,6 @@
     <string name="next">Следующий</string>
     <string name="prev">Предыдущий</string>
     <string name="done">Сделано</string>
-    <string name="pinyin_dict">Словари Пиньинь</string>
     <string name="importing">Импортирование</string>
     <string name="import_error">Ошибка импорта</string>
     <string name="dict_already_exists">Словарь уже существует</string>
@@ -40,8 +39,6 @@
     <string name="expanded_candidate_style">Расширенный стиль кандидата</string>
     <string name="expanded_candidate_style_grid">Сетка</string>
     <string name="expanded_candidate_style_flexbox">Flexbox</string>
-    <string name="no_more_input_methods">Методов ввода для переключения больше нет</string>
-    <string name="add_more_input_methods">Хотите добавить больше методов ввода?</string>
     <string name="about">О программе</string>
     <string name="current_version">Текущая версия</string>
     <string name="real_time_logs">Журналы в реальном времени</string>
@@ -150,7 +147,6 @@
     <string name="toolbar_num_row_on_password">Показывать строку с цифрами на панели инструментов при вводе пароля</string>
     <string name="space_long_press_behavior">Поведение при длительном нажатии клавиши пробела</string>
     <string name="space_behavior_none">Нет</string>
-    <string name="space_behavior_enumerate">Перечислить методы ввода</string>
     <string name="space_behavior_activate">Переключить состояние активации метода ввода</string>
     <string name="space_behavior_picker">Показать диалоговое окно выбора метода ввода</string>
     <string name="show_lang_switch_key">Показываать клавишу переключения языка</string>
@@ -277,11 +273,5 @@
         <item quantity="few">%1$d words</item>
         <item quantity="many">%1$d words</item>
         <item quantity="other">%1$d words</item>
-    </plurals>
-    <plurals name="im_save_phrase_typed">
-        <item quantity="one">After typed %d time(s)</item>
-        <item quantity="few">After typed %d times</item>
-        <item quantity="many">After typed %d times</item>
-        <item quantity="other">After typed %d times</item>
     </plurals>
     </resources>

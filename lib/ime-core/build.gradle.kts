@@ -51,23 +51,7 @@ dependencies {
     testImplementation(libs.junit)
 }
 
-// AndroidEngineHeaderTest reads the addon's headers, outside this module: handed their paths, it
-// finds them wherever it runs from; inputs relative to the build, an edit to one alone runs it
-// again, and its result is still taken from the build cache in another checkout
-abstract class AndroidEngineHeaders : CommandLineArgumentProvider {
-    @get:InputFiles
-    @get:PathSensitive(PathSensitivity.RELATIVE)
-    abstract val headers: ConfigurableFileCollection
-
-    override fun asArguments(): Iterable<String> = headers.files.map { "-Dheader.${it.name}=${it.absolutePath}" }
-}
-
 tasks.withType<Test>().configureEach {
-    // MisreadingsTest checks the list the app build compiles: an edit to it alone runs it again
-    inputs.file(rootProject.file("lexicon/misreadings.tsv")).withPathSensitivity(PathSensitivity.RELATIVE)
-    jvmArgumentProviders.add(objects.newInstance<AndroidEngineHeaders>().apply {
-        headers.from(rootProject.files("app/src/main/cpp/androidengine/androidengine.h", "app/src/main/cpp/androidengine/androidengine_public.h"))
-    })
     testLogging {
         events("failed")
     }

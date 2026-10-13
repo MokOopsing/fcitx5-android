@@ -123,7 +123,7 @@ class PopupComponent :
     /**
      * Over the key [bounds], [width] wide, by default as wide as the key's face (the bounds across)
      * and its text, never narrower than [popupWidth]: a fixed width over a wider key
-     * (九键's, `.com`, any in landscape) left the key's pressed colour showing at both sides.
+     * (a wide key, `.com`, any in landscape) left the key's pressed colour showing at both sides.
      */
     private fun place(popup: PopupEntryUi, bounds: Rect, width: Int = entryWidth(popup, bounds)) {
         popup.trigger.set(bounds)

@@ -194,7 +194,7 @@ class BaseKeyboardTest {
     @Test
     fun theSpaceShowsTheSubModeToo() {
         assertEquals("拼音", spaceLabel("拼音", InputMethodSubMode()))
-        assertEquals("拼音 (A)", spaceLabel("拼音", InputMethodSubMode("ascii", "A", "")))
-        assertEquals("by its name, unlabelled", "拼音 (ascii)", spaceLabel("拼音", InputMethodSubMode("ascii", "", "")))
+        assertEquals("拼音 ascii", spaceLabel("拼音", InputMethodSubMode("ascii", "A", "")))
+        assertEquals("拼音 A", spaceLabel("拼音", InputMethodSubMode("", "A", "")))
     }
 }

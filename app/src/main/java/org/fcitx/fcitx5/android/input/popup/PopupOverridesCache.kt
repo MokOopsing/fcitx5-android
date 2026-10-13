@@ -8,7 +8,7 @@ import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 
 /**
  * The [PopupOverrides] that [text] holds now, parsed again only when it changed. Not thread-safe:
- * its readers, the long press and a letter's swipe and corner, all run on the main thread.
+ * its readers, the long press and a letter's swipe, all run on the main thread.
  */
 class PopupOverridesCache(private val text: () -> String) {
 

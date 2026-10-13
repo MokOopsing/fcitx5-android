@@ -5,10 +5,18 @@
 package org.fcitx.fcitx5.android.ui.main.settings.theme
 
 import android.os.Bundle
+import androidx.preference.Preference
+import androidx.preference.PreferenceCategory
+import androidx.preference.PreferenceScreen
 import androidx.preference.SwitchPreferenceCompat
+import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
+import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceCategory
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceFragment
 import org.fcitx.fcitx5.android.data.theme.ThemeManager
+import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
+import org.fcitx.fcitx5.android.utils.navigateWithAnim
 
 class ThemeSettingsFragment : ManagedPreferenceFragment(ThemeManager.prefs) {
 
@@ -17,6 +25,46 @@ class ThemeSettingsFragment : ManagedPreferenceFragment(ThemeManager.prefs) {
     private var resumed = false
 
     private lateinit var switchPreference: SwitchPreferenceCompat
+
+    override fun onPreferenceUiCreated(screen: PreferenceScreen) {
+        val dayNight = checkNotNull(
+            screen.findPreference<PreferenceCategory>(
+                ManagedPreferenceCategory.sectionKey(R.string.section_day_night)
+            )
+        )
+        check(screen.removePreference(dayNight))
+
+        AppPrefs.getInstance().keyboardAppearance.createUi(screen)
+
+        checkNotNull(
+            screen.findPreference<PreferenceCategory>(
+                ManagedPreferenceCategory.sectionKey(R.string.section_preedit)
+            )
+        ).addDestination(
+            R.string.preedit_font_size_overrides,
+            R.string.preedit_font_size_overrides_summary,
+            SettingsRoute.PreeditFontSizeOverrides
+        )
+
+        screen.addPreference(dayNight)
+    }
+
+    private fun PreferenceCategory.addDestination(
+        title: Int,
+        summary: Int,
+        route: SettingsRoute
+    ) {
+        addPreference(Preference(requireContext()).apply {
+            isIconSpaceReserved = false
+            isSingleLineTitle = false
+            setTitle(title)
+            setSummary(summary)
+            setOnPreferenceClickListener {
+                navigateWithAnim(route)
+                true
+            }
+        })
+    }
 
     // sync SwitchPreferenceCompat's state when `followSystemDayNightTheme` changed in ThemeListFragment
     private val listener = ManagedPreference.OnChangeListener<Boolean> { _, v ->

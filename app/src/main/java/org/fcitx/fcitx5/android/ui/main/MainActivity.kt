@@ -95,17 +95,6 @@ class MainActivity : AppCompatActivity() {
     private fun processIntent(intent: Intent?) {
         val action = intent?.action ?: return
         when (action) {
-            Intent.ACTION_VIEW -> intent.data?.let {
-                AlertDialog.Builder(this)
-                    .setTitle(R.string.pinyin_dict)
-                    .setMessage(R.string.whether_import_dict)
-                    .setNegativeButton(android.R.string.cancel) { _, _ -> }
-                    .setPositiveButton(android.R.string.ok) { _, _ ->
-                        navController.popBackStack(SettingsRoute.Index, false)
-                        navController.navigateWithAnim(SettingsRoute.PinyinDict(it))
-                    }
-                    .show()
-            }
             Intent.ACTION_RUN -> {
                 val route = try {
                     intent.parcelable<SettingsRoute>(EXTRA_SETTINGS_ROUTE)

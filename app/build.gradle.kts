@@ -4,8 +4,6 @@ plugins {
     id("org.fcitx.fcitx5.android.build-metadata")
     id("org.fcitx.fcitx5.android.data-descriptor")
     id("org.fcitx.fcitx5.android.fcitx-component")
-    id("org.fcitx.fcitx5.android.engine-data")
-    id("org.fcitx.fcitx5.android.voice-data")
     alias(libs.plugins.kotlin.parcelize)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
@@ -32,7 +30,8 @@ android {
                     // android specific modules
                     "androidfrontend",
                     "androidnotification",
-                    "androidengine"
+                    // fcitx5-rime addon (rime engine fused into main apk)
+                    "rime"
                 )
             }
         }
@@ -54,23 +53,6 @@ android {
             resValue("mipmap", "app_icon", "@mipmap/ic_launcher_debug")
             resValue("mipmap", "app_icon_round", "@mipmap/ic_launcher_round_debug")
             resValue("string", "app_name", "@string/app_name_debug")
-        }
-    }
-
-    // Everything runs on the phone, with no network permission at all. Two builds, text or voice:
-    // voice adds RECORD_AUDIO and the speech recognizer with its ~180 MB of models
-    // (VoiceDataPlugin), for those who want them; text, the default, has neither.
-    flavorDimensions += listOf(VoiceDataPlugin.DIMENSION)
-    productFlavors {
-        create("text") {
-            dimension = VoiceDataPlugin.DIMENSION
-            isDefault = true
-            buildConfigField("boolean", "VOICE", "false")
-        }
-        create(VoiceDataPlugin.FLAVOR) {
-            dimension = VoiceDataPlugin.DIMENSION
-            versionNameSuffix = "-voice"
-            buildConfigField("boolean", "VOICE", "true")
         }
     }
 
@@ -96,15 +78,10 @@ android {
             isIncludeAndroidResources = false
         }
     }
-    // the evaluation sets, for EngineEvalRunner (lib/ime-eval/run-on-device.sh)
-    sourceSets.getByName("androidTest").assets.srcDir("../lib/ime-eval/data")
 }
 
 fcitxComponent {
-    includeLibs = listOf(
-        "fcitx5",
-        "fcitx5-chinese-addons"
-    )
+    includeLibs = listOf("fcitx5")
     installPrebuiltAssets = true
 }
 
@@ -118,6 +95,11 @@ androidComponents {
     }
 }
 
+generateDataDescriptor {
+    // rime-data ships its own copy of opencc data; link it to the shared one
+    symlinks.put("usr/share/rime-data/opencc", "usr/share/opencc")
+}
+
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
@@ -126,7 +108,6 @@ dependencies {
     implementation(project(":lib:ime-core"))
     ksp(project(":codegen"))
     implementation(project(":lib:fcitx5"))
-    implementation(project(":lib:fcitx5-chinese-addons"))
     implementation(libs.kotlinx.coroutines)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.activity)

@@ -12,19 +12,17 @@ import androidx.preference.PreferenceDataStore
 import androidx.preference.PreferenceGroup
 import androidx.preference.PreferenceManager
 import org.fcitx.fcitx5.android.R
-import org.fcitx.fcitx5.android.core.InputMethodNames
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceProvider
 import org.fcitx.fcitx5.android.data.theme.ThemeManager
 import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
 import org.fcitx.fcitx5.android.ui.main.settings.behavior.AdvancedSettingsFragment
-import org.fcitx.fcitx5.android.ui.main.settings.im.InputMethodSettings
 import org.fcitx.fcitx5.android.ui.search.SettingsSearch.Entry
 
 /**
  * Every setting the search finds, read from the pages themselves where they are built from a
- * list (the app's preference categories, the input methods' [InputMethodSettings]), so a setting
- * added there is found without a word here; the pages drawn by hand are listed by name.
+ * list (the app's preference categories), so a setting added there is found without a word here;
+ * pages drawn by hand are listed by name.
  */
 object SettingsIndex {
 
@@ -36,14 +34,21 @@ object SettingsIndex {
             add(Entry(context.getString(title), "", under.map(context::getString), Target(route, null)))
 
         page(R.string.input_methods, SettingsRoute.InputMethodList)
-        inputMethods(context, this)
-        page(R.string.custom_phrases, SettingsRoute.PinyinCustomPhrase)
-        page(R.string.word_packs, SettingsRoute.PinyinDict(""))
-        page(R.string.my_words, SettingsRoute.UserWords, R.string.word_packs)
         managed(context, R.string.theme_and_size, SettingsRoute.Theme, ThemeManager.prefs, this)
         managed(context, R.string.virtual_keyboard, SettingsRoute.VirtualKeyboard, AppPrefs.getInstance().keyboard, this)
+        managedSettings(context, SettingsRoute.Theme, AppPrefs.getInstance().keyboardAppearance, this,
+            listOf(context.getString(R.string.theme_and_size), context.getString(R.string.configure_look)))
         add(Entry(context.getString(R.string.long_press_characters), context.getString(R.string.long_press_characters_summary),
-            listOf(context.getString(R.string.virtual_keyboard)), Target(SettingsRoute.PopupOverrides, null)))
+            listOf(context.getString(R.string.virtual_keyboard), context.getString(R.string.section_keys)),
+            Target(SettingsRoute.PopupOverrides, null)))
+        add(Entry(context.getString(R.string.key_labels), context.getString(R.string.key_labels_summary),
+            listOf(context.getString(R.string.virtual_keyboard), context.getString(R.string.section_keys)),
+            Target(SettingsRoute.KeyLabelOverrides, null)))
+        add(Entry(context.getString(R.string.preedit_font_size_overrides),
+            context.getString(R.string.preedit_font_size_overrides_summary),
+            listOf(context.getString(R.string.theme_and_size), context.getString(R.string.configure_look),
+                context.getString(R.string.section_preedit)),
+            Target(SettingsRoute.PreeditFontSizeOverrides, null)))
         managed(context, R.string.clipboard, SettingsRoute.Clipboard, AppPrefs.getInstance().clipboard, this)
         managed(context, R.string.emoji_and_symbols, SettingsRoute.Symbol, AppPrefs.getInstance().symbols, this)
         managed(context, R.string.advanced, SettingsRoute.Advanced, AppPrefs.getInstance().advanced, this)
@@ -66,6 +71,18 @@ object SettingsIndex {
     ) {
         val path = under.map(context::getString) + context.getString(title)
         into += Entry(path.last(), "", path.dropLast(1), Target(route, null))
+        managedSettings(context, route, provider, into, path)
+    }
+
+    /** A provider whose UI is part of an existing settings page rather than a page of its own. */
+    @SuppressLint("RestrictedApi")
+    private fun managedSettings(
+        context: Context,
+        route: SettingsRoute,
+        provider: ManagedPreferenceProvider,
+        into: MutableList<Entry<Target>>,
+        path: List<String>
+    ) {
         // over storage that keeps nothing: a preference attached saves its default, which would
         // pin every default the user never touched to what it is today
         val manager = PreferenceManager(context).apply { preferenceDataStore = DiscardingDataStore }
@@ -94,33 +111,4 @@ object SettingsIndex {
     // a list's summary is its value, read from storage, which is no description to search
     private fun summary(pref: Preference): String = if (pref.summaryProvider != null) "" else pref.summary?.toString().orEmpty()
 
-    internal fun inputMethods(context: Context, into: MutableList<Entry<Target>>) {
-        val top = context.getString(R.string.input_methods)
-        for (name in InputMethodSettings.BUILT_IN) {
-            val items = InputMethodSettings.of(name) ?: continue
-            val page = InputMethodNames.of(context, name, name)
-            val route = SettingsRoute.InputMethodConfig(page, name)
-            into += Entry(page, "", listOf(top), Target(route, null))
-            items(context, items, listOf(top, page)) { title, summary, key, path ->
-                into += Entry(title, summary, path, Target(route, key))
-            }
-        }
-    }
-
-    // each with the key InputMethodSettings.create gives its preference
-    private fun items(
-        context: Context, items: List<InputMethodSettings.Item>, path: List<String>,
-        visit: (String, String, String, List<String>) -> Unit,
-    ) {
-        fun text(@StringRes id: Int) = if (id == 0) "" else context.getString(id)
-        for (item in items) when (item) {
-            is InputMethodSettings.Toggle -> visit(item.title(context), text(item.summary), item.key, path)
-            is InputMethodSettings.Choice -> visit(text(item.title), text(item.summary), item.key, path)
-            is InputMethodSettings.Flags -> visit(text(item.title), item.flags.joinToString(" ") { it.second }, item.path, path)
-            is InputMethodSettings.AppChoice<*> -> visit(text(item.title), text(item.summary), item.key, path)
-            is InputMethodSettings.AppToggle -> visit(text(item.title), text(item.summary), item.key, path)
-            is InputMethodSettings.Page -> visit(text(item.title), text(item.summary), item.key, path)
-            is InputMethodSettings.Section -> items(context, item.items, path + text(item.title), visit)
-        }
-    }
 }

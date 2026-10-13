@@ -4,7 +4,6 @@
  */
 package org.fcitx.fcitx5.android.input.keyboard
 
-import org.fcitx.fcitx5.android.engine.pinyin.NineKeyLetters
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -12,11 +11,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
-/**
- * Sogou's bottom row has no quick-phrase key, so on the 26 keys holding 符 and 123 opens quick
- * phrase and Unicode input, while tapping them still switches the layout. The nine keys send only
- * digits, which can type neither a quick-phrase keyword nor a hex code, so there they only tap.
- */
+/** Holding 符 and 123 opens quick phrase and Unicode input; tapping still switches the layout. */
 @RunWith(RobolectricTestRunner::class)
 class LayoutSwitchKeyTest {
 
@@ -35,16 +30,6 @@ class LayoutSwitchKeyTest {
         val numbers = TextKeyboard.Layout.bottomKey("123")
         assertEquals(KeyAction.LayoutSwitchAction(NumberKeyboard.Name), numbers.tapped())
         assertEquals(KeyAction.UnicodeAction, numbers.held())
-    }
-
-    @Test
-    fun theNineKeysSwitchKeysOnlyTap() {
-        val symbols = T9Keyboard.layout(NineKeyLetters.STANDARD).bottomKey("符")
-        assertEquals(KeyAction.LayoutSwitchAction(PickerWindow.Key.Symbol.name), symbols.tapped())
-        assertNull(symbols.held())
-        val numbers = T9Keyboard.layout(NineKeyLetters.STANDARD).bottomKey("123")
-        assertEquals(KeyAction.LayoutSwitchAction(NumberKeyboard.Name), numbers.tapped())
-        assertNull(numbers.held())
     }
 
     @Test

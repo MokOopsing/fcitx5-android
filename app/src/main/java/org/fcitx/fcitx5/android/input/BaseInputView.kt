@@ -142,20 +142,6 @@ abstract class BaseInputView(
         }
     }
 
-    /**
-     * Voice's hold to talk, while one goes on: it follows the finger that long-pressed space,
-     * which the key itself no longer reports once its long press has fired, and ends with the
-     * field or the keyboard (InputView's startInput and finishInput).
-     */
-    interface Hold {
-        /** each touch event, before the keys see it */
-        fun touched(ev: MotionEvent)
-
-        fun inputEnded()
-    }
-
-    var hold: Hold? = null
-
     // where each finger down went down, in this view
     private val downYs = SparseArray<Float>()
 
@@ -170,7 +156,6 @@ abstract class BaseInputView(
         if (ev.actionMasked == MotionEvent.ACTION_DOWN || ev.actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
             downYs.put(ev.getPointerId(ev.actionIndex), ev.getY(ev.actionIndex))
         }
-        hold?.touched(ev)
         if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
             swallowing = candidateActionMenu != null || ev.downTime <= candidateActionMenuClosed
             candidateActionMenu?.dismiss()

@@ -20,7 +20,7 @@ interface InputBroadcastReceiver {
 
     fun onStartInput(info: EditorInfo, capFlags: CapabilityFlags) {}
 
-    /** the keyboard hidden, or the field left: what is going on for it, such as voice input, stops */
+    /** The keyboard hidden or the field left: transient input activity for it stops. */
     fun onFinishInput() {}
 
     fun onClientPreeditUpdate(data: FormattedText) {}

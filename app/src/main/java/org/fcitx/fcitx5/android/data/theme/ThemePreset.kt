@@ -18,7 +18,6 @@ object ThemePreset {
         candidateLabelColor = 0xff37474f,
         candidateCommentColor = 0xff7a858a,
         altKeyBackgroundColor = 0xffdfe2e4,
-        // Google Pinyin's symbol color on alphabet key: #727d82
         altKeyTextColor = 0xff7a858a,
         accentKeyBackgroundColor = 0xff5cb5ab,
         accentKeyTextColor = 0xffffffff,
@@ -45,7 +44,6 @@ object ThemePreset {
         candidateLabelColor = 0xffd9dbdc,
         candidateCommentColor = 0xffadb1b3,
         altKeyBackgroundColor = 0xff313c42,
-        // Google Pinyin's symbol color on alphabet key: #b3b7b9
         altKeyTextColor = 0xffadb1b3,
         accentKeyBackgroundColor = 0xff6eaca8,
         accentKeyTextColor = 0xffffffff,
@@ -72,7 +70,6 @@ object ThemePreset {
         candidateLabelColor = 0xff212121,
         candidateCommentColor = 0xff6e6e6e,
         altKeyBackgroundColor = 0xffe1e1e1,
-        // Google Pinyin's symbol color on alphabet key: #4e4e4e
         altKeyTextColor = 0xff6e6e6e,
         accentKeyBackgroundColor = 0xff4285f4,
         accentKeyTextColor = 0xffffffff,
@@ -99,7 +96,6 @@ object ThemePreset {
         candidateLabelColor = 0xfffafafa,
         candidateCommentColor = 0xffacacac,
         altKeyBackgroundColor = 0xff373737,
-        // Google Pinyin's symbol color on alphabet key: #d6d6d6
         altKeyTextColor = 0xffacacac,
         accentKeyBackgroundColor = 0xff5e97f6,
         accentKeyTextColor = 0xffffffff,
@@ -126,7 +122,6 @@ object ThemePreset {
         candidateLabelColor = 0xffffffff,
         candidateCommentColor = 0xffa9c6e7,
         altKeyBackgroundColor = 0xff2771c4,
-        // Google Pinyin's symbol color on alphabet key: #d6d6d6
         altKeyTextColor = 0xffa9c6e7,
         accentKeyBackgroundColor = 0xff2196f3,
         accentKeyTextColor = 0xffffffff,
@@ -153,7 +148,6 @@ object ThemePreset {
         candidateLabelColor = 0xffffffff,
         candidateCommentColor = 0xffa1a1a1,
         altKeyBackgroundColor = 0xff141414,
-        // Google Pinyin's symbol color on alphabet key: #d9e6f5
         altKeyTextColor = 0xffa1a1a1,
         accentKeyBackgroundColor = 0xff80cbc4,
         accentKeyTextColor = 0xffffffff,

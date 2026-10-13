@@ -29,19 +29,6 @@ sealed class StatusAreaEntry(
 
     companion object {
         private fun drawableFromIconName(icon: String) = when (icon) {
-            // fcitx5-chinese-addons
-            "fcitx-chttrans-active" -> R.drawable.ic_fcitx_status_chttrans_trad
-            "fcitx-chttrans-inactive" -> R.drawable.ic_fcitx_status_chttrans_simp
-            "fcitx-punc-active" -> R.drawable.ic_fcitx_status_punc_active
-            "fcitx-punc-inactive" -> R.drawable.ic_fcitx_status_punc_inactive
-            "fcitx-fullwidth-active" -> R.drawable.ic_fcitx_status_fullwidth_active
-            "fcitx-fullwidth-inactive" -> R.drawable.ic_fcitx_status_fullwidth_inactive
-            "fcitx-remind-active" -> R.drawable.ic_fcitx_status_prediction_active
-            "fcitx-remind-inactive" -> R.drawable.ic_fcitx_status_prediction_inactive
-            // fcitx5-unikey
-            "document-edit" -> R.drawable.ic_baseline_edit_24
-            "character-set" -> R.drawable.ic_baseline_text_format_24
-            "edit-find" -> R.drawable.ic_baseline_search_24
             // fallback
             "" -> 0
             else -> {
@@ -58,7 +45,7 @@ sealed class StatusAreaEntry(
             return Fcitx(it, label(context, it.name, active) ?: it.shortText, drawableFromIconName(it.icon), active)
         }
 
-        // fcitx names its actions in its own language, not the app's (InputMethodNames)
+        // fcitx names its actions in its own language, not the app's
         private fun label(context: Context, action: String, active: Boolean) = when (action) {
             "punctuation" -> if (active) R.string.status_punctuation_chinese else R.string.status_punctuation_english
             "fullwidth" -> if (active) R.string.status_full_width else R.string.status_half_width

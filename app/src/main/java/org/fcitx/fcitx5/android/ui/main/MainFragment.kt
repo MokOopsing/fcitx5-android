@@ -12,12 +12,14 @@ import android.view.View
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.core.view.MenuProvider
+import androidx.fragment.app.activityViewModels
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
-import org.fcitx.fcitx5.android.BuildConfig
+import kotlinx.coroutines.launch
 import org.fcitx.fcitx5.android.R
-import org.fcitx.fcitx5.android.engine.data.DataAge
+import org.fcitx.fcitx5.android.core.InputMethodEntry
 import org.fcitx.fcitx5.android.ui.common.PaddingPreferenceFragment
 import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
 import org.fcitx.fcitx5.android.utils.Const
@@ -28,12 +30,13 @@ import org.fcitx.fcitx5.android.utils.navigateWithAnim
 import org.fcitx.fcitx5.android.utils.openUrl
 import org.fcitx.fcitx5.android.utils.setup
 import org.fcitx.fcitx5.android.utils.styledColor
-import java.text.ParsePosition
-import java.text.SimpleDateFormat
-import java.util.Locale
-import java.util.TimeZone
+import org.fcitx.fcitx5.android.utils.toast
 
 class MainFragment : PaddingPreferenceFragment() {
+
+    private val viewModel: MainViewModel by activityViewModels()
+    private var inputMethodEntry: InputMethodEntry? = null
+    private var inputMethodPreference: Preference? = null
 
     override fun onViewCreated(
         view: View, savedInstanceState: Bundle?
@@ -44,7 +47,17 @@ class MainFragment : PaddingPreferenceFragment() {
         requireActivity().addMenuProvider(
             AboutMenuProvider(), viewLifecycleOwner, Lifecycle.State.STARTED
         )
+        viewLifecycleOwner.lifecycleScope.launch {
+            val entry = loadInputMethodEntry()
+            inputMethodEntry = entry
+            inputMethodPreference?.title = entry?.displayName ?: getString(R.string.input_methods)
+        }
     }
+
+    private suspend fun loadInputMethodEntry(): InputMethodEntry? =
+        viewModel.fcitx.runOnReady {
+            enabledIme().firstOrNull() ?: availableIme().firstOrNull()
+        }
 
     private inner class AboutMenuProvider : MenuProvider {
         override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
@@ -69,9 +82,10 @@ class MainFragment : PaddingPreferenceFragment() {
     private fun PreferenceCategory.addDestinationPreference(
         @StringRes title: Int,
         @DrawableRes icon: Int,
-        route: SettingsRoute
+        route: SettingsRoute,
+        @StringRes summary: Int? = null
     ) {
-        addPreference(title, icon = icon) {
+        addPreference(title, summary, icon = icon) {
             navigateWithAnim(route)
         }
     }
@@ -81,33 +95,25 @@ class MainFragment : PaddingPreferenceFragment() {
         // setting; what a phone's user seldom needs (a physical keyboard's candidate window) is
         // under Advanced, and fcitx's global options are not shown at all
         preferenceScreen = preferenceManager.createPreferenceScreen(requireContext()).apply {
-            // the offline build fetches nothing itself: new words come with a new version
-            val dataMade = dataDay(BuildConfig.ENGINE_DATA, BuildConfig.ENGINE_WORDS) ?: BuildConfig.BUILD_TIME
-            if (DataAge.isStale(dataMade, System.currentTimeMillis())) {
-                addPreference(R.string.data_outdated, R.string.data_outdated_summary) {
-                    requireContext().openUrl(Const.releasesUrl)
-                }
-            }
             addCategory(R.string.home_section_input) {
-                addDestinationPreference(
-                    R.string.input_methods,
-                    R.drawable.ic_baseline_language_24,
-                    SettingsRoute.InputMethodList
-                )
-            }
-            addCategory(R.string.home_section_words) {
-                // the user dictionary is the first of the three layers on the dictionaries' page:
-                // one way in, not a second one here
-                addDestinationPreference(
-                    R.string.custom_phrases,
-                    R.drawable.ic_baseline_text_format_24,
-                    SettingsRoute.PinyinCustomPhrase
-                )
-                addDestinationPreference(
-                    R.string.word_packs,
-                    R.drawable.ic_baseline_list_alt_24,
-                    SettingsRoute.PinyinDict("")
-                )
+                inputMethodPreference = Preference(context).apply {
+                    setup(
+                        getString(R.string.input_methods),
+                        icon = R.drawable.ic_baseline_language_24
+                    ) {
+                        viewLifecycleOwner.lifecycleScope.launch {
+                            val entry = inputMethodEntry ?: loadInputMethodEntry()
+                                .also { inputMethodEntry = it }
+                            if (entry == null) {
+                                requireContext().toast(R.string.preedit_font_size_no_input_methods)
+                            } else {
+                                navigateWithAnim(
+                                    SettingsRoute.InputMethodConfig(entry.displayName, entry.uniqueName)
+                                )
+                            }
+                        }
+                    }
+                }.also(::addPreference)
             }
             addCategory(R.string.home_section_keyboard_look) {
                 addDestinationPreference(
@@ -152,23 +158,4 @@ class MainFragment : PaddingPreferenceFragment() {
             }
         }
     }
-}
-
-// the day in a release's tag, engine-data-20261005-3, or its month, words-202610
-private val RELEASE_DAY = Regex("""-(\d{8}|\d{6})(?:-|$)""")
-
-/**
- * The day the newest of the data of [releases] (their tags) was made, in epoch milliseconds; null
- * if no tag has a day. Its age, not the build's: an old tree built today has old data all the
- * same. Each part counts (the model, the word pack), as each is released apart from the others.
- */
-internal fun dataDay(vararg releases: String): Long? = releases.mapNotNull(::releaseDay).maxOrNull()
-
-// a month's tag from its first day, the earliest it may have been made
-private fun releaseDay(release: String): Long? {
-    val day = RELEASE_DAY.find(release)?.groupValues?.get(1) ?: return null
-    return SimpleDateFormat(if (day.length == 8) "yyyyMMdd" else "yyyyMM", Locale.ROOT).apply {
-        timeZone = TimeZone.getTimeZone("UTC")
-        isLenient = false
-    }.parse(day, ParsePosition(0))?.time
 }

@@ -5,7 +5,6 @@
 package org.fcitx.fcitx5.android.core
 
 import kotlinx.coroutines.flow.SharedFlow
-import org.fcitx.fcitx5.android.engine.host.Engines
 
 /**
  * API of fcitx that hides lifecycle stuffs from [Fcitx]
@@ -38,61 +37,6 @@ interface FcitxAPI {
 
     suspend fun reloadConfig()
 
-    /** Reads again what the user added to the engine's input methods: custom phrases, dictionaries. */
-    suspend fun reloadEngine()
-
-    /** The words the user added, made as they typed, and blocked: see [Engines.userWords]. */
-    suspend fun userWords(): List<Engines.UserWord>
-
-    /** The user's words of [kind] alone: see [Engines.userWords]. */
-    suspend fun userWords(kind: Engines.UserWord.Kind): List<Engines.UserWord>
-
-    /** How many words of each kind the user has: see [Engines.userWordCounts]. */
-    suspend fun userWordCounts(): Map<Engines.UserWord.Kind, Int>
-
-    /** Where each of [texts] splits into words: see [Engines.wordBoundaries]. */
-    suspend fun wordBoundaries(texts: List<String>): Map<String, IntArray>
-
-    /** How likely each of [texts] is: see [Engines.logProbs]. */
-    suspend fun logProbs(texts: List<String>): FloatArray
-
-    /** How the dictionary reads [text], for the user to check: see [Engines.pinyinOf]. */
-    suspend fun pinyinOf(text: String): String?
-
-    /** Adds [text] read as [pinyin]; false if it does not read so. */
-    suspend fun addUserWord(text: String, pinyin: String): Boolean
-
-    /** Blocks [text] read as [pinyin], never offered again; false if it does not read so. */
-    suspend fun blockUserWord(text: String, pinyin: String): Boolean
-
-    /** Takes [words] off their lists: see [Engines.removeWords]. */
-    suspend fun removeUserWords(words: List<Engines.UserWord>)
-
-    /** The English words the user typed: see [Engines.englishWords]. */
-    suspend fun englishWords(): List<Engines.UserWord>
-
-    /** Makes [text] an English word of the user's; false if it is none: see [Engines.addEnglishWord]. */
-    suspend fun addEnglishWord(text: String): Boolean
-
-    /** Forgets the English words [texts]: see [Engines.forgetEnglishWords]. */
-    suspend fun forgetEnglishWords(texts: List<String>)
-
-    /**
-     * Adds and blocks the words of a list the user imports, a word a line: see [Engines.importWords].
-     * [lines] are read as the engine takes them, on fcitx's thread: those of a local file, not of a
-     * provider's stream, whose slowness would hold up the keyboard.
-     */
-    suspend fun importUserWords(lines: Sequence<String>): Engines.Imported
-
-    /** The user's words as [importUserWords] reads them: see [Engines.exportWords]. */
-    suspend fun exportUserWords(): List<String>
-
-    /**
-     * Tells the engine [before], the text before the cursor, where the user put the cursor other
-     * than by typing (a field focused, a tap): what they type next follows it.
-     */
-    suspend fun engineContext(before: String)
-
     suspend fun sendKey(key: String, states: UInt = 0u, code: Int = 0, up: Boolean = false, timestamp: Int = -1)
 
     suspend fun sendKey(c: Char, states: UInt = 0u, code: Int = 0, up: Boolean = false, timestamp: Int = -1)
@@ -107,6 +51,7 @@ interface FcitxAPI {
      * not checked.
      */
     suspend fun select(idx: Int, text: String? = null): Boolean
+    suspend fun simulateShift(): Boolean
     suspend fun isEmpty(): Boolean
     suspend fun reset()
     suspend fun moveCursor(position: Int)
@@ -118,7 +63,6 @@ interface FcitxAPI {
 
     suspend fun toggleIme()
     suspend fun activateIme(ime: String)
-    suspend fun enumerateIme(forward: Boolean = true)
 
     suspend fun currentIme(): InputMethodEntry
 

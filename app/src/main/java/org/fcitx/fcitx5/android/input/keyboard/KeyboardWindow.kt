@@ -14,10 +14,7 @@ import androidx.transition.Slide
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.CapabilityFlags
 import org.fcitx.fcitx5.android.core.InputMethodEntry
-import org.fcitx.fcitx5.android.core.InputMethodNames
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
-import org.fcitx.fcitx5.android.engine.host.Engines
-import org.fcitx.fcitx5.android.engine.pinyin.NineKeyLetters
 import org.fcitx.fcitx5.android.input.bar.KawaiiBarComponent
 import org.fcitx.fcitx5.android.input.broadcast.InputBroadcastReceiver
 import org.fcitx.fcitx5.android.input.broadcast.ReturnKeyAppearance
@@ -67,23 +64,16 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
 
     private lateinit var keyboardView: FrameLayout
 
-    // each made when first shown: every new input view made 九键 too, which most never use
+    // Create each keyboard only when it is first shown.
     private val makers: Map<String, () -> BaseKeyboard> = mapOf(
         TextKeyboard.Name to { TextKeyboard(context, theme) },
-        T9Keyboard.Name to { T9Keyboard(context, theme, NineKeyLetters.parse(AppPrefs.getInstance().keyboard.t9Letters.getValue())) },
         NumberKeyboard.Name to { NumberKeyboard(context, theme) },
     )
     private val keyboards = hashMapOf<String, BaseKeyboard>()
     private var currentKeyboardName = ""
     private var lastSymbolType: String by AppPrefs.getInstance().internal.lastSymbolLayout
 
-    // the space's badge asks what the hold to talk asks (CommonKeyActionListener), a shown password too
     private val service by manager.inputMethodService()
-
-    private val autoCapsPref = AppPrefs.getInstance().keyboard.englishAutoCaps
-
-    // English is typed: Shift may come on by itself at a sentence start
-    private var english = false
 
     // a word is being composed: no sentence starts within it, and the editor is not asked
     private var composing = false
@@ -130,7 +120,6 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
         currentKeyboard?.let {
             it.keyActionListener = keyActionListener
             it.popupActionListener = popupActionListener
-            it.inPasswordField = service.inPasswordField
             (it as? TextKeyboard)?.address = address
             spaceKeys.attach(it) {
                 keyboardView.apply { add(it, lParams(matchParent, matchParent)) }
@@ -173,8 +162,6 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     private var address = AddressKeys.NONE
 
     override fun onStartInput(info: EditorInfo, capFlags: CapabilityFlags) {
-        // the layout may stay as it is, so the one shown is told now
-        currentKeyboard?.inPasswordField = service.inPasswordField
         address = AddressKeys.of(info.toEditorTraits())
         (currentKeyboard as? TextKeyboard)?.address = address
         val targetLayout = when (info.inputType and InputType.TYPE_MASK_CLASS) {
@@ -193,18 +180,16 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     private fun capitalize() {
         val keyboard = currentKeyboard as? TextKeyboard ?: return
         if (composing) return
-        val wants = english && autoCapsPref.getValue() &&
+        val wants =
             (service.currentInputConnection?.getCursorCapsMode(service.currentInputEditorInfo.inputType) ?: 0) != 0
         keyboard.sentenceStart(wants)
     }
 
     override fun onImeUpdate(ime: InputMethodEntry) {
         spaceKeys.current = ime
-        val letters = if (ime.uniqueName == Engines.T9) T9Keyboard.Name else TextKeyboard.Name
-        val shown = lettersLayout.inputMethodChanged(letters, currentKeyboardName)
+        val shown = lettersLayout.inputMethodChanged(TextKeyboard.Name, currentKeyboardName)
         // a layout shown anew is told the input method as it is attached
         if (shown != null) showLayout(shown) else currentKeyboard?.let(spaceKeys::show)
-        english = ime.uniqueName == InputMethodNames.KEYBOARD
         capitalize()
     }
 

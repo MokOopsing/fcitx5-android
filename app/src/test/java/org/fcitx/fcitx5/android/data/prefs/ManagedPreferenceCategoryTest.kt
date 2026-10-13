@@ -28,13 +28,11 @@ class ManagedPreferenceCategoryTest {
     private lateinit var ctx: Context
     private lateinit var sp: SharedPreferences
 
-    // a text build's: Voice is not offered
     private class Sample(sp: SharedPreferences) : ManagedPreferenceCategory(R.string.virtual_keyboard, sp) {
         val behavior = enumList(
             R.string.space_long_press_behavior,
             "behavior",
-            SpaceLongPressBehavior.None,
-            entryValues = SpaceLongPressBehavior.entries - SpaceLongPressBehavior.Voice
+            SpaceLongPressBehavior.None
         )
     }
 
@@ -58,23 +56,20 @@ class ManagedPreferenceCategoryTest {
     }
 
     @Test
-    fun aValueTheListDoesNotOfferReadsAndShowsAsTheDefault() {
-        // a voice build's, carried over by a backup or by the text build installed over it
-        sp.edit { putString("behavior", SpaceLongPressBehavior.Voice.name) }
+    fun aRemovedValueReadsAndShowsAsTheDefault() {
+        sp.edit { putString("behavior", "RemovedInputMethodBehavior") }
         val sample = Sample(sp)
         assertEquals(SpaceLongPressBehavior.None, sample.behavior.getValue())
         val list = shown(sample)
         assertEquals(SpaceLongPressBehavior.None.name, list.value)
         assertEquals(placeholder(R.string.space_behavior_none), list.entry.toString())
-        // shown, not written over: the voice build installed again reads Voice
-        assertEquals(SpaceLongPressBehavior.Voice.name, sp.getString("behavior", null))
+        assertEquals("RemovedInputMethodBehavior", sp.getString("behavior", null))
     }
 
     @Test
     fun theDefaultPickedOverAValueTheListDoesNotOfferIsStored() {
-        sp.edit { putString("behavior", SpaceLongPressBehavior.Voice.name) }
+        sp.edit { putString("behavior", "RemovedInputMethodBehavior") }
         shown(Sample(sp)).choose(SpaceLongPressBehavior.None.name)
-        // the user's None, which the voice build installed again keeps
         assertEquals(SpaceLongPressBehavior.None.name, sp.getString("behavior", null))
     }
 

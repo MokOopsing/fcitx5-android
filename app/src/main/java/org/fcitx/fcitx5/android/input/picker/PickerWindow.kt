@@ -73,8 +73,6 @@ class PickerWindow(
 
     override fun onStartInput(info: EditorInfo, capFlags: CapabilityFlags) {
         keepsNoRecent = capFlags.hasAny(CapabilityFlag.PasswordOrSensitive)
-        // the space's badge asks what the hold to talk asks (CommonKeyActionListener), a shown password too
-        if (::pickerLayout.isInitialized) pickerLayout.embeddedKeyboard.inPasswordField = service.inPasswordField
     }
 
     override fun enterAnimation(lastWindow: InputWindow): Transition? = null
@@ -220,7 +218,6 @@ class PickerWindow(
         pickerLayout.embeddedKeyboard.also {
             it.onReturnDrawableUpdate(returnKeyDrawable.appearance)
             it.keyActionListener = keyActionListener
-            it.inPasswordField = service.inPasswordField
         }
     }
 

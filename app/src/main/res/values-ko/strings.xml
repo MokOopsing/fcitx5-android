@@ -20,7 +20,6 @@
     <string name="next">다음</string>
     <string name="prev">이전</string>
     <string name="done">완료</string>
-    <string name="pinyin_dict">병음 사전</string>
     <string name="importing">가져오는 중</string>
     <string name="import_error">가져오기 오류</string>
     <string name="dict_already_exists">사전이 이미 존재합니다</string>
@@ -34,8 +33,6 @@
     <string name="expanded_candidate_style">확장된 후보 스타일</string>
     <string name="expanded_candidate_style_grid">격자</string>
     <string name="expanded_candidate_style_flexbox">Flexbox</string>
-    <string name="no_more_input_methods">더 이상 전환할 입력기가 없습니다</string>
-    <string name="add_more_input_methods">더 많은 입력기를 추가하시겠습니까?</string>
     <string name="about">정보</string>
     <string name="current_version">현재 버전</string>
     <string name="real_time_logs">실시간 로그</string>

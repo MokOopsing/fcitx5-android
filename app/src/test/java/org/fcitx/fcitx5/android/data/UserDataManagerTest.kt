@@ -45,7 +45,7 @@ class UserDataManagerTest {
     // an install's directories, made as they are needed: not the app's, which it writes as the test runs
     private fun install(name: String) = File(folder.root, name).let {
         UserDataManager.Dirs(
-            File(it, "shared_prefs"), File(it, "databases"), File(it, "external"), File(it, "recently_used"), File(it, "engine")
+            File(it, "shared_prefs"), File(it, "databases"), File(it, "external"), File(it, "recently_used")
         )
     }
 
@@ -93,21 +93,15 @@ class UserDataManagerTest {
     fun whatIsExportedIsImportedIntoAFreshInstallAsItWas() {
         val old = install("old")
         File(old.sharedPrefs.apply { mkdirs() }, prefs).writeText("<map />")
-        File(old.engine, "tables").mkdirs()
-        File(old.engine, "pinyin.log").writeText("learned")
-        File(old.engine, "tables/mine.txt").writeText("table")
-        // kept aside by its store, which could not read it: the only copy of what it held
-        File(old.engine, "pinyin.log.unreadable").writeText("damaged")
-        // half written by a compaction, which renames it over the log once done
-        File(old.engine, "pinyin.log.compacting").writeText("half")
+        File(old.external, "engine").mkdirs()
+        File(old.external, "engine/pinyin.log").writeText("legacy")
+        File(old.external, "data/rime").mkdirs()
+        File(old.external, "data/rime/user.yaml").writeText("rime")
         val fresh = install("fresh")
         UserDataManager.import(exported(old), fresh).getOrThrow()
         assertEquals("<map />", File(fresh.sharedPrefs, prefs).readText())
-        assertEquals("learned", File(fresh.engine, "pinyin.log").readText())
-        assertEquals("table", File(fresh.engine, "tables/mine.txt").readText())
-        assertEquals("damaged", File(fresh.engine, "pinyin.log.unreadable").readText())
-        assertFalse(File(fresh.engine, "pinyin.log.compacting").exists())
-        assertEquals(listOf("engine"), File(folder.root, "fresh").list()!!.filter { it.startsWith("engine") })
+        assertFalse(File(fresh.external, "engine").exists())
+        assertEquals("rime", File(fresh.external, "data/rime/user.yaml").readText())
     }
 
     @Test
@@ -234,7 +228,6 @@ class UserDataManagerTest {
             "shared_prefs/${UserDataOrigin.preferencesFile(legacy)}" to "<map />",
             // a directory where they would go: the rename fails
             "shared_prefs/$prefs/x" to "",
-            "engine/pinyin.log" to "learned",
         )
         assertTrue(UserDataManager.import(backup, install("fresh")).isFailure)
         assertFalse(marker.exists())
@@ -242,19 +235,16 @@ class UserDataManagerTest {
     }
 
     @Test
-    fun anImportKeepsTheEngineFilesTheBackupHasNot() {
+    fun anImportIgnoresLegacyEngineData() {
         val phone = install("phone")
-        File(phone.engine, "cache").mkdirs()
-        File(phone.engine, "pinyin.log").writeText("old")
-        File(phone.engine, "cache/table.bin").writeText("built")
-        File(phone.engine, "lists").mkdir()
-        File(phone.engine, "lists/a").writeText("a list")
-        val backup = zip(BuildConfig.APPLICATION_ID, "engine/pinyin.log" to "learned", "engine/lists" to "a file")
+        val backup = zip(
+            BuildConfig.APPLICATION_ID,
+            "external/engine/pinyin.log" to "learned",
+            "external/engine/lists" to "a file",
+            "external/data/rime/user.yaml" to "rime",
+        )
         UserDataManager.import(backup, phone).getOrThrow()
-        assertEquals("learned", File(phone.engine, "pinyin.log").readText())
-        assertEquals("built", File(phone.engine, "cache/table.bin").readText())
-        // where the backup has a file, its file
-        assertEquals("a file", File(phone.engine, "lists").readText())
-        assertEquals(listOf("engine"), File(folder.root, "phone").list()!!.filter { it.startsWith("engine") })
+        assertFalse(File(phone.external, "engine").exists())
+        assertEquals("rime", File(phone.external, "data/rime/user.yaml").readText())
     }
 }

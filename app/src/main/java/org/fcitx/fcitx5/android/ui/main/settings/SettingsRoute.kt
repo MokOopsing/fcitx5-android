@@ -119,27 +119,16 @@ sealed class SettingsRoute : Parcelable {
     }
 
     @Serializable
-    data class PinyinDict(val uri: String? = null) : SettingsRoute() {
-        constructor(uri: Uri) : this(uri.toString())
-    }
-
-    @Serializable
     data class Punctuation(val title: String, val lang: String? = null) : SettingsRoute()
-
-    @Serializable
-    data object PinyinCustomPhrase : SettingsRoute()
-
-    @Serializable
-    data object UserWords : SettingsRoute()
-
-    @Serializable
-    data class UserWordList(val kind: String, val english: Boolean = false) : SettingsRoute()
 
     @Serializable
     data object PopupOverrides : SettingsRoute()
 
     @Serializable
-    data object NineKeyLetters : SettingsRoute()
+    data object KeyLabelOverrides : SettingsRoute()
+
+    @Serializable
+    data object PreeditFontSizeOverrides : SettingsRoute()
 
     @Serializable
     data object Search : SettingsRoute()
@@ -196,22 +185,15 @@ sealed class SettingsRoute : Parcelable {
             fragment<ListFragment, ListConfig>(
                 typeMap = mapOf(typeOf<ListConfig.Params>() to ListConfig.Params.NavType)
             )
-            fragment<PinyinDictionaryFragment, PinyinDict> {
-                label = ctx.getString(R.string.word_packs)
-            }
-            fragment<UserWordsFragment, UserWords> {
-                label = ctx.getString(R.string.my_words)
-            }
-            fragment<UserWordListFragment, UserWordList>()
             fragment<PunctuationEditorFragment, Punctuation>()
-            fragment<PinyinCustomPhraseFragment, PinyinCustomPhrase> {
-                label = ctx.getString(R.string.custom_phrases)
-            }
             fragment<PopupOverridesFragment, PopupOverrides> {
                 label = ctx.getString(R.string.long_press_characters)
             }
-            fragment<NineKeyLettersFragment, NineKeyLetters> {
-                label = ctx.getString(R.string.t9_letters)
+            fragment<KeyLabelOverridesFragment, KeyLabelOverrides> {
+                label = ctx.getString(R.string.key_labels)
+            }
+            fragment<PreeditFontSizeOverridesFragment, PreeditFontSizeOverrides> {
+                label = ctx.getString(R.string.preedit_font_size_overrides)
             }
             fragment<SettingsSearchFragment, Search> {
                 label = ctx.getString(R.string.search_settings)

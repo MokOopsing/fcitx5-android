@@ -13,7 +13,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 /**
- * The editor SoftKeyboardTest types into keeps a Return key event a newline in its multi-line
+ * The test editor keeps a Return key event a newline in its multi-line
  * field. TextView offers that key to the editor-action listener as IME_NULL first, on key down and
  * on key up; the listener took it, so the field got no newline and [TypingHostActivity.actions]
  * read [0, 0].

@@ -1,0 +1,11 @@
+{
+    "uniqueId": "rime/librime",
+    "artifactVersion": "origin/master",
+    "description": "Rime Input Method Engine",
+    "name": "rime/librime",
+    "website": "https://github.com/rime/librime",
+    "tag": "native",
+    "licenses": [
+        "BSD-3-Clause"
+    ]
+}

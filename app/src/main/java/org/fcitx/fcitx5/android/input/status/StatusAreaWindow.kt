@@ -12,7 +12,6 @@ import androidx.core.text.color
 import kotlinx.coroutines.launch
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.Action
-import org.fcitx.fcitx5.android.core.InputMethodNames
 import org.fcitx.fcitx5.android.daemon.FcitxConnection
 import org.fcitx.fcitx5.android.daemon.launchOnReady
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
@@ -129,7 +128,7 @@ class StatusAreaWindow : InputWindow.ExtendedInputWindow<StatusAreaWindow>(),
                     is StatusAreaEntry.Android -> when (entry.type) {
                         InputMethod -> fcitx.runImmediately { inputMethodEntryCached }.let {
                             AppUtil.launchMainToInputMethodConfig(
-                                context, it.uniqueName, InputMethodNames.of(context, it)
+                                context, it.uniqueName, it.displayName
                             )
                         }
                         Keyboard -> AppUtil.launchMainToKeyboard(context)

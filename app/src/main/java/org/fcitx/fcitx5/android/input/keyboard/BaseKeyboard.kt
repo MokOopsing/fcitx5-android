@@ -18,7 +18,6 @@ import kotlin.math.roundToInt
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.FcitxKeyMapping
 import org.fcitx.fcitx5.android.core.InputMethodEntry
-import org.fcitx.fcitx5.android.core.InputMethodNames
 import org.fcitx.fcitx5.android.core.InputMethodSubMode
 import org.fcitx.fcitx5.android.core.KeyStates
 import org.fcitx.fcitx5.android.core.KeySym
@@ -32,7 +31,6 @@ import org.fcitx.fcitx5.android.input.keyboard.CustomGestureView.OnGestureListen
 import org.fcitx.fcitx5.android.input.popup.PopupAction
 import org.fcitx.fcitx5.android.input.popup.PopupActionListener
 import org.fcitx.fcitx5.android.input.popup.PopupKeyboardUi
-import org.fcitx.fcitx5.android.input.voice.VoiceFeature
 import splitties.dimensions.dp
 import splitties.views.dsl.constraintlayout.above
 import splitties.views.dsl.constraintlayout.below
@@ -70,21 +68,6 @@ abstract class BaseKeyboard(
             it.swipeEnabled = v
         }
     }
-
-    private val spaceLongPress = prefs.keyboard.spaceKeyLongPressBehavior
-
-    @Keep
-    private val spaceLongPressListener = ManagedPreference.OnChangeListener<SpaceLongPressBehavior> { _, v ->
-        updateSpaceBadges(v)
-    }
-
-    /** Set per field ([KeyboardWindow]): no hold to talk in a password (CommonKeyActionListener), so no badge. */
-    var inPasswordField = false
-        set(value) {
-            if (field == value) return
-            field = value
-            updateSpaceBadges(spaceLongPress.getValue())
-        }
 
     private val vivoKeypressWorkaround by prefs.advanced.vivoKeypressWorkaround
 
@@ -158,15 +141,6 @@ abstract class BaseKeyboard(
             })
         }
         spaceSwipeMoveCursor.registerOnChangeListener(spaceSwipeChangeListener)
-        updateSpaceBadges(spaceLongPress.getValue())
-        spaceLongPress.registerOnChangeListener(spaceLongPressListener)
-    }
-
-    // holding the space to talk: a microphone on every keyboard's space says so, or no one would know
-    private fun updateSpaceBadges(behavior: SpaceLongPressBehavior) {
-        val voice = behavior.talks(VoiceFeature.AVAILABLE, inPasswordField)
-        val icon = if (voice) R.drawable.ic_baseline_keyboard_voice_24 else null
-        spaceKeys.forEach { (it as? TextKeyView)?.showBadge(icon) }
     }
 
     /** What swiping a key types: its own swipe, nothing, or what the user chose ([swipeText]). */
@@ -242,7 +216,7 @@ abstract class BaseKeyboard(
                                 true
                             }
                         }
-                        else -> false
+                        GestureType.Down, GestureType.Up -> false
                     }
                 }
             } else if (def is BackspaceKey) {
@@ -270,7 +244,7 @@ abstract class BaseKeyboard(
                             if (!event.cancelled) onAction(KeyAction.DeleteSelectionAction(event.totalX))
                             false
                         }
-                        else -> false
+                        GestureType.Down, GestureType.Move -> false
                     }
                 }
             }
@@ -282,10 +256,8 @@ abstract class BaseKeyboard(
                         }
                     }
                     is KeyDef.Behavior.LongPress -> {
-                        // hold to talk follows the finger that holds the space
-                        setOnLongClickListener { view ->
-                            val action = it.action
-                            onAction(if (action is KeyAction.SpaceLongPressAction) action.copy(pointer = (view as CustomGestureView).touchPointer) else action)
+                        setOnLongClickListener { _ ->
+                            onAction(it.action)
                             true
                         }
                     }
@@ -573,7 +545,7 @@ abstract class BaseKeyboard(
 
     /** Shows [ime] on [space]: its name, and its sub-mode's ([spaceLabel]). */
     protected fun showInputMethodName(space: TextKeyView, ime: InputMethodEntry) {
-        val imeName = spaceLabel(InputMethodNames.of(context, ime), ime.subMode)
+        val imeName = spaceLabel(ime.displayName, ime.subMode)
         // A change of input method (or of its sub-mode, e.g. an ASCII toggle) is otherwise
         // silent: the name is only on the Space key, which the user is not touching. The first
         // update is the keyboard appearing, which TalkBack announces itself. A change made while
@@ -621,7 +593,7 @@ abstract class BaseKeyboard(
 
 /**
  * Finger [pointerIndex] of this event alone, as [action], in the coordinates of the key at [hitRect].
- * Its id stays the finger's: hold to talk follows that id in the real events (VoiceHoldOverlay).
+ * Its id stays the finger's so the target receives consistent pointer events.
  */
 internal fun MotionEvent.forKey(action: Int, pointerIndex: Int, hitRect: Rect): MotionEvent {
     KeyPointer.properties[0].id = getPointerId(pointerIndex)
@@ -647,8 +619,8 @@ private object KeyPointer {
 internal fun CustomGestureView.Event.isSwipe(direction: SwipeSymbolDirection) =
     !consumed && !cancelled && direction.checkY(totalY)
 
-/** What the Space key shows of an input method: its [name], and [subMode]'s label (or else its name) in brackets. */
+/** What the Space key shows: [name], followed by [subMode]'s name or, if absent, its label. */
 internal fun spaceLabel(name: String, subMode: InputMethodSubMode): String {
-    val mode = subMode.label.ifEmpty { subMode.name }
-    return if (mode.isEmpty()) name else "$name ($mode)"
+    val mode = subMode.name.ifEmpty { subMode.label }
+    return if (mode.isEmpty()) name else "$name $mode"
 }

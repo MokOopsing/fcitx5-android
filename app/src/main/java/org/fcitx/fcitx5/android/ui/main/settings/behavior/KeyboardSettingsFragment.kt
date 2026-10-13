@@ -15,18 +15,28 @@ import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
 import org.fcitx.fcitx5.android.utils.navigateWithAnim
 
 class KeyboardSettingsFragment : ManagedPreferenceFragment(AppPrefs.getInstance().keyboard) {
+
     override fun onPreferenceUiCreated(screen: PreferenceScreen) {
         val keys = screen.findPreference<PreferenceCategory>(
             ManagedPreferenceCategory.sectionKey(R.string.section_keys)
         ) ?: screen
         keys.addPreference(Preference(requireContext()).apply {
-            // managed preferences don't reserve an icon slot; match them or the title sits indented
             isIconSpaceReserved = false
             isSingleLineTitle = false
             setTitle(R.string.long_press_characters)
             setSummary(R.string.long_press_characters_summary)
             setOnPreferenceClickListener {
                 navigateWithAnim(SettingsRoute.PopupOverrides)
+                true
+            }
+        })
+        keys.addPreference(Preference(requireContext()).apply {
+            isIconSpaceReserved = false
+            isSingleLineTitle = false
+            setTitle(R.string.key_labels)
+            setSummary(R.string.key_labels_summary)
+            setOnPreferenceClickListener {
+                navigateWithAnim(SettingsRoute.KeyLabelOverrides)
                 true
             }
         })

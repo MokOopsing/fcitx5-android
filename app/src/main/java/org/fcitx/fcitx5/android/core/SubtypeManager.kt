@@ -5,7 +5,6 @@
 
 package org.fcitx.fcitx5.android.core
 
-import android.content.Context
 import android.os.Build
 import android.view.inputmethod.InputMethodSubtype
 import android.view.inputmethod.InputMethodSubtype.InputMethodSubtypeBuilder
@@ -17,8 +16,6 @@ import org.fcitx.fcitx5.android.utils.inputMethodManager
 object SubtypeManager {
 
     private const val MODE_KEYBOARD = "keyboard"
-
-    private const val IM_KEYBOARD = InputMethodNames.KEYBOARD
 
     // replaced whole, never changed in place: the main thread reads it while another thread syncs
     @Volatile
@@ -38,16 +35,14 @@ object SubtypeManager {
     }
 
     /**
-     * The order subtypes are registered in: the system takes the first for the current one until
-     * the user picks another, and the first field switches to it, so the keyboard first opened
-     * every fresh install in English. The keyboard goes last, the rest keep their order.
+     * Put Rime first so the system selects it by default when the IME is first enabled.
      */
     fun registrationOrder(enabled: Array<InputMethodEntry>): List<InputMethodEntry> =
-        enabled.sortedBy { it.uniqueName == IM_KEYBOARD }
+        enabled.sortedBy { it.uniqueName != RIME_INPUT_METHOD }
 
     @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     @Synchronized
-    fun syncWith(enabled: Array<InputMethodEntry>, names: Context = appContext) {
+    fun syncWith(enabled: Array<InputMethodEntry>) {
         val inputMethods = registrationOrder(enabled)
         val size = inputMethods.size
         val known = HashMap<String, InputMethodSubtype>(size)
@@ -57,9 +52,9 @@ object SubtypeManager {
             val subtype = InputMethodSubtypeBuilder()
                 .setSubtypeId(im.uniqueName.hashCode())
                 .setSubtypeExtraValue(im.uniqueName)
-                .setSubtypeNameOverride(InputMethodNames.of(names, im))
+                .setSubtypeNameOverride(im.displayName)
                 .setSubtypeMode(MODE_KEYBOARD)
-                .setIsAsciiCapable(im.uniqueName == IM_KEYBOARD)
+                .setIsAsciiCapable(im.uniqueName == RIME_INPUT_METHOD)
                 .build()
             val hashCode = subtype.hashCode()
             subtypes[i] = subtype

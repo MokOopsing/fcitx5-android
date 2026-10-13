@@ -126,11 +126,21 @@ class TextKeyboard(
 
     private val keepLettersUppercase by AppPrefs.getInstance().keyboard.keepLettersUppercase
 
-    // what the user made of the long press: a letter's first is its swipe and its corner too
+    // what the user made of the long press: a letter's first is its swipe and normally its corner label
     private val popupOverridesPref = AppPrefs.getInstance().internal.popupOverrides
 
     @Keep
     private val popupOverridesListener = ManagedPreference.OnChangeListener<String> { _, _ ->
+        updatePunctuationKeys()
+    }
+
+    private val keyLabelOverridesPref = AppPrefs.getInstance().internal.keyLabelOverrides
+    private var parsedKeyLabelText: String? = null
+    private var parsedKeyLabelOverrides = KeyLabelOverrides.Empty
+
+    @Keep
+    private val keyLabelOverridesListener = ManagedPreference.OnChangeListener<String> { _, _ ->
+        updateAlphabetKeys()
         updatePunctuationKeys()
     }
 
@@ -139,6 +149,7 @@ class TextKeyboard(
         updateLangSwitchKey(showLangSwitchKey.getValue())
         showLangSwitchKey.registerOnChangeListener(showLangSwitchKeyListener)
         popupOverridesPref.registerOnChangeListener(popupOverridesListener)
+        keyLabelOverridesPref.registerOnChangeListener(keyLabelOverridesListener)
     }
 
     private val textKeys: List<TextKeyView> by lazy {
@@ -146,6 +157,9 @@ class TextKeyboard(
     }
 
     private var capsState: CapsState = CapsState.None
+
+    private var currentInputMethod = ""
+    private var currentSubMode = ""
 
     private val autoCaps = AutoCaps()
 
@@ -229,7 +243,11 @@ class TextKeyboard(
     }
 
     override fun onInputMethodUpdate(ime: InputMethodEntry) {
+        currentInputMethod = ime.uniqueName
+        currentSubMode = ime.subMode.name
         showInputMethodName(space, ime)
+        updateAlphabetKeys()
+        updatePunctuationKeys()
         if (capsState != CapsState.None) {
             switchCapsState()
         }
@@ -309,9 +327,18 @@ class TextKeyboard(
     }
 
     private fun updateAlphabetKeys() {
+        val rawKeyLabels = keyLabelOverridesPref.getValue()
+        if (rawKeyLabels != parsedKeyLabelText) {
+            parsedKeyLabelText = rawKeyLabels
+            parsedKeyLabelOverrides = KeyLabelOverrides.parse(rawKeyLabels)
+        }
+        val customLabels = parsedKeyLabelOverrides.labelsFor(currentInputMethod, currentSubMode)
         textKeys.forEach {
             if (it.def !is KeyDef.Appearance.AltText) return
-            it.mainText.text = it.def.displayText.let { str ->
+            val letter = it.def.displayText
+                .takeIf { str -> str.length == 1 && str[0].isLetter() }
+                ?.lowercase()
+            it.mainText.text = letter?.let(customLabels::get) ?: it.def.displayText.let { str ->
                 if (str.length != 1 || !str[0].isLetter()) return@forEach
                 if (keepLettersUppercase) str.uppercase() else transformAlphabet(str)
             }
@@ -322,7 +349,8 @@ class TextKeyboard(
         textKeys.forEach {
             if (it is AltTextKeyView) {
                 it.def as KeyDef.Appearance.AltText
-                it.altText.text = transformPunctuation(swipeOverride(it.def) ?: it.def.altText)
+                val defaultLabel = transformPunctuation(swipeOverride(it.def) ?: it.def.altText)
+                it.altText.text = defaultLabel
             } else {
                 it.def as KeyDef.Appearance.Text
                 // an address's keys commit as they are, and say so: . not 。
@@ -336,9 +364,7 @@ class TextKeyboard(
     }
 
 
-    // a letter's swipe is the first of its long press, as built in (q: 1, then Q) and as the user
-    // changed it: one thing, drawn in its corner too (updatePunctuationKeys); none when the user
-    // turned its long press off
+    // A letter's swipe is the first of its long press, independent of the displayed letter label.
     override fun swipeText(view: KeyView): SwipeChoice =
         SwipeChoice.of(((view as? AltTextKeyView)?.def as? KeyDef.Appearance.AltText)?.let(::swipeOverride))
 

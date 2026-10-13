@@ -17,12 +17,10 @@ import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.data.DataManager
 import org.fcitx.fcitx5.android.data.clipboard.ClipboardManager
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
-import org.fcitx.fcitx5.android.engine.host.Engines
 import org.fcitx.fcitx5.android.utils.Locales
 import org.fcitx.fcitx5.android.utils.appContext
 import org.fcitx.fcitx5.android.utils.toast
 import timber.log.Timber
-import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
@@ -59,24 +57,6 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
 
     override suspend fun save() = withFcitxContext { saveFcitxState() }
     override suspend fun reloadConfig() = withFcitxContext { reloadFcitxConfig() }
-    override suspend fun reloadEngine() = withFcitxContext { EngineBridge.reload() }
-    override suspend fun userWords() = withFcitxContext { EngineBridge.engines.userWords() }
-    override suspend fun userWords(kind: Engines.UserWord.Kind) = withFcitxContext { EngineBridge.engines.userWords(kind) }
-    override suspend fun userWordCounts() = withFcitxContext { EngineBridge.engines.userWordCounts() }
-    override suspend fun pinyinOf(text: String) = withFcitxContext { EngineBridge.engines.pinyinOf(text) }
-    override suspend fun wordBoundaries(texts: List<String>) = withFcitxContext { EngineBridge.engines.wordBoundaries(texts) }
-    override suspend fun logProbs(texts: List<String>) = withFcitxContext { EngineBridge.engines.logProbs(texts) }
-    override suspend fun addUserWord(text: String, pinyin: String) = withFcitxContext { EngineBridge.engines.addWord(text, pinyin) }
-    override suspend fun blockUserWord(text: String, pinyin: String) = withFcitxContext { EngineBridge.engines.blockWord(text, pinyin) }
-    override suspend fun removeUserWords(words: List<Engines.UserWord>) = withFcitxContext { EngineBridge.engines.removeWords(words) }
-    override suspend fun englishWords() = withFcitxContext { EngineBridge.engines.englishWords() }
-    override suspend fun addEnglishWord(text: String) = withFcitxContext { EngineBridge.engines.addEnglishWord(text) }
-    override suspend fun forgetEnglishWords(texts: List<String>) = withFcitxContext { EngineBridge.engines.forgetEnglishWords(texts) }
-    override suspend fun importUserWords(lines: Sequence<String>) = withFcitxContext { EngineBridge.engines.importWords(lines) }
-    override suspend fun exportUserWords() = withFcitxContext { EngineBridge.engines.exportWords() }
-
-    override suspend fun engineContext(before: String) = withFcitxContext { EngineBridge.context(before) }
-
     override suspend fun sendKey(
         key: String,
         states: UInt,
@@ -104,22 +84,25 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
     override suspend fun select(idx: Int, text: String?): Boolean =
         withFcitxContext { selectCandidate(idx, text) }
 
+    override suspend fun simulateShift(): Boolean = withFcitxContext { sendHardShift() }
     override suspend fun isEmpty(): Boolean = withFcitxContext { isInputPanelEmpty() }
     override suspend fun reset() = withFcitxContext { resetInputContext() }
     override suspend fun moveCursor(position: Int) = withFcitxContext { repositionCursor(position) }
-    override suspend fun availableIme() =
-        withFcitxContext { availableInputMethods() ?: emptyArray() }
+    override suspend fun availableIme(): Array<InputMethodEntry> =
+        withFcitxContext<Array<InputMethodEntry>> { availableInputMethods() ?: emptyArray() }
 
-    override suspend fun enabledIme() =
-        withFcitxContext { listInputMethods() ?: emptyArray() }
+    override suspend fun enabledIme(): Array<InputMethodEntry> =
+        withFcitxContext<Array<InputMethodEntry>> { listInputMethods() ?: emptyArray() }
 
     override suspend fun setEnabledIme(array: Array<String>) =
-        withFcitxContext { setEnabledInputMethods(array) }
+        withFcitxContext {
+            if (availableInputMethods().orEmpty().any { it.uniqueName == RIME_INPUT_METHOD }) {
+                setEnabledInputMethods(arrayOf(RIME_INPUT_METHOD))
+            }
+        }
 
     override suspend fun toggleIme() = withFcitxContext { toggleInputMethod() }
     override suspend fun activateIme(ime: String) = withFcitxContext { setInputMethod(ime) }
-    override suspend fun enumerateIme(forward: Boolean) =
-        withFcitxContext { nextInputMethod(forward) }
 
     override suspend fun currentIme() =
         withFcitxContext { inputMethodStatus() ?: inputMethodEntryCached }
@@ -264,6 +247,9 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
         external fun selectCandidate(idx: Int, text: String?): Boolean
 
         @JvmStatic
+        external fun sendHardShift(): Boolean
+
+        @JvmStatic
         external fun isInputPanelEmpty(): Boolean
 
         @JvmStatic
@@ -274,9 +260,6 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
 
         @JvmStatic
         external fun toggleInputMethod()
-
-        @JvmStatic
-        external fun nextInputMethod(forward: Boolean)
 
         @JvmStatic
         external fun listInputMethods(): Array<InputMethodEntry>?
@@ -378,16 +361,10 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
             eventFlow_.tryEmit(event)
         }
 
-        // will be called in fcitx main thread
-        private fun onFirstRun() {
-            Timber.i("onFirstRun")
-            // fcitx builds the first group from the system's language: on a phone not set to
-            // Chinese that is the keyboard alone, and this is a pinyin input method first. First in
-            // the group, as a field starts with the group's first (the globe key then toggles to the
-            // keyboard)
-            if (availableInputMethods()?.any { it.uniqueName == Engines.PINYIN } == true) {
-                val enabled = listInputMethods()?.map { it.uniqueName }.orEmpty().filter { it != Engines.PINYIN }
-                setEnabledInputMethods((listOf(Engines.PINYIN) + enabled).toTypedArray())
+        // will be called in fcitx main thread; replacing legacy input methods leaves Rime enabled
+        private fun ensureRimeEnabled() {
+            if (availableInputMethods().orEmpty().any { it.uniqueName == RIME_INPUT_METHOD }) {
+                setEnabledInputMethods(arrayOf(RIME_INPUT_METHOD))
             }
         }
 
@@ -421,14 +398,6 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
             )
             with(FcitxApplication.getInstance().directBootAwareContext) {
                 val home = getExternalFilesDir(null) ?: filesDir
-                EngineMigration.run(File(home, "config"), EngineBridge.userDir())
-                // what the user changed while fcitx was down (a dictionary imported, say) is read anew
-                try {
-                    EngineBridge.reload()
-                } catch (@Suppress("TooGenericExceptionCaught") e: Exception) {
-                    // read again at first need all the same: that must not keep fcitx from starting
-                    Timber.w(e, "cannot reload the engine")
-                }
                 startupFcitx(
                     locale,
                     dataDir,
@@ -454,8 +423,6 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
 
         override fun nativeExit() {
             exitFcitx()
-            // the addon gone with fcitx: a cached process keeps none of the engine's models, tables and logs
-            EngineBridge.close()
         }
 
     })
@@ -470,15 +437,10 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
         lifecycle.launchWhenReady { setClipboard(it.text, it.sensitive) }
     }
 
-    private var firstRun by AppPrefs.getInstance().internal.firstRun
-
-    private fun handleFirstRunReadyEvent(event: FcitxEvent<*>) {
-        if (event is FcitxEvent.ReadyEvent && firstRun) {
-            firstRun = false
-            // this method runs in same thread with `startupFcitx`
-            // block it will also block fcitx
-            onFirstRun()
-            unregisterFcitxEventHandler(::handleFirstRunReadyEvent)
+    private fun handleRimeReadyEvent(event: FcitxEvent<*>) {
+        if (event is FcitxEvent.ReadyEvent) {
+            ensureRimeEnabled()
+            unregisterFcitxEventHandler(::handleRimeReadyEvent)
         }
     }
 
@@ -507,9 +469,7 @@ class Fcitx(private val context: Context) : FcitxAPI, FcitxLifecycleOwner {
             Timber.w("Skip starting fcitx: not at stopped state!")
             return
         }
-        if (firstRun) {
-            registerFcitxEventHandler(::handleFirstRunReadyEvent)
-        }
+        registerFcitxEventHandler(::handleRimeReadyEvent)
         registerFcitxEventHandler(::handleFcitxEvent)
         lifecycleRegistry.postEvent(FcitxLifecycle.Event.ON_START)
         ClipboardManager.addOnUpdateListener(onClipboardUpdate)

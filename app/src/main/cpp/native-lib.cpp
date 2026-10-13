@@ -9,7 +9,6 @@
 #include <memory>
 #include <future>
 #include <string>
-#include <unordered_map>
 #include <unordered_set>
 
 #include <android/log.h>
@@ -38,7 +37,6 @@
 
 #include "androidaddonloader/androidaddonloader.h"
 #include "androidfrontend/androidfrontend_public.h"
-#include "androidengine/androidengine_public.h"
 #include "jni-utils.h"
 #include "nativestreambuf.h"
 #include "helper-types.h"
@@ -79,7 +77,7 @@ public:
         return uv_run(get_event_base(), UV_RUN_ONCE);
     }
 
-    void startup(const std::function<void(fcitx::AddonInstance *, fcitx::AddonInstance *)> &setupCallback) {
+    void startup(const std::function<void(fcitx::AddonInstance *)> &setupCallback) {
         p_instance = std::make_unique<fcitx::Instance>(0, nullptr);
         p_instance->addonManager().registerLoader(std::make_unique<fcitx::AndroidSharedLibraryLoader>());
         p_dispatcher = std::make_unique<fcitx::EventDispatcher>();
@@ -90,8 +88,7 @@ public:
         p_quickphrase = addonMgr.addon("quickphrase");
         p_unicode = addonMgr.addon("unicode");
         p_clipboard = addonMgr.addon("clipboard", true);
-        p_engine = addonMgr.addon("androidengine", true);
-        setupCallback(p_frontend, p_engine);
+        setupCallback(p_frontend);
     }
 
     void reloadConfig() {
@@ -118,6 +115,10 @@ public:
         return p_frontend->call<fcitx::IAndroidFrontend::selectCandidate>(idx, text);
     }
 
+    bool sendHardShift() {
+        return p_frontend->call<fcitx::IAndroidFrontend::sendHardShift>();
+    }
+
     bool isInputPanelEmpty() {
         return p_frontend->call<fcitx::IAndroidFrontend::isInputPanelEmpty>();
     }
@@ -132,10 +133,6 @@ public:
 
     void toggleInputMethod() {
         p_instance->toggle();
-    }
-
-    void nextInputMethod(bool forward) {
-        p_instance->enumerate(forward);
     }
 
     std::vector<const fcitx::InputMethodEntry *> listInputMethods() {
@@ -382,7 +379,6 @@ private:
     fcitx::AddonInstance *p_quickphrase = nullptr;
     fcitx::AddonInstance *p_unicode = nullptr;
     fcitx::AddonInstance *p_clipboard = nullptr;
-    fcitx::AddonInstance *p_engine = nullptr;
 
     void resetGlobalPointers() {
         p_instance.reset();
@@ -391,7 +387,6 @@ private:
         p_quickphrase = nullptr;
         p_unicode = nullptr;
         p_clipboard = nullptr;
-        p_engine = nullptr;
     }
 };
 
@@ -433,74 +428,6 @@ static std::vector<std::string> utf8FromJStringArray(JNIEnv *env, jobjectArray a
         out.push_back(utf8FromJString(env, s));
     }
     return out;
-}
-
-static std::string className(JNIEnv *env, jobject object) {
-    static const jmethodID getName = [env] {
-        auto c = JRef<jclass>(env, env->FindClass("java/lang/Class"));
-        return env->GetMethodID(c, "getName", "()Ljava/lang/String;");
-    }();
-    auto type = JRef<jclass>(env, env->GetObjectClass(object));
-    auto name = utf8FromJString(env, JRef<jstring>(env, env->CallObjectMethod(type, getName)));
-    env->ExceptionClear();
-    return name;
-}
-
-// The lines of [e]'s trace: its frames, then each cause's by its class. Not Throwable.toString's
-// lines, which add each message, and a message may hold letters typed (CustomPhrases' "not a key").
-static std::vector<std::string> traceOf(JNIEnv *env, jthrowable e) {
-    struct Methods {
-        jmethodID getStackTrace, getCause, frameToString;
-    };
-    static const Methods methods = [env] {
-        auto throwable = JRef<jclass>(env, env->FindClass("java/lang/Throwable"));
-        auto frame = JRef<jclass>(env, env->FindClass("java/lang/StackTraceElement"));
-        return Methods{env->GetMethodID(throwable, "getStackTrace", "()[Ljava/lang/StackTraceElement;"),
-                       env->GetMethodID(throwable, "getCause", "()Ljava/lang/Throwable;"),
-                       env->GetMethodID(frame, "toString", "()Ljava/lang/String;")};
-    }();
-    std::vector<std::string> lines;
-    auto t = static_cast<jthrowable>(env->NewLocalRef(e));
-    // a chain may loop back (initCause refuses only a throwable itself): a few causes at most
-    for (int depth = 0; t && depth < 8 && !env->ExceptionCheck(); depth++) {
-        if (depth > 0) lines.push_back("Caused by: " + className(env, t));
-        auto frames = JRef<jobjectArray>(env, env->CallObjectMethod(t, methods.getStackTrace));
-        const jsize n = frames ? env->GetArrayLength(frames) : 0;
-        for (jsize i = 0; i < n && !env->ExceptionCheck(); i++) {
-            auto frame = JRef(env, env->GetObjectArrayElement(frames, i));
-            lines.push_back("\tat " + utf8FromJString(env, JRef<jstring>(env, env->CallObjectMethod(frame, methods.frameToString))));
-        }
-        auto cause = env->ExceptionCheck() ? nullptr : static_cast<jthrowable>(env->CallObjectMethod(t, methods.getCause));
-        env->DeleteLocalRef(t);
-        t = cause;
-    }
-    env->DeleteLocalRef(t);
-    // only memory run out throws here, which cuts the trace short
-    env->ExceptionClear();
-    return lines;
-}
-
-// An exception from the engine must not unwind through fcitx: log it, and the key goes to the app.
-// Its trace once for each call, input method, event and exception class, then a line with the
-// count at the 2nd, 4th, 8th... alike: still failing, not a stack on every key. Never an event's
-// arg (a character typed), nor a message (traceOf): the log is exported, and no test can throw from
-// the engine to hold this, so no ExceptionDescribe nor Throwable.toString here.
-static bool engineFailed(JNIEnv *env, const char *call, const std::string &im = "", int event = -1) {
-    if (!env->ExceptionCheck()) return false;
-    auto e = JRef<jthrowable>(env, env->ExceptionOccurred());
-    // nothing else may be called while it is pending
-    env->ExceptionClear();
-    const auto name = className(env, e);
-    static std::unordered_map<std::string, unsigned long> failures;
-    const auto where = std::string(call) + " " + im + (event < 0 ? std::string() : " " + std::to_string(event)) + " " + name;
-    const auto count = ++failures[where];
-    if (count == 1) {
-        FCITX_ERROR() << "engine failed: " << where;
-        for (const auto &line: traceOf(env, e)) FCITX_ERROR() << line;
-    } else if ((count & (count - 1)) == 0) {
-        FCITX_ERROR() << "engine failed again: " << where << ", " << count << " times";
-    }
-    return true;
 }
 
 extern "C"
@@ -558,7 +485,7 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_startupFcitx(
 
     const char *locale_dir_char = locale_dir.c_str();
     fcitx::registerDomain("fcitx5", locale_dir_char);
-    fcitx::registerDomain("fcitx5-chinese-addons", locale_dir_char);
+    fcitx::registerDomain("fcitx5-rime", locale_dir_char);
     fcitx::registerDomain("fcitx5-android", locale_dir_char);
 
     auto candidateListCallback = [](const std::vector<CandidateEntity> &candidates, const int total) {
@@ -696,72 +623,10 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_startupFcitx(
         env->CallStaticVoidMethod(GlobalRef->Fcitx, GlobalRef->ShowToast, *JString(env, s));
     };
 
-    auto engineEventCallback = [](const std::string &im, EngineEvent event, int arg, bool learning) {
-        auto env = GlobalRef->AttachEnv();
-        EngineSnapshot snapshot;
-        auto result = JRef(env, env->CallStaticObjectMethod(GlobalRef->EngineBridge, GlobalRef->EngineBridgeOnEvent,
-                                                             *JString(env, im), static_cast<jint>(event), arg,
-                                                             static_cast<jboolean>(learning)));
-        // input methods whose session has answered: one that never did has nothing to drop
-        static std::unordered_set<std::string> answered;
-        if (engineFailed(env, "onEvent", im, static_cast<int>(event))) {
-            // the panel is cleared for it (but for a slice of refining, not shown): so must the
-            // session be, or what it had comes back with the next key
-            if (event != EngineEvent::Reset && event != EngineEvent::Refine && answered.count(im)) {
-                JRef(env, env->CallStaticObjectMethod(GlobalRef->EngineBridge, GlobalRef->EngineBridgeOnEvent,
-                                                      *JString(env, im), static_cast<jint>(EngineEvent::Reset), 0,
-                                                      static_cast<jboolean>(learning)));
-                // one that fails to reset too is not sent another till it answers: not two failing
-                // calls on every key
-                if (engineFailed(env, "onEvent", im, static_cast<int>(EngineEvent::Reset))) answered.erase(im);
-            }
-            return snapshot;
-        }
-        answered.insert(im);
-        if (!result) return snapshot;
-        snapshot.handled = env->GetBooleanField(result, GlobalRef->EngineResultHandled);
-        snapshot.commit = utf8FromJString(env, JRef<jstring>(env, env->GetObjectField(result, GlobalRef->EngineResultCommit)));
-        snapshot.preedit = utf8FromJString(env, JRef<jstring>(env, env->GetObjectField(result, GlobalRef->EngineResultPreedit)));
-        snapshot.candidates = utf8FromJStringArray(env, JRef<jobjectArray>(env, env->GetObjectField(result, GlobalRef->EngineResultCandidates)));
-        snapshot.hints = utf8FromJStringArray(env, JRef<jobjectArray>(env, env->GetObjectField(result, GlobalRef->EngineResultHints)));
-        snapshot.first = env->GetIntField(result, GlobalRef->EngineResultFirst);
-        snapshot.shown = env->GetIntField(result, GlobalRef->EngineResultShown);
-        snapshot.total = env->GetIntField(result, GlobalRef->EngineResultTotal);
-        snapshot.actionable = env->GetBooleanField(result, GlobalRef->EngineResultActionable);
-        snapshot.labels = utf8FromJString(env, JRef<jstring>(env, env->GetObjectField(result, GlobalRef->EngineResultLabels)));
-        snapshot.refines = env->GetBooleanField(result, GlobalRef->EngineResultRefines);
-        snapshot.deleteBefore = env->GetIntField(result, GlobalRef->EngineResultDeleteBefore);
-        snapshot.cursor = env->GetIntField(result, GlobalRef->EngineResultCursor);
-        return snapshot;
-    };
-    auto engineCandidatesCallback = [](const std::string &im, int from, int count) {
-        auto env = GlobalRef->AttachEnv();
-        std::vector<std::pair<std::string, std::string>> out;
-        // text and hint, one after the other
-        auto flat = JRef<jobjectArray>(env, env->CallStaticObjectMethod(GlobalRef->EngineBridge, GlobalRef->EngineBridgeCandidates,
-                                                                        *JString(env, im), from, count));
-        if (engineFailed(env, "candidates", im) || !flat) return out;
-        auto strings = utf8FromJStringArray(env, flat);
-        for (size_t i = 0; i + 1 < strings.size(); i += 2) out.emplace_back(std::move(strings[i]), std::move(strings[i + 1]));
-        return out;
-    };
-
-    auto engineOffersCallback = [](const std::string &im, int index) {
-        auto env = GlobalRef->AttachEnv();
-        const jint offers = env->CallStaticIntMethod(GlobalRef->EngineBridge, GlobalRef->EngineBridgeOffers, *JString(env, im), index);
-        return engineFailed(env, "offers", im) ? 0 : static_cast<int>(offers);
-    };
-
-    auto engineSettingsCallback = [](const std::string &settings) {
-        auto env = GlobalRef->AttachEnv();
-        env->CallStaticVoidMethod(GlobalRef->EngineBridge, GlobalRef->EngineBridgeConfigure, *JString(env, settings));
-        engineFailed(env, "configure");
-    };
-
     umask(007);
     fcitx::StandardPaths::global().syncUmask();
 
-    Fcitx::Instance().startup([&](auto *androidfrontend, auto *androidengine) {
+    Fcitx::Instance().startup([&](auto *androidfrontend) {
         FCITX_INFO() << "Setting up callback";
         readyCallback();
         androidfrontend->template call<fcitx::IAndroidFrontend::setCandidateListCallback>(candidateListCallback);
@@ -775,15 +640,6 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_startupFcitx(
         androidfrontend->template call<fcitx::IAndroidFrontend::setPagedCandidateCallback>(pagedCandidateCallback);
         androidfrontend->template call<fcitx::IAndroidFrontend::setSwitchInputMethodCallback>(switchInputMethodCallback);
         androidfrontend->template call<fcitx::IAndroidFrontend::setToastCallback>(toastCallback);
-        if (androidengine) {
-            androidengine->template call<fcitx::IAndroidEngine::setEventCallback>(engineEventCallback);
-            androidengine->template call<fcitx::IAndroidEngine::setCandidatesCallback>(engineCandidatesCallback);
-            androidengine->template call<fcitx::IAndroidEngine::setOffersCallback>(engineOffersCallback);
-            androidengine->template call<fcitx::IAndroidEngine::setSettingsCallback>(engineSettingsCallback);
-        } else {
-            // pinyin and every table type through it: without it they type nothing
-            FCITX_ERROR() << "androidengine not loaded";
-        }
     });
     FCITX_INFO() << "Finishing startup";
 }
@@ -857,6 +713,14 @@ Java_org_fcitx_fcitx5_android_core_Fcitx_selectCandidate(JNIEnv *env, jclass cla
 
 extern "C"
 JNIEXPORT jboolean JNICALL
+Java_org_fcitx_fcitx5_android_core_Fcitx_sendHardShift(JNIEnv *env, jclass clazz) {
+    RETURN_VALUE_IF_NOT_RUNNING(false)
+    FCITX_DEBUG() << "sendHardShift";
+    return Fcitx::Instance().sendHardShift();
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
 Java_org_fcitx_fcitx5_android_core_Fcitx_isInputPanelEmpty(JNIEnv *env, jclass clazz) {
     RETURN_VALUE_IF_NOT_RUNNING(true)
     return Fcitx::Instance().isInputPanelEmpty();
@@ -882,13 +746,6 @@ JNIEXPORT void JNICALL
 Java_org_fcitx_fcitx5_android_core_Fcitx_toggleInputMethod(JNIEnv *env, jclass clazz) {
     RETURN_IF_NOT_RUNNING
     Fcitx::Instance().toggleInputMethod();
-}
-
-extern "C"
-JNIEXPORT void JNICALL
-Java_org_fcitx_fcitx5_android_core_Fcitx_nextInputMethod(JNIEnv *env, jclass clazz, jboolean forward) {
-    RETURN_IF_NOT_RUNNING
-    Fcitx::Instance().nextInputMethod(forward == JNI_TRUE);
 }
 
 extern "C"

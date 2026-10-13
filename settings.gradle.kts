@@ -19,10 +19,6 @@ dependencyResolutionManagement {
 rootProject.name = "youmo-ime"
 
 include(":lib:ime-core")
-include(":lib:ime-eval")
-include(":lib:ime-dict-tool")
 include(":lib:fcitx5")
-include(":lib:fcitx5-chinese-addons")
-include(":lib:sherpa-onnx")
 include(":codegen")
 include(":app")

@@ -23,7 +23,6 @@
     <string name="next">Weiter</string>
     <string name="prev">Zurück</string>
     <string name="done">Fertig</string>
-    <string name="pinyin_dict">Pinyin-Wörterbücher</string>
     <string name="importing">Wird importiert</string>
     <string name="import_error">Fehler beim Import</string>
     <string name="dict_already_exists">Wörterbuch bereits vorhanden</string>
@@ -35,8 +34,6 @@
     <string name="clipboard_limit">Anzahl Clipboard Verlauf</string>
     <string name="clipboard_enable">Zwischenablage aktivieren</string>
     <string name="expanded_candidate_style_flexbox">Flexbox</string>
-    <string name="no_more_input_methods">Keine weiteren Eingabemethoden zur Auswahl</string>
-    <string name="add_more_input_methods">Wollen Sie mehr Eingabemethoden hinzufügen?</string>
     <string name="about">Über</string>
     <string name="current_version">Aktuelle Version</string>
     <string name="real_time_logs">Echtzeitprotokolle</string>

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The C++ unit tests of native-lib's helpers that need neither JNI nor fcitx, run on this machine
-# rather than a phone: googletest (as lib/sherpa-onnx/host-test.sh pins it, SHA-256 checked)
-# compiled with the host's g++. Usage: app/src/test/cpp/host-test.sh
+# rather than a phone: googletest compiled with the host's g++.
+# Usage: app/src/test/cpp/host-test.sh
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 src=$(cd "$here/../../main/cpp" && pwd)

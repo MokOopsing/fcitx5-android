@@ -413,6 +413,18 @@ bool AndroidFrontend::selectCandidate(int idx, const std::string &text) {
     }
 }
 
+bool AndroidFrontend::sendHardShift() {
+    if (!activeIC_) return false;
+    auto keyDown = Key(FcitxKey_Shift_L, Flags<KeyState>(KeyState::Shift));
+    KeyEvent keyEvent(activeIC_, keyDown, false);
+    activeIC_->keyEvent(keyEvent);
+    auto keyUp = Key(FcitxKey_Shift_L, Flags<KeyState>(KeyState::NoState));
+    keyEvent = KeyEvent(activeIC_, keyUp, true);
+    activeIC_->keyEvent(keyEvent);
+
+    return true;
+}
+
 std::vector<CandidateActionEntity> AndroidFrontend::getCandidateActions(const int idx) {
     if (!activeIC_) return {};
     return activeIC_->getCandidateAction(idx, pagingMode_ != 0);

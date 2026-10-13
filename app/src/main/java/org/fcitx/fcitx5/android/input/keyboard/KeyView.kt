@@ -286,43 +286,6 @@ open class TextKeyView(ctx: Context, theme: Theme, def: KeyDef.Appearance.Text) 
         }
     }
 
-    private var badge: ImageView? = null
-
-    /**
-     * A small icon before the label, the two centred together; null for none: what holding the
-     * key does, where that is not the usual (voice input on the space).
-     */
-    fun showBadge(@DrawableRes icon: Int?) {
-        if (icon == null) {
-            badge?.let { appearanceView.removeView(it) }
-            badge = null
-            mainText.updateLayoutParams<ConstraintLayout.LayoutParams> {
-                startToEnd = unset
-                startToStart = parentId
-            }
-            return
-        }
-        val img = badge ?: imageView { configure(theme, icon, Variant.AltForeground) }.also {
-            badge = it
-            appearanceView.add(it, appearanceView.lParams(dp(BADGE), dp(BADGE)) {
-                centerVertically()
-                startToStart = parentId
-                endToStart = mainText.existingOrNewId
-                horizontalChainStyle = ConstraintLayout.LayoutParams.CHAIN_PACKED
-                marginEnd = dp(BADGE_GAP)
-            })
-            mainText.updateLayoutParams<ConstraintLayout.LayoutParams> {
-                startToStart = unset
-                startToEnd = it.existingOrNewId
-            }
-        }
-        img.setImageResource(icon)
-    }
-
-    private companion object {
-        const val BADGE = 15
-        const val BADGE_GAP = 3
-    }
 }
 
 @SuppressLint("ViewConstructor")

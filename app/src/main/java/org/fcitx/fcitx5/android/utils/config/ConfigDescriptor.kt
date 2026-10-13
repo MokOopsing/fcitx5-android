@@ -178,9 +178,10 @@ sealed class ConfigDescriptor<T, U> : Parcelable {
         val knownType: ETy? = null
     ) : ConfigDescriptor<ConfigType.TyExternal, Nothing>() {
         enum class ETy {
-            PinyinDict,
             Punctuation,
-            PinyinCustomPhrase,
+            QuickPhrase,
+            Chttrans,
+            RimeUserDataDir
         }
 
         override val ty: ConfigType<ConfigType.TyExternal>
@@ -316,9 +317,10 @@ sealed class ConfigDescriptor<T, U> : Parcelable {
                             raw.tooltip,
                             raw.findByName("External")?.value,
                             when (raw.name) {
-                                "DictManager" -> ConfigExternal.ETy.PinyinDict
                                 "Punctuation" -> ConfigExternal.ETy.Punctuation
-                                "CustomPhrase" -> ConfigExternal.ETy.PinyinCustomPhrase
+                                "QuickPhrase", "Editor" -> ConfigExternal.ETy.QuickPhrase
+                                "Chttrans" -> ConfigExternal.ETy.Chttrans
+                                "UserDataDir" -> ConfigExternal.ETy.RimeUserDataDir
                                 else -> null
                             }
                         )

@@ -74,9 +74,7 @@ object UserDataManager {
         val sharedPrefs: File,
         val dataBases: File,
         val external: File,
-        val recentlyUsed: File,
-        // the engine's user store (EngineBridge): what it learnt of the user's words, user tables
-        val engine: File
+        val recentlyUsed: File
     )
 
     // internal for ClipboardManagerReopenTest, which leaves the import's clipboard marker where an import into these does;
@@ -86,8 +84,7 @@ object UserDataManager {
             File(appContext.applicationInfo.dataDir, "shared_prefs"),
             File(appContext.applicationInfo.dataDir, "databases"),
             appContext.getExternalFilesDir(null)!!,
-            appContext.filesDir.resolve(RecentlyUsed.DIR_NAME),
-            appContext.filesDir.resolve("engine")
+            appContext.filesDir.resolve(RecentlyUsed.DIR_NAME)
         )
 
     // SQLite's files beside a database
@@ -137,10 +134,9 @@ object UserDataManager {
                 }
             }
             // external
-            writeFileTree(dirs.external, "external", zipStream)
-            // engine, but for a log being compacted (RecordStore): it holds nothing the log has not
-            if (dirs.engine.isDirectory) {
-                writeFileTree(dirs.engine, "engine", zipStream) { it.name.endsWith(".compacting") }
+            writeFileTree(dirs.external, "external", zipStream) {
+                val relativePath = it.relativeTo(dirs.external).path
+                relativePath == "engine" || relativePath.startsWith("engine${File.separator}")
             }
             // recently_used moved to SharedPreference and shoud not be exported
             // metadata
@@ -210,34 +206,15 @@ object UserDataManager {
                 runCatching { importedClipboardMarker(dirs.dataBases).createNewFile() }
                     .onFailure { Timber.w(it, "Clipboard database import not marked: its next open keeps it as the user's") }
             }
-            copyDir(File(tempDir, "external"), dirs.external)
+            val external = File(tempDir, "external")
+            val legacyEngine = File(external, "engine")
+            if (legacyEngine.exists() && !legacyEngine.deleteRecursively()) {
+                throw IOException("cannot discard legacy engine data")
+            }
+            copyDir(external, dirs.external)
             // keep importing recently_used for backwords compatibility
             copyDir(File(tempDir, "recently_used"), dirs.recentlyUsed)
-            // last: an import failing after it would start fcitx again on the logs it replaced
-            if (File(tempDir, "engine").exists()) importEngine(File(tempDir, "engine"), dirs.engine)
             metadata
-        }
-    }
-
-    /**
-     * [source] laid over [engine], as [copyDir] would, but put in place in one rename: if the
-     * import fails here, the engine's directory is whole as it was, for fcitx to start again on.
-     */
-    private fun importEngine(source: File, engine: File) {
-        if (!source.isDirectory) {
-            Timber.w("Cannot import user data: path='${source.path}' is not a directory")
-            return
-        }
-        replaceDirectory(engine, File(engine.path + ".import")) { staged ->
-            // the backup moved, and only the engine's files it lacks copied: a full phone may have no room for two copies
-            if (!source.renameTo(staged)) source.copyRecursively(staged)
-            engine.walkTopDown()
-                // a directory the backup has as a file: the backup's
-                .onEnter { !File(staged, it.toRelativeString(engine)).isFile }
-                .forEach {
-                    val target = File(staged, it.toRelativeString(engine))
-                    if (it.isDirectory) target.mkdirs() else if (!target.exists()) it.copyTo(target)
-                }
         }
     }
 }

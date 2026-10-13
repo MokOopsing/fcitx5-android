@@ -52,7 +52,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.fcitx.fcitx5.android.BuildConfig
 import org.fcitx.fcitx5.android.R
-import org.fcitx.fcitx5.android.core.CapabilityFlag
 import org.fcitx.fcitx5.android.core.CapabilityFlags
 import org.fcitx.fcitx5.android.core.FcitxAPI
 import org.fcitx.fcitx5.android.core.FcitxEvent
@@ -73,8 +72,6 @@ import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.data.theme.ThemeManager
 import org.fcitx.fcitx5.android.input.cursor.CursorRange
 import org.fcitx.fcitx5.android.input.editing.ArrowKeys
-import org.fcitx.fcitx5.android.input.editing.CodePoints
-import org.fcitx.fcitx5.android.input.editing.ContextMemory
 import org.fcitx.fcitx5.android.input.editing.EditingSession
 import org.fcitx.fcitx5.android.input.editing.EditorKeyPolicy
 import org.fcitx.fcitx5.android.input.editing.ForwardedKeys
@@ -129,7 +126,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
 
     private var capabilityFlags = CapabilityFlags.DefaultFlags
 
-    /** nothing said out loud goes into a password, its characters shown or not */
+    /** Password fields keep password-specific keyboard behavior, whether their characters are shown or not. */
     val inPasswordField get() = fieldPolicy.password
 
     private val editingSession = EditingSession(
@@ -162,18 +159,10 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     private val ignoreSystemCursor by prefs.advanced.ignoreSystemCursor
     private val autoPairs by prefs.keyboard.autoPairs
 
-    /** What was written in each app, the engine's context where a field has none of its own. */
-    private val contextMemory = ContextMemory(keep = ContextChars)
-
-    private val fieldPolicy = FieldPolicy(contextMemory)
-
-    // onFinishInputView's focus out dropped the engine's context, and no onStartInput told it since
-    private var contextDropped = false
+    private val fieldPolicy = FieldPolicy()
 
     private val recreateInputViewPrefs: Array<ManagedPreference<*>> = arrayOf(
         prefs.keyboard.expandKeypressArea,
-        // drawn on 九键's keys
-        prefs.keyboard.t9Letters,
         prefs.advanced.disableAnimation,
         prefs.advanced.ignoreSystemWindowInsets,
     )
@@ -253,7 +242,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         // a fcitx not ready yet syncs them itself once it is, in the app's language as here
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             fcitx.runIfReady {
-                SubtypeManager.syncWith(enabledIme(), this@FcitxInputMethodService)
+                SubtypeManager.syncWith(enabledIme())
             }
         }
         super.onCreate()
@@ -338,12 +327,9 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
 
     private fun handleDeleteSurrounding(before: Int, after: Int) {
         editingSession.deleteSurrounding(before, after, inCodePoints = true)
-        repeat(before) { contextMemory.deleted() }
     }
 
     private fun handleBackspaceKey() {
-        val deleting = selection.latest
-        contextMemory.backspace(deleting.start, deleting.end)
         if (pairing) backspacePair()
         if (!editingSession.backspace(currentInputEditorInfo.toEditorTraits())) {
             sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
@@ -359,17 +345,11 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         // next may not have landed by a read after it
         if (quoteOpen && !editingSession.pairs.quoteOpen) {
             postFcitxJob { reset() }
-            tellContext(before = {
-                currentInputConnection?.getTextBeforeCursor(ContextChars + 1, 0)
-                    ?.let { it.dropLast(CodePoints.lengthOfLast(it, 1) ?: 1) }
-            })
         }
     }
 
     /** The text-editing panel's Backspace, a key event as ever: what it takes is not kept as context. */
     fun sendBackspaceKey() {
-        val deleting = selection.latest
-        contextMemory.backspace(deleting.start, deleting.end)
         sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)
     }
 
@@ -378,7 +358,6 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
      * takes away is not kept as context any more than Backspace's.
      */
     fun performContextMenuAction(id: Int) {
-        if ((id == android.R.id.cut || id == android.R.id.paste) && selection.latest.isNotEmpty()) contextMemory.cut()
         currentInputConnection?.performContextMenuAction(id)
     }
 
@@ -388,17 +367,12 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
      */
     private val pairing get() = fieldPolicy.pairs(autoPairs, rawKeys = currentInputEditorInfo.isTypeNull())
 
-    /** What the user typed, a key or the engine's commit: a bracket or quote may go in paired. */
+    /** What the user typed: a bracket or quote may go in paired. */
     private fun commitTyped(text: String, cursor: Int = -1) {
-        if (cursor != -1 || !pairing || !editingSession.pairs.type(text)) {
-            // fcitx's punctuation may put a pair in itself, the cursor between
-            val start = selection.latest.start.takeIf { editingSession.composing.isEmpty() }
-            commitText(text, cursor)
-            if (pairing && start != null) editingSession.pairs.committed(text, cursor, start)
-            return
-        }
-        // paired or stepped over: either way the cursor is after [text]
-        contextMemory.committed(text, now = SystemClock.elapsedRealtime())
+        if (cursor == -1 && pairing && editingSession.pairs.type(text)) return
+        val start = selection.latest.start.takeIf { editingSession.composing.isEmpty() }
+        commitText(text, cursor)
+        if (pairing && start != null) editingSession.pairs.committed(text, cursor, start)
     }
 
     private fun handleReturnKey() {
@@ -428,16 +402,11 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
 
     fun commitText(text: String, cursor: Int = -1) {
         editingSession.commitText(text, cursor)
-        contextMemory.committed(text, cursor, SystemClock.elapsedRealtime())
     }
 
     /**
-     * [text] put in by the app itself, not the engine (a paste, a word from a long press): what
-     * the engine has typed goes in first, and the engine forgets what it committed, no longer
-     * before the cursor (English would put its space behind punctuation typed next, in [text]).
-     * With [replacing], [text] takes its place before the cursor: what the app put in just before
-     * (九键's 1 pressed again, 。 for ，), if it is still there; the field may have refused it, or
-     * the cursor moved.
+     * With [replacing], [text] takes its place before the cursor if it is still there; the field
+     * may have refused it, or the cursor moved.
      */
     fun commitOverEngine(text: String, replacing: String = "") = postFcitxJob {
         commitAndReset()
@@ -599,9 +568,6 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
          */
         if (diff and f != diff) {
             super.onConfigurationChanged(newConfig)
-        } else if (currentInputStarted && currentInputEditorInfo?.isTypeNull() == false) {
-            // the reset above dropped the engine's context, and no input restarts to tell it anew
-            tellContext()
         }
         lastKnownConfig = newConfig
     }
@@ -795,15 +761,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         capabilityFlags = flags
         editingSession.pairs.forget()
         arrowKeys.forget()
-        contextReads.forget()
-        // nothing of a password or a field that asks not to be learned from is kept
-        fieldPolicy.focus(
-            ContextMemory.field(
-                attribute.packageName, attribute.fieldId, attribute.inputType, attribute.fieldName, attribute.hintText
-            ),
-            password = CapabilityFlags.isPassword(attribute),
-            sensitive = flags.hasAny(CapabilityFlag.PasswordOrSensitive),
-        )
+        fieldPolicy.focus(password = CapabilityFlags.isPassword(attribute))
         // EditorInfo may change between onStartInput and onStartInputView
         inputDeviceMgr.notifyOnStartInput(attribute)
         Timber.d("onStartInput: initialSel=${selection.current}, restarting=$restarting")
@@ -824,31 +782,13 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                 focus(true)
             }
         }
-        contextDropped = false
-        if (!isNullType) {
-            // an editor that gives no initial text may still answer the connection
-            val initial = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
-            tellContext(
-                before = {
-                    (if (initial) attribute.getInitialTextBeforeCursor(ContextChars, 0) else null)
-                        ?: currentInputConnection?.getTextBeforeCursor(ContextChars, 0)
-                },
-                after = {
-                    (if (initial) attribute.getInitialTextAfterCursor(1, 0) else null)
-                        ?: currentInputConnection?.getTextAfterCursor(1, 0)
-                },
-            )
-        }
     }
 
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         Timber.d("onStartInputView: restarting=$restarting")
-        // the app's language picked anew in its settings: shown in it from now on
+        // Recreate views to apply the app's newly picked language.
         if (pickedLocalesChanged()) {
             replaceInputViews(ThemeManager.activeTheme)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                postFcitxJob { SubtypeManager.syncWith(enabledIme(), this@FcitxInputMethodService) }
-            }
         }
         postFcitxJob {
             focus(true)
@@ -868,11 +808,6 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
             }
             showStatusIcon(StatusIconMapping.fromEntry(fcitx.runImmediately { inputMethodEntryCached }))
         }
-        // shown again in the field it was hidden in, no onStartInput between to tell it anew
-        if (contextDropped) {
-            contextDropped = false
-            if (!info.isTypeNull()) tellContext()
-        }
     }
 
     override fun onUpdateSelection(
@@ -889,13 +824,10 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         )
         arrowKeys.cursorReported(newSelStart, newSelEnd)
         // the user left a “” put in without typing its ”, or stepped over its ” with a “: fcitx's
-        // punctuation still counts the “ open, and would make the next quote a lone ”. Nothing
-        // composed is lost (the cursor left it, finished in place), and the context comes after:
-        // the update's, or told here where the update tells none (a reset drops it)
+        // punctuation still counts the “ open, and would make the next quote a lone ”.
         val quoteReset = editingSession.quoteLeftOpen
         if (quoteReset) postFcitxJob { reset() }
         handleCursorUpdate(update)
-        if (quoteReset && update == EditingSession.CursorUpdate.None) tellContextLater()
         inputView?.updateSelection(newSelStart, newSelEnd)
     }
 
@@ -965,7 +897,6 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
                         reset()
                     }
                 }
-                tellContextLater()
             }
             is EditingSession.CursorUpdate.MovePreeditCursor -> postFcitxJob {
                 // onUpdateSelection can lag behind when the user types quickly enough, eg. long
@@ -976,44 +907,7 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
             }
             EditingSession.CursorUpdate.FocusOutIn -> {
                 postFcitxJob { focusOutIn() }
-                tellContextLater()
             }
-        }
-    }
-
-    private val textBeforeCursor = { currentInputConnection?.getTextBeforeCursor(ContextChars, 0) }
-    private val textAfterCursor = { currentInputConnection?.getTextAfterCursor(1, 0) }
-
-    // context reads asked for: one still queued behind a newer, or from a field since left, is not made
-    private val contextReads = ContextReads()
-
-    /**
-     * What the engine's input follows, after fcitx is done with what was there: not read at all
-     * in a password or other sensitive field, where the engine learns nothing either. See
-     * [FieldPolicy.context].
-     */
-    private fun tellContext(
-        before: () -> CharSequence? = textBeforeCursor,
-        after: () -> CharSequence? = textAfterCursor,
-    ) {
-        contextReads.ask()
-        val context = fieldPolicy.context(SystemClock.elapsedRealtime(), before, after) ?: return
-        postFcitxJob { engineContext(context) }
-    }
-
-    /**
-     * [tellContext] for a cursor report, read once fcitx gets to it rather than on the report, so
-     * that of a burst (a held arrow or Backspace, keys typed ahead of a slow editor) the last alone
-     * waits on the editor. Told in that job, it still comes before any key queued after the report.
-     */
-    private fun tellContextLater() {
-        val read = contextReads.ask()
-        postFcitxJob {
-            val context = withContext(Dispatchers.Main) {
-                if (!contextReads.isLatest(read)) null
-                else fieldPolicy.context(SystemClock.elapsedRealtime(), textBeforeCursor, textAfterCursor)
-            }
-            if (context != null) engineContext(context)
         }
     }
 
@@ -1117,7 +1011,6 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
         postFcitxJob {
             focusOutIn()
         }
-        contextDropped = true
         hideStatusIcon()
         showingDialog?.dismiss()
     }
@@ -1128,8 +1021,6 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
             focus(false)
         }
         capabilityFlags = CapabilityFlags.DefaultFlags
-        // a read queued in the field, a password's maybe, is not made once the policy forgot it
-        contextReads.forget()
         fieldPolicy.finish()
     }
 
@@ -1178,8 +1069,5 @@ class FcitxInputMethodService : LifecycleInputMethodService() {
     @Suppress("ConstPropertyName")
     companion object {
         const val DefaultHighlightColor = 0x008577  // material_deep_teal_500
-        // what the engine reads of the text before the cursor: its last two words, and what the
-        // reranker has room for
-        const val ContextChars = 64
     }
 }
