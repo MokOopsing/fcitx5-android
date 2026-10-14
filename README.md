@@ -1,4 +1,4 @@
-# 知了猴输入法 · Youmo IME
+# 知了猴输入法 · Youmo RIME
 
 [中文](#知了猴输入法) · [English](#youmo-rime) · [使用说明](docs/README.md) · [下载](https://github.com/MokOopsing/fcitx5-android/actions)
 
@@ -24,7 +24,7 @@
 
 ---
 
-## Youmo IME
+## Youmo RIME
 
 Youmo IME is an Android input method built on Fcitx5. **Rime is the only input engine.** The shared keyboard, themes, clipboard, symbols, emoji, and text-editing tools remain available. The app requests no network permission; typed text and Rime user data stay on device.
 
