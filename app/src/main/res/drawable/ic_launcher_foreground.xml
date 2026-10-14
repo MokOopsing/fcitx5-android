@@ -66,5 +66,26 @@
             android:strokeColor="#3B2314"
             android:strokeWidth="2.2"
             android:strokeLineCap="round" />
+        <path
+            android:pathData="M68,64 h14 a4,4 0 0,1 4,4 v14 a4,4 0 0,1 -4,4 h-14 a4,4 0 0,1 -4,-4 v-14 a4,4 0 0,1 4,-4 Z"
+            android:fillColor="#000000" />
+        <path
+            android:pathData="M69,66 h12 a3,3 0 0,1 3,3 v12 a3,3 0 0,1 -3,3 h-12 a3,3 0 0,1 -3,-3 v-12 a3,3 0 0,1 3,-3 Z"
+            android:fillColor="#B0B0B0" />
+        <path
+            android:pathData="M69.8,68 V74.1 Q69.8,75.4 71.1,75.4 H80.2 V68"
+            android:strokeColor="#000000"
+            android:strokeWidth="1.7"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M75,67.2 V78.6"
+            android:strokeColor="#000000"
+            android:strokeWidth="1.7"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M69,80 H81"
+            android:strokeColor="#000000"
+            android:strokeWidth="1.7"
+            android:strokeLineCap="round" />
     </group>
 </vector>

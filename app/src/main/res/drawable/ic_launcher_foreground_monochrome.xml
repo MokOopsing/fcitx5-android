@@ -40,5 +40,25 @@
             android:strokeColor="#000"
             android:strokeWidth="2.6"
             android:strokeLineCap="round" />
+        <path
+            android:pathData="M68,64 h14 a4,4 0 0,1 4,4 v14 a4,4 0 0,1 -4,4 h-14 a4,4 0 0,1 -4,-4 v-14 a4,4 0 0,1 4,-4 Z"
+            android:strokeColor="#000"
+            android:strokeWidth="1.4"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M69.8,68 V74.1 Q69.8,75.4 71.1,75.4 H80.2 V68"
+            android:strokeColor="#000"
+            android:strokeWidth="1.7"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M75,67.2 V78.6"
+            android:strokeColor="#000"
+            android:strokeWidth="1.7"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M69,80 H81"
+            android:strokeColor="#000"
+            android:strokeWidth="1.7"
+            android:strokeLineCap="round" />
     </group>
 </vector>

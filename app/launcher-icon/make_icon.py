@@ -39,11 +39,19 @@ GLASSES = [(rounded(39.5, 47, 13, 9, 4), INK, None, 0), (rounded(55.5, 47, 13, 9
            ('M52,49.5 h4 v1.8 h-4 Z', INK, None, 0)]
 GLINTS = [('M42.5,49.5 Q45,48 48,49', None, GLINT, 1.2), ('M58.5,49.5 Q61,48 64,49', None, GLINT, 1.2)]
 GRIN = [('M47.5,63 Q54,69.5 60.5,63', None, INK, 2.2)]
-FOREGROUND = EARS + EAR_INSIDES + HEAD + PATCH + NOSE + GLASSES + GLINTS + GRIN
+BADGE = [(rounded(64, 64, 22, 22, 4), '#000000', None, 0),
+         (rounded(66, 66, 18, 18, 3), '#B0B0B0', None, 0),
+         ('M69.8,68 V74.1 Q69.8,75.4 71.1,75.4 H80.2 V68', None, '#000000', 1.7),
+         ('M75,67.2 V78.6', None, '#000000', 1.7),
+         ('M69,80 H81', None, '#000000', 1.7)]
+FOREGROUND = EARS + EAR_INSIDES + HEAD + PATCH + NOSE + GLASSES + GLINTS + GRIN + BADGE
 # one colour, for themed icons: the head as a ring, the rest as it is
 MONOCHROME = ([(d, '#000', None, 0) for d, _, _, _ in EARS]
               + [(circle(54, 56, 18), None, '#000', 4), ('M48,39 Q51,30 55,37 Q58,30 61,39 Z', '#000', None, 0)]
-              + [(d, '#000', None, 0) for d, _, _, _ in NOSE + GLASSES] + [(d, None, '#000', 2.6) for d, _, _, _ in GRIN])
+              + [(d, '#000', None, 0) for d, _, _, _ in NOSE + GLASSES]
+              + [(d, None, '#000', 2.6) for d, _, _, _ in GRIN]
+              + [(rounded(64, 64, 22, 22, 4), None, '#000', 1.4)]
+              + [(d, None, '#000', 1.7) for d, _, _, _ in BADGE[2:]])
 
 
 def vector(shapes, gradient=None):
