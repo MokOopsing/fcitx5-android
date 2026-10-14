@@ -78,14 +78,12 @@ class ThemePrefs(sharedPreferences: SharedPreferences) :
     // keys drawn apart: borderless, one letter was hard to tell from the next
     val keyBorder = switch(R.string.key_border, "key_border", true)
 
-    val keyBorderStroke = hidden {
-        switch(
-            R.string.key_border_stroke, "key_border_stroke", false,
-            enableUiOn = { keyBorder.getValue() }
-        )
-    }
+    val keyBorderStroke = switch(
+        R.string.key_border_stroke, "key_border_stroke", false,
+        enableUiOn = { keyBorder.getValue() }
+    )
 
-    val keyRippleEffect = hidden { switch(R.string.key_ripple_effect, "key_ripple_effect", false) }
+    val keyRippleEffect = switch(R.string.key_ripple_effect, "key_ripple_effect", false)
 
     val keyHorizontalMargin: ManagedPreference.PInt
     val keyHorizontalMarginLandscape: ManagedPreference.PInt
@@ -93,36 +91,32 @@ class ThemePrefs(sharedPreferences: SharedPreferences) :
     val keyVerticalMarginLandscape: ManagedPreference.PInt
 
     init {
-        val (horizontal, horizontalLandscape) = hidden(setByLevels = true) {
-            twinInt(
-                R.string.key_horizontal_margin,
-                R.string.portrait,
-                "key_horizontal_margin",
-                3,
-                R.string.landscape,
-                "key_horizontal_margin_landscape",
-                3,
-                0,
-                24,
-                "dp"
-            )
-        }
+        val (horizontal, horizontalLandscape) = twinInt(
+            R.string.key_horizontal_margin,
+            R.string.portrait,
+            "key_horizontal_margin",
+            3,
+            R.string.landscape,
+            "key_horizontal_margin_landscape",
+            3,
+            0,
+            24,
+            "dp"
+        )
         keyHorizontalMargin = horizontal
         keyHorizontalMarginLandscape = horizontalLandscape
-        val (vertical, verticalLandscape) = hidden(setByLevels = true) {
-            twinInt(
-                R.string.key_vertical_margin,
-                R.string.portrait,
-                "key_vertical_margin",
-                7,
-                R.string.landscape,
-                "key_vertical_margin_landscape",
-                4,
-                0,
-                24,
-                "dp"
-            )
-        }
+        val (vertical, verticalLandscape) = twinInt(
+            R.string.key_vertical_margin,
+            R.string.portrait,
+            "key_vertical_margin",
+            7,
+            R.string.landscape,
+            "key_vertical_margin_landscape",
+            4,
+            0,
+            24,
+            "dp"
+        )
         keyVerticalMargin = vertical
         keyVerticalMarginLandscape = verticalLandscape
         levels(
@@ -136,7 +130,7 @@ class ThemePrefs(sharedPreferences: SharedPreferences) :
         )
     }
 
-    val keyRadius = hidden(setByLevels = true) { int(R.string.key_radius, "key_radius", 4, 0, 48, "dp") }
+    val keyRadius = int(R.string.key_radius, "key_radius", 4, 0, 48, "dp")
 
     init {
         levels(
@@ -151,10 +145,10 @@ class ThemePrefs(sharedPreferences: SharedPreferences) :
     }
 
     val textEditingButtonRadius =
-        hidden { int(R.string.text_editing_button_radius, "text_editing_button_radius", 8, 0, 48, "dp") }
+        int(R.string.text_editing_button_radius, "text_editing_button_radius", 8, 0, 48, "dp")
 
     val clipboardEntryRadius =
-        hidden { int(R.string.clipboard_entry_radius, "clipboard_entry_radius", 2, 0, 48, "dp") }
+        int(R.string.clipboard_entry_radius, "clipboard_entry_radius", 2, 0, 48, "dp")
 
     enum class PunctuationPosition(override val stringRes: Int) : ManagedPreferenceEnum {
         None(R.string.punctuation_pos_none),
@@ -175,15 +169,13 @@ class ThemePrefs(sharedPreferences: SharedPreferences) :
         Full(R.string.navbar_bkg_full);
     }
 
-    val navbarBackground = hidden {
-        enumList(
-            R.string.navbar_background,
-            "navbar_background",
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) NavbarBackground.Full else NavbarBackground.ColorOnly,
-            // 35+ forces edge to edge
-            enableUiOn = { Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM }
-        )
-    }.apply {
+    val navbarBackground = enumList(
+        R.string.navbar_background,
+        "navbar_background",
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) NavbarBackground.Full else NavbarBackground.ColorOnly,
+        // 35+ forces edge to edge
+        enableUiOn = { Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM }
+    ).apply {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
             sharedPreferences.edit {
                 remove(this@apply.key)

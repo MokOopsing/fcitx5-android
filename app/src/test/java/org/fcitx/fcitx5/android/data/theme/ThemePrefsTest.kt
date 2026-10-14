@@ -9,7 +9,7 @@ import androidx.core.content.edit
 import org.fcitx.fcitx5.android.FcitxApplication
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceUi
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -17,10 +17,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/**
- * The theme page's level lists read the keys its preferences write, and what they set is not put
- * back to its default with the settings that have no UI.
- */
+/** The theme page's level lists and direct controls use the same preference values. */
 @RunWith(RobolectricTestRunner::class)
 // the real application: the keyboard's size is AppPrefs', and a theme preference reaches the theme manager
 @Config(application = FcitxApplication::class)
@@ -53,19 +50,20 @@ class ThemePrefsTest {
         assertEquals(2, prefs.level("key_spacing_level"))
     }
 
-    // AppPrefs.registerProvider resets these hidden settings as ThemeManager registers ThemePrefs, after the reset
-    // at the start (AppPrefsTest.aCategoryRegisteredAfterTheResetIsResetAsItRegisters): what a level sets must outlive it
     @Test
-    fun whatALevelSetsIsKeptWhenTheHiddenSettingsGoBackToTheirDefaults() {
+    fun themePreferencesHaveVisibleControls() {
         val prefs = ThemePrefs(sp)
-        val set = listOf(
-            prefs.keyHorizontalMargin, prefs.keyHorizontalMarginLandscape,
-            prefs.keyVerticalMargin, prefs.keyVerticalMarginLandscape, prefs.keyRadius,
+        val ui = prefs.managedPreferencesUi.associateBy { it.key }
+        val booleanSwitches = listOf("key_border_stroke", "key_ripple_effect")
+        val otherControls = listOf(
+            "key_horizontal_margin", "key_vertical_margin", "key_radius",
+            "text_editing_button_radius", "clipboard_entry_radius", "navbar_background",
         )
-        set.forEach { it.setValue(9) }
-        prefs.keyRippleEffect.setValue(true)
-        sp.edit { prefs.resetHidden(this) }
-        assertEquals(List(set.size) { 9 }, set.map { it.getValue() })
-        assertFalse("not a level's", prefs.keyRippleEffect.getValue())
+        booleanSwitches.forEach { key ->
+            assertTrue("$key should be a visible switch", ui[key] is ManagedPreferenceUi.Switch)
+        }
+        otherControls.forEach { key ->
+            assertTrue("$key should have a visible control", key in ui)
+        }
     }
 }

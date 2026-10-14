@@ -60,7 +60,7 @@ class AppPrefsTest {
         val prefs = AppPrefs(sp)
         val categories = listOf(prefs.keyboard, prefs.candidates, prefs.clipboard, prefs.symbols, prefs.advanced)
         // AppPrefs' keys alone: ThemeManager.prefs is registered with the application's AppPrefs, not this one.
-        // ThemePrefsTest and aCategoryRegisteredAfterTheResetIsResetAsItRegisters check that its reset keeps what its levels set
+        // ThemePrefsTest and aVisibleThemePreferenceKeepsItsValueAcrossHiddenResets check that theme controls survive resets
         val own = categories.flatMapTo(HashSet()) { it.managedPreferences.keys }
         // what every level sets, one off its default: the keyboard's size on the theme page, the long press, the vibration, the sound
         val levels = (categories + ThemeManager.prefs)
@@ -79,10 +79,9 @@ class AppPrefsTest {
         assertFalse("shown", prefs.keyboard.popupOnKeyPress.getValue())
     }
 
-    // ThemeManager registers ThemePrefs after the reset at the start: what it hides goes back then
     @Test
     @Config(application = FcitxApplication::class)
-    fun aCategoryRegisteredAfterTheResetIsResetAsItRegisters() {
+    fun aVisibleThemePreferenceKeepsItsValueAcrossHiddenResets() {
         sp.edit {
             putBoolean("key_ripple_effect", true)
             putInt("key_radius", 9)
@@ -90,12 +89,12 @@ class AppPrefsTest {
         val prefs = AppPrefs(sp)
         prefs.resetHiddenSettings()
         val theme = prefs.registerProvider(::ThemePrefs)
-        assertFalse(theme.keyRippleEffect.getValue())
-        assertEquals("a level sets it", 9, theme.keyRadius.getValue())
-        // a later start, the reset done before it: nothing registered then is reset
-        sp.edit { putBoolean("key_ripple_effect", true) }
+        assertTrue(theme.keyRippleEffect.getValue())
+        assertEquals(9, theme.keyRadius.getValue())
         val later = AppPrefs(sp)
         later.resetHiddenSettings()
-        assertTrue(later.registerProvider(::ThemePrefs).keyRippleEffect.getValue())
+        val laterTheme = later.registerProvider(::ThemePrefs)
+        assertTrue(laterTheme.keyRippleEffect.getValue())
+        assertEquals(9, laterTheme.keyRadius.getValue())
     }
 }
