@@ -33,16 +33,17 @@ class TextEditingUi(
     private val theme: Theme,
     private val ripple: Boolean,
     private val border: Boolean,
+    private val borderStroke: Boolean,
     private val radius: Float
 ) : Ui {
 
     private fun textButton(@StringRes id: Int, altStyle: Boolean = false) =
-        TextEditingButton(ctx, theme, ripple, border, radius, altStyle).apply {
+        TextEditingButton(ctx, theme, ripple, border, borderStroke, radius, altStyle).apply {
             setText(id)
         }
 
     private fun iconButton(@DrawableRes icon: Int, altStyle: Boolean = false) =
-        TextEditingButton(ctx, theme, ripple, border, radius, altStyle).apply {
+        TextEditingButton(ctx, theme, ripple, border, borderStroke, radius, altStyle).apply {
             setIcon(icon)
         }
 

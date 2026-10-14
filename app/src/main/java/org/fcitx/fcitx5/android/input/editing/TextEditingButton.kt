@@ -13,6 +13,7 @@ import android.graphics.drawable.StateListDrawable
 import androidx.annotation.DrawableRes
 import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.input.keyboard.CustomGestureView
+import org.fcitx.fcitx5.android.input.keyboard.borderedKeyBackgroundDrawable
 import org.fcitx.fcitx5.android.input.keyboard.shadowedKeyBackgroundDrawable
 import org.fcitx.fcitx5.android.input.keyboard.insetRadiusDrawable
 import org.fcitx.fcitx5.android.utils.borderDrawable
@@ -34,6 +35,7 @@ class TextEditingButton(
     private val theme: Theme,
     private val rippled: Boolean,
     private val bordered: Boolean,
+    private val borderStroke: Boolean,
     private val radius: Float,
     private val altStyle: Boolean = false
 ) : CustomGestureView(ctx) {
@@ -49,10 +51,7 @@ class TextEditingButton(
     init {
         if (bordered) {
             val bkgColor = if (altStyle) theme.altKeyBackgroundColor else theme.keyBackgroundColor
-            background = shadowedKeyBackgroundDrawable(
-                bkgColor, theme.keyShadowColor,
-                radius, shadowWidth, hInset, vInset
-            )
+            background = keyBackgroundDrawable(bkgColor)
             foreground = if (rippled) {
                 RippleDrawable(
                     ColorStateList.valueOf(theme.keyPressHighlightColor), null,
@@ -99,6 +98,17 @@ class TextEditingButton(
         add(imageView, lParams(wrapContent, wrapContent, gravityCenter))
     }
 
+    private fun keyBackgroundDrawable(color: Int) =
+        if (borderStroke) {
+            borderedKeyBackgroundDrawable(
+                color, theme.keyShadowColor, radius, shadowWidth, hInset, vInset
+            )
+        } else {
+            shadowedKeyBackgroundDrawable(
+                color, theme.keyShadowColor, radius, shadowWidth, hInset, vInset
+            )
+        }
+
     fun enableActivatedState() {
         textView.setTextColor(
             ColorStateList(
@@ -126,17 +136,11 @@ class TextEditingButton(
             StateListDrawable().apply {
                 addState(
                     intArrayOf(android.R.attr.state_activated),
-                    shadowedKeyBackgroundDrawable(
-                        theme.genericActiveBackgroundColor, theme.keyShadowColor,
-                        radius, shadowWidth, hInset, vInset
-                    )
+                    keyBackgroundDrawable(theme.genericActiveBackgroundColor)
                 )
                 addState(
                     intArrayOf(android.R.attr.state_enabled),
-                    shadowedKeyBackgroundDrawable(
-                        theme.keyBackgroundColor, theme.keyShadowColor,
-                        radius, shadowWidth, hInset, vInset
-                    )
+                    keyBackgroundDrawable(theme.keyBackgroundColor)
                 )
             }
         } else {

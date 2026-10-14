@@ -31,6 +31,7 @@ class TextEditingWindow : InputWindow.ExtendedInputWindow<TextEditingWindow>(),
 
     private val buttonRipple by ThemeManager.prefs.keyRippleEffect
     private val buttonBorder by ThemeManager.prefs.keyBorder
+    private val buttonBorderStroke by ThemeManager.prefs.keyBorderStroke
     private val buttonRadius by ThemeManager.prefs.textEditingButtonRadius
 
     private var hasSelection = false
@@ -41,7 +42,9 @@ class TextEditingWindow : InputWindow.ExtendedInputWindow<TextEditingWindow>(),
     }
 
     private val ui by lazy {
-        TextEditingUi(context, theme, buttonRipple, buttonBorder, buttonRadius.toFloat()).apply {
+        TextEditingUi(
+            context, theme, buttonRipple, buttonBorder, buttonBorderStroke, buttonRadius.toFloat()
+        ).apply {
             fun CustomGestureView.onClickWithRepeating(block: () -> Unit) {
                 setOnClickListener { block() }
                 repeatEnabled = true
