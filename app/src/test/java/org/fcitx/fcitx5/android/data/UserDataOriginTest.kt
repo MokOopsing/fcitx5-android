@@ -10,37 +10,54 @@ import org.junit.Test
 
 class UserDataOriginTest {
 
-    private val root = "io.github.sraw.youmo"
+    private val root = "io.github.mokoopsing.youmo.rime"
 
     private fun of(exporter: String, applicationId: String) = UserDataOrigin.of(exporter, applicationId, root)
 
     @Test
     fun theAppsOwnDataIsImportedAsItIs() {
-        assertEquals(UserDataOrigin.Own, of("io.github.sraw.youmo", "io.github.sraw.youmo"))
-        assertEquals(UserDataOrigin.Own, of("io.github.sraw.youmo.debug", "io.github.sraw.youmo.debug"))
+        assertEquals(UserDataOrigin.Own, of(root, root))
+        assertEquals(UserDataOrigin.Own, of("$root.debug", "$root.debug"))
     }
 
     @Test
     fun dataFromBeforeTheRenamingIsImportedByTheSameBuildTypeWithItsPreferencesRenamed() {
         assertEquals(
-            UserDataOrigin.Legacy("org.fcitx.fcitx5.android_preferences.xml", "io.github.sraw.youmo_preferences.xml"),
-            of("org.fcitx.fcitx5.android", "io.github.sraw.youmo")
+            UserDataOrigin.Legacy(
+                "org.fcitx.fcitx5.android_preferences.xml",
+                "${root}_preferences.xml"
+            ),
+            of("org.fcitx.fcitx5.android", root)
         )
         assertEquals(
             UserDataOrigin.Legacy(
                 "org.fcitx.fcitx5.android.debug_preferences.xml",
-                "io.github.sraw.youmo.debug_preferences.xml"
+                "${root}.debug_preferences.xml"
             ),
-            of("org.fcitx.fcitx5.android.debug", "io.github.sraw.youmo.debug")
+            of("org.fcitx.fcitx5.android.debug", "$root.debug")
+        )
+        assertEquals(
+            UserDataOrigin.Legacy(
+                "io.github.sraw.youmo_preferences.xml",
+                "${root}_preferences.xml"
+            ),
+            of("io.github.sraw.youmo", root)
+        )
+        assertEquals(
+            UserDataOrigin.Legacy(
+                "io.github.sraw.youmo.debug_preferences.xml",
+                "${root}.debug_preferences.xml"
+            ),
+            of("io.github.sraw.youmo.debug", "$root.debug")
         )
     }
 
     @Test
     fun otherAppsAndOtherBuildTypesAreNot() {
-        assertNull(of("org.fcitx.fcitx5.android.debug", "io.github.sraw.youmo"))
-        assertNull(of("org.fcitx.fcitx5.android", "io.github.sraw.youmo.debug"))
-        assertNull(of("io.github.sraw.youmo.debug", "io.github.sraw.youmo"))
-        assertNull(of("com.example.ime", "io.github.sraw.youmo"))
+        assertNull(of("org.fcitx.fcitx5.android.debug", root))
+        assertNull(of("org.fcitx.fcitx5.android", "$root.debug"))
+        assertNull(of("$root.debug", root))
+        assertNull(of("com.example.ime", root))
     }
 
     @Test

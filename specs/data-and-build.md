@@ -48,7 +48,7 @@ language corpora or speech models.
 - `versionCode` includes an ABI suffix; raise `Versions.baseVersionCode` for a release.
 - Release APKs are built for the supported release ABI, signed outside the repository, installed
   over the previous version, and uploaded with `SHA256SUMS.txt`.
-- Package `io.github.sraw.youmo` (debug has a `.debug` suffix).
+- Package `io.github.mokoopsing.youmo.rime` (debug has a `.debug` suffix).
 
 ## CI
 

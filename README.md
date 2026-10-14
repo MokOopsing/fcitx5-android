@@ -1,10 +1,10 @@
-# 幽默输入法 · Youmo IME
+# 知了猴输入法 · Youmo IME
 
-[中文](#幽默输入法) · [English](#youmo-ime) · [使用说明](docs/README.md) · [下载](https://github.com/Sraw/youmo-ime/releases)
+[中文](#知了猴输入法) · [English](#youmo-ime) · [使用说明](docs/README.md) · [下载](https://github.com/Sraw/youmo-ime/releases)
 
-## 幽默输入法
+## 知了猴输入法
 
-幽默输入法是一个基于 Fcitx5 的 Android 输入法，**只保留 Rime 输入引擎**。键盘、主题、剪贴板、符号、表情和文本编辑等共用功能仍可使用。应用不申请网络权限，输入内容和 Rime 用户数据留在设备本地。
+知了猴输入法是一个基于 Fcitx5 的 Android 输入法，**只保留 Rime 输入引擎**。键盘、主题、剪贴板、符号、表情和文本编辑等共用功能仍可使用。应用不申请网络权限，输入内容和 Rime 用户数据留在设备本地。
 
 **不随安装包提供输入方案或词典。** 首次使用需自行安装 Rime 方案并部署，详见[Rime 输入说明](docs/rime.md)。
 

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name_release">幽默輸入法</string>
-    <string name="app_name_debug">幽默輸入法 (除錯)</string>
+    <string name="app_name_release">知了猴輸入法</string>
+    <string name="app_name_debug">知了猴輸入法 (除錯)</string>
     <string name="save">儲存</string>
     <string name="input_methods">輸入法</string>
     <string name="advanced">進階</string>
@@ -177,7 +177,7 @@
     <string name="reset_keyboard_on_focus_change">焦點改變時切換回鍵盤</string>
     <string name="export_user_data">備份全部</string>
     <string name="import_user_data">從備份還原</string>
-    <string name="exception_user_data_filename">%1$s 的副檔名並不是幽默輸入法備份</string>
+    <string name="exception_user_data_filename">%1$s 的副檔名並不是知了猴輸入法備份</string>
     <string name="exception_user_data_metadata">無法找到使用者資料的中繼資料</string>
     <string name="exception_user_data_package_name_mismatch">使用者資料與目前應用程式不符合</string>
     <string name="user_data_imported">已匯入來自 %1$s 的使用者資料，正在重新啟動</string>
@@ -355,7 +355,7 @@
     <string name="export_words">匯出</string>
     <string name="export_words_summary">整個使用者詞庫存成一個文字檔，可在別的手機上匯入</string>
     <string name="import_words_done">匯入完成：新增 %1$d 個詞，封鎖 %2$d 個，%3$d 行沒能讀懂</string>
-    <string name="export_words_header"># 幽默輸入法使用者詞庫：一行一個詞，詞後面是拼音；! 開頭的是封鎖的詞</string>
+    <string name="export_words_header"># 知了猴輸入法使用者詞庫：一行一個詞，詞後面是拼音；! 開頭的是封鎖的詞</string>
     <string name="select_all">全選</string>
     <string name="delete_selected">刪除</string>
     <string name="selected_count">已選 %1$d 個</string>

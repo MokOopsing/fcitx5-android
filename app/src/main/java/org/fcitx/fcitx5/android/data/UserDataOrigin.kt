@@ -4,8 +4,11 @@
  */
 package org.fcitx.fcitx5.android.data
 
-/** This fork was built as upstream's org.fcitx.fcitx5.android until 2026-10-02, when it became 幽默输入法. */
-const val LEGACY_APPLICATION_ID_ROOT = "org.fcitx.fcitx5.android"
+/** This fork was built as upstream's org.fcitx.fcitx5.android until 2026-10-02, when it became 知了猴输入法. */
+private val LEGACY_APPLICATION_ID_ROOTS = listOf(
+    "org.fcitx.fcitx5.android",
+    "io.github.sraw.youmo"
+)
 
 /**
  * Where user data exported by [exporter] comes from, for the app [applicationId] whose id without the
@@ -21,9 +24,14 @@ sealed interface UserDataOrigin {
     companion object {
         fun of(exporter: String, applicationId: String, root: String): UserDataOrigin? = when {
             exporter == applicationId -> Own
-            applicationId.startsWith(root) &&
-                exporter == LEGACY_APPLICATION_ID_ROOT + applicationId.removePrefix(root) ->
-                Legacy(preferencesFile(exporter), preferencesFile(applicationId))
+            applicationId.startsWith(root) -> {
+                val suffix = applicationId.removePrefix(root)
+                if (LEGACY_APPLICATION_ID_ROOTS.any { exporter == it + suffix }) {
+                    Legacy(preferencesFile(exporter), preferencesFile(applicationId))
+                } else {
+                    null
+                }
+            }
             else -> null
         }
 

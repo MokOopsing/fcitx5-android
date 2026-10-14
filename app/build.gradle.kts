@@ -14,7 +14,7 @@ android {
     namespace = "org.fcitx.fcitx5.android"
 
     defaultConfig {
-        applicationId = "io.github.sraw.youmo"
+        applicationId = "io.github.mokoopsing.youmo.rime"
         // the id without the build type's suffix (.debug): UserDataOrigin's root, for importing backups
         buildConfigField("String", "APPLICATION_ID_ROOT", "\"$applicationId\"")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

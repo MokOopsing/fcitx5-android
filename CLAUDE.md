@@ -1,4 +1,4 @@
-# youmo-ime, 幽默输入法
+# youmo-ime, 知了猴输入法
 
 This project branched from fcitx5-android and is not intended to merge upstream. Free to restructure.
 

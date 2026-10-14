@@ -16,7 +16,7 @@ and known pitfalls. `CLAUDE.md` is the summary. User-visible behavior and settin
 
 ## The project in five lines
 
-- Youmo IME (`io.github.sraw.youmo`) is an offline Android input method branched from
+- 知了猴输入法 (`io.github.mokoopsing.youmo.rime`) is an offline Android input method branched from
   fcitx5-android; upstream compatibility is not a constraint.
 - Fcitx5 remains the framework. Rime is the only input engine; schemas and dictionaries are
   supplied and maintained by the user.

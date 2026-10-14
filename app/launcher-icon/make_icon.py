@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""幽默输入法's launcher icon: a monkey in sunglasses, grinning. The shapes are listed once, as
+"""知了猴输入法's launcher icon: a monkey in sunglasses, grinning. The shapes are listed once, as
 path data, and written out twice: as the adaptive icon's vector drawables (background, foreground,
 monochrome) and, through cairosvg, as the PNGs that launchers before Android 8 take. Run it after
 changing a shape; it writes into app/src/main/res. Needs cairosvg and Pillow.

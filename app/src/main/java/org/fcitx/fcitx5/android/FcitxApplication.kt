@@ -196,7 +196,7 @@ class FcitxApplication : Application() {
          * This permission is requested by com.android.shell, makes it possible to restart
          * fcitx instance from `adb shell am` command:
          * ```sh
-         * adb shell am broadcast -a io.github.sraw.youmo.action.RESTART_FCITX_INSTANCE
+         * adb shell am broadcast -a io.github.mokoopsing.youmo.rime.action.RESTART_FCITX_INSTANCE
          * ```
          * https://android.googlesource.com/platform/frameworks/base/+/refs/tags/android-7.0.0_r1/packages/Shell/AndroidManifest.xml#67
          *

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name_release">幽默输入法</string>
-    <string name="app_name_debug">幽默输入法 (调试)</string>
+    <string name="app_name_release">知了猴输入法</string>
+    <string name="app_name_debug">知了猴输入法 (调试)</string>
     <string name="save">保存</string>
     <string name="input_methods">输入法</string>
     <string name="advanced">高级</string>
@@ -180,7 +180,7 @@
     <string name="reset_keyboard_on_focus_change">焦点改变时切换回键盘</string>
     <string name="export_user_data">备份全部</string>
     <string name="import_user_data">从备份恢复</string>
-    <string name="exception_user_data_filename">文件 %1$s 的拓展名不是幽默输入法备份</string>
+    <string name="exception_user_data_filename">文件 %1$s 的拓展名不是知了猴输入法备份</string>
     <string name="exception_user_data_metadata">找不到用户数据的元数据</string>
     <string name="exception_user_data_package_name_mismatch">用户数据与当前应用不匹配</string>
     <string name="user_data_imported">已导入来自 %1$s 的用户数据，正在重启…</string>
@@ -361,7 +361,7 @@
     <string name="export_words">导出</string>
     <string name="export_words_summary">整个用户词库存成一个文本文件，可在别的手机上导入</string>
     <string name="import_words_done">导入完成：添加 %1$d 个词，屏蔽 %2$d 个，%3$d 行没能读懂</string>
-    <string name="export_words_header"># 幽默输入法用户词库：一行一个词，词后面是拼音；! 开头的是屏蔽的词</string>
+    <string name="export_words_header"># 知了猴输入法用户词库：一行一个词，词后面是拼音；! 开头的是屏蔽的词</string>
     <string name="select_all">全选</string>
     <string name="delete_selected">删除</string>
     <string name="selected_count">已选 %1$d 个</string>
