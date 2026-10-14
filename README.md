@@ -1,6 +1,6 @@
 # 知了猴输入法 · Youmo IME
 
-[中文](#知了猴输入法) · [English](#youmo-ime) · [使用说明](docs/README.md) · [下载](https://github.com/Sraw/youmo-ime/releases)
+[中文](#知了猴输入法) · [English](#youmo-rime) · [使用说明](docs/README.md) · [下载](https://github.com/MokOopsing/fcitx5-android/actions)
 
 ## 知了猴输入法
 
@@ -8,11 +8,11 @@
 
 **不随安装包提供输入方案或词典。** 首次使用需自行安装 Rime 方案并部署，详见[Rime 输入说明](docs/rime.md)。
 
-本项目由 [fcitx5-android](https://github.com/fcitx5-android/fcitx5-android) 分叉，保留 [Fcitx5](https://github.com/fcitx/fcitx5) 框架及 [Rime](https://rime.im) 引擎。与上游项目无关，问题请在[本仓库](https://github.com/Sraw/youmo-ime/issues)反馈。
+本项目由 [youmo-ime](https://github.com/Sraw/youmo-ime) 分叉，保留 [Fcitx5](https://github.com/fcitx/fcitx5) 框架及 [Rime](https://rime.im) 引擎。
 
 ### 下载与使用
 
-安装包在 [GitHub Releases](https://github.com/Sraw/youmo-ime/releases)。下载后可用 `SHA256SUMS.txt` 校验。安装、启用和使用方法见[完整说明](docs/README.md)。
+安装包在 action构建记录(https://github.com/MokOopsing/fcitx5-android/actions)。
 
 ### 构建与开发
 
@@ -30,11 +30,11 @@ Youmo IME is an Android input method built on Fcitx5. **Rime is the only input e
 
 **No Rime schema or dictionary is bundled.** Install a Rime schema and deploy it before typing; see the [Rime guide](docs/rime.md).
 
-This project branched from [fcitx5-android](https://github.com/fcitx5-android/fcitx5-android), retaining the [Fcitx5](https://github.com/fcitx/fcitx5) framework and [Rime](https://rime.im) engine. It is independent of upstream; please report issues [here](https://github.com/Sraw/youmo-ime/issues).
+This project branched from [youmo-ime](https://github.com/Sraw/youmo-ime), retaining the [Fcitx5](https://github.com/fcitx/fcitx5) framework and [Rime](https://rime.im) engine. 
 
 ### Download and use
 
-Get the APK from [GitHub Releases](https://github.com/Sraw/youmo-ime/releases). Verify it with `SHA256SUMS.txt`. See the [user guide](docs/README.md) for setup and usage.
+Get the APK from [GitHub Action](https://github.com/MokOopsing/fcitx5-android/actions)
 
 ### Build and development
 
