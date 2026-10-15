@@ -236,7 +236,10 @@ class TextKeyboard(
         }
     }
 
-    private fun transformPopupPreview(c: String): String {
+    private fun transformPopupPreview(viewId: Int, c: String): String {
+        val key = textKeys.firstOrNull { it.id == viewId } as? AltTextKeyView
+        val character = (key?.def as? KeyDef.Appearance.AltText)?.displayText
+        keyLabelForPreview(character, key?.mainText?.text?.toString(), c)?.let { return it }
         if (c.length != 1) return c
         if (c[0].isLetter()) return transformAlphabet(c)
         return transformPunctuation(c)
@@ -244,8 +247,10 @@ class TextKeyboard(
 
     override fun onPopupAction(action: PopupAction) {
         val newAction = when (action) {
-            is PopupAction.PreviewAction -> action.copy(content = transformPopupPreview(action.content))
-            is PopupAction.PreviewUpdateAction -> action.copy(content = transformPopupPreview(action.content))
+            is PopupAction.PreviewAction ->
+                action.copy(content = transformPopupPreview(action.viewId, action.content))
+            is PopupAction.PreviewUpdateAction ->
+                action.copy(content = transformPopupPreview(action.viewId, action.content))
             is PopupAction.ShowKeyboardAction -> {
                 when (action.keyboard) {
                     is KeyDef.Popup.Keyboard.Preset -> {
@@ -356,6 +361,16 @@ class TextKeyboard(
         return PopupOverridesCache.user.current.swipeOf(letter, transformAlphabet(letter))
     }
 
+}
+
+internal fun keyLabelForPreview(
+    character: String?,
+    label: String?,
+    preview: String
+): String? {
+    if (label == null) return null
+    val key = character?.takeIf { it.length == 1 && it[0].isLetter() } ?: return null
+    return label.takeIf { preview.equals(key, ignoreCase = true) }
 }
 
 /** What [label]'s long press offers: the user's list, else the built-in one; null where it is off. */

@@ -56,4 +56,13 @@ class TextKeyboardTest {
         assertNull(overrides.swipeOf("q", "q"))
         assertEquals("7", overrides.swipeOf("q", "Q"))
     }
+
+    @Test
+    fun popupPreviewUsesTheVisibleKeyLabelForItsLetter() {
+        assertEquals("日", keyLabelForPreview("a", "日", "a"))
+        assertEquals("日", keyLabelForPreview("a", "日", "A"))
+        assertNull(keyLabelForPreview("a", "日", "1"))
+        assertNull(keyLabelForPreview("a", null, "a"))
+        assertNull(keyLabelForPreview(null, "日", "a"))
+    }
 }
