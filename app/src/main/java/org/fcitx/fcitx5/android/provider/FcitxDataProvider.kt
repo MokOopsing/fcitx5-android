@@ -16,8 +16,10 @@ import android.provider.DocumentsContract.Document
 import android.provider.DocumentsContract.Root
 import android.provider.DocumentsProvider
 import android.webkit.MimeTypeMap
+import kotlinx.coroutines.launch
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.SubtypeManager
+import org.fcitx.fcitx5.android.daemon.FcitxConnection
 import org.fcitx.fcitx5.android.daemon.FcitxDaemon
 import org.fcitx.fcitx5.android.utils.isPlainFileName
 import timber.log.Timber
@@ -161,23 +163,27 @@ class FcitxDataProvider : DocumentsProvider() {
     // a test counts the calls instead: reloading needs fcitx running
     internal var reload: (File) -> Unit = { reloadFcitx(it) }
 
+    // a test's fake instead, to see what a reload asks of fcitx
+    internal var connection: () -> FcitxConnection? = { FcitxDaemon.getFirstConnectionOrNull() }
+
     // fcitx that is not running reads the files when it starts
     private fun reloadFcitx(written: File) {
-        val fcitx = FcitxDaemon.getFirstConnectionOrNull()
+        val fcitx = connection()
         if (fcitx == null) {
             Timber.d("Not reloading fcitx for %s: it is not running", written.name)
             return
         }
-        // runIfReady drops it without a word while fcitx is still starting
-        Timber.d("Reloading fcitx for %s, if it is ready", written.name)
-        fcitx.runIfReady {
+        // once ready: fcitx still starting may have read the file before it was written, and
+        // runIfReady would drop the reload
+        Timber.d("Reloading fcitx for %s once it is ready", written.name)
+        fcitx.lifecycleScope.launch { fcitx.runOnReady {
             reloadConfig()
             // what the removed status-area entry did: config/profile holds the enabled input methods
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 SubtypeManager.syncWith(enabledIme())
             }
             Timber.d("Reloaded fcitx for %s", written.name)
-        }
+        } }
     }
 
     @Throws(FileNotFoundException::class)
@@ -381,3 +387,4 @@ private fun File.canonical(): File = try {
 /** Whether fcitx reads [this] again on reload: its own and its addons' config, and the punctuation tables. */
 internal fun File.isReadOnReload(root: File): Boolean =
     startsWith(root.resolve("config")) || startsWith(root.resolve("data/punctuation"))
+
