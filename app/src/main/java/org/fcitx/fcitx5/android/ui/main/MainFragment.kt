@@ -4,6 +4,11 @@
  */
 package org.fcitx.fcitx5.android.ui.main
 
+import android.graphics.Canvas
+import android.graphics.ColorFilter
+import android.graphics.Paint
+import android.graphics.PixelFormat
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuInflater
@@ -19,6 +24,7 @@ import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import kotlinx.coroutines.launch
 import org.fcitx.fcitx5.android.R
+import org.fcitx.fcitx5.android.core.FcitxEvent
 import org.fcitx.fcitx5.android.core.InputMethodEntry
 import org.fcitx.fcitx5.android.ui.common.PaddingPreferenceFragment
 import org.fcitx.fcitx5.android.ui.main.settings.SettingsRoute
@@ -37,6 +43,8 @@ class MainFragment : PaddingPreferenceFragment() {
     private val viewModel: MainViewModel by activityViewModels()
     private var inputMethodEntry: InputMethodEntry? = null
     private var inputMethodPreference: Preference? = null
+    private var inputMethodIcon: Drawable? = null
+    private var inputMethodIconText = ""
 
     override fun onViewCreated(
         view: View, savedInstanceState: Bundle?
@@ -52,6 +60,19 @@ class MainFragment : PaddingPreferenceFragment() {
             inputMethodEntry = entry
             inputMethodPreference?.title = entry?.displayName ?: getString(R.string.input_methods)
         }
+        viewLifecycleOwner.lifecycleScope.launch {
+            updateInputMethodIcon(viewModel.fcitx.runOnReady { currentIme() })
+            viewModel.fcitx.runImmediately { eventFlow }.collect { event ->
+                if (event is FcitxEvent.IMChangeEvent) {
+                    updateInputMethodIcon(event.data)
+                }
+            }
+        }
+    }
+
+    private fun updateInputMethodIcon(ime: InputMethodEntry) {
+        inputMethodIconText = ime.displayName.take(1)
+        inputMethodIcon?.invalidateSelf()
     }
 
     private suspend fun loadInputMethodEntry(): InputMethodEntry? =
@@ -97,10 +118,7 @@ class MainFragment : PaddingPreferenceFragment() {
         preferenceScreen = preferenceManager.createPreferenceScreen(requireContext()).apply {
             addCategory(R.string.home_section_input) {
                 inputMethodPreference = Preference(context).apply {
-                    setup(
-                        getString(R.string.input_methods),
-                        icon = R.drawable.ic_baseline_language_24
-                    ) {
+                    setup(getString(R.string.input_methods)) {
                         viewLifecycleOwner.lifecycleScope.launch {
                             val entry = inputMethodEntry ?: loadInputMethodEntry()
                                 .also { inputMethodEntry = it }
@@ -113,6 +131,39 @@ class MainFragment : PaddingPreferenceFragment() {
                             }
                         }
                     }
+                    val iconSize = (24 * resources.displayMetrics.density).toInt()
+                    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = context.styledColor(android.R.attr.colorControlNormal)
+                        textAlign = Paint.Align.CENTER
+                        textSize = 20 * resources.displayMetrics.scaledDensity
+                    }
+                    icon = object : Drawable() {
+                        override fun draw(canvas: Canvas) {
+                            val metrics = textPaint.fontMetrics
+                            canvas.drawText(
+                                inputMethodIconText,
+                                bounds.exactCenterX(),
+                                bounds.exactCenterY() - (metrics.ascent + metrics.descent) / 2,
+                                textPaint
+                            )
+                        }
+
+                        override fun setAlpha(alpha: Int) {
+                            textPaint.alpha = alpha
+                        }
+
+                        override fun setColorFilter(colorFilter: ColorFilter?) {
+                            textPaint.colorFilter = colorFilter
+                        }
+
+                        @Suppress("DEPRECATION")
+                        override fun getOpacity() = PixelFormat.TRANSLUCENT
+
+                        override fun getIntrinsicWidth() = iconSize
+                        override fun getIntrinsicHeight() = iconSize
+                    }
+                    isIconSpaceReserved = true
+                    inputMethodIcon = icon
                 }.also(::addPreference)
             }
             addCategory(R.string.home_section_keyboard_look) {
