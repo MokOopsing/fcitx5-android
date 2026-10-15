@@ -12,7 +12,6 @@ import kotlinx.coroutines.launch
 import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.FcitxAPI
 import org.fcitx.fcitx5.android.input.FcitxInputMethodService
-import org.fcitx.fcitx5.android.utils.AppUtil
 import splitties.dimensions.dp
 import splitties.resources.styledDrawable
 import splitties.views.dsl.core.matchParent
@@ -51,9 +50,6 @@ object InputMethodPickerDialog {
                     addItemDecoration(SingleDividerDecoration(it, dividerIndex))
                 }
             })
-            .setNeutralButton(R.string.input_methods) { _, _ ->
-                AppUtil.launchMainToInputMethodList(context)
-            }
             .create()
         return dialog
     }
