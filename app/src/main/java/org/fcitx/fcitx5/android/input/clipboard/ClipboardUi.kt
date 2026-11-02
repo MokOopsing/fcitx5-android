@@ -16,11 +16,11 @@ import org.fcitx.fcitx5.android.data.theme.ThemeManager
 import org.fcitx.fcitx5.android.input.bar.ui.ToolButton
 import splitties.dimensions.dp
 import splitties.views.backgroundColor
-import splitties.views.dsl.coordinatorlayout.coordinatorLayout
-import splitties.views.dsl.coordinatorlayout.defaultLParams
 import splitties.views.dsl.core.Ui
 import splitties.views.dsl.core.add
 import splitties.views.dsl.core.horizontalLayout
+import splitties.views.dsl.coordinatorlayout.coordinatorLayout
+import splitties.views.dsl.coordinatorlayout.defaultLParams
 import splitties.views.dsl.core.lParams
 import splitties.views.dsl.core.matchParent
 import splitties.views.dsl.core.view

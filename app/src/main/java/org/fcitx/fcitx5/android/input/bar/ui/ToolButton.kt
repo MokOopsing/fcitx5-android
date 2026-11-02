@@ -43,11 +43,21 @@ class ToolButton(context: Context) : CustomGestureView(context) {
             image.rotation = value
         }
 
-    constructor(context: Context, @DrawableRes icon: Int, theme: Theme) : this(context) {
+    constructor(
+        context: Context,
+        @DrawableRes icon: Int,
+        theme: Theme,
+        iconSizeDp: Int? = null
+    ) : this(context) {
         image.imageTintList = ColorStateList.valueOf(theme.altKeyTextColor)
         setIcon(icon)
         setPressHighlightColor(theme.keyPressHighlightColor)
-        add(image, lParams(wrapContent, wrapContent, gravityCenter))
+        val iconSize = iconSizeDp?.let(::dp) ?: wrapContent
+        if (iconSizeDp != null) {
+            image.padding = 0
+            image.scaleType = ImageView.ScaleType.FIT_CENTER
+        }
+        add(image, lParams(iconSize, iconSize, gravityCenter))
     }
 
     fun iconAnimate(): ViewPropertyAnimator = image.animate()

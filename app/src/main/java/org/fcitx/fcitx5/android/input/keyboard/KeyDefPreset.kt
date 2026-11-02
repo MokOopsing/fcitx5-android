@@ -42,6 +42,25 @@ class SymbolKey(
     )
 )
 
+class PunctuationKey : KeyDef(
+    Appearance.AltText(
+        displayText = ",",
+        altText = ".",
+        textSize = 23f,
+        percentWidth = 0.1f,
+        variant = Variant.Alternative,
+        viewId = R.id.button_comma
+    ),
+    setOf(
+        Behavior.Press(KeyAction.FcitxKeyAction(",")),
+        Behavior.Swipe(KeyAction.FcitxKeyAction("."))
+    ),
+    arrayOf(
+        Popup.AltPreview(",", "."),
+        Popup.Keyboard.Preset(",")
+    )
+)
+
 /**
  * What an address is made of ([AddressKeys]), committed as it is: through the engine `/` would
  * be 、 in Chinese. Its long press offers [more], hidden till an address field shows it.

@@ -165,4 +165,7 @@ class InputWindowManager : UniqueViewComponent<InputWindowManager, FrameLayout>(
     }
 
     fun isAttached(window: InputWindow) = currentWindow === window
+
+    fun isShowing(windowType: Class<out InputWindow>) =
+        currentWindow?.let(windowType::isInstance) == true
 }

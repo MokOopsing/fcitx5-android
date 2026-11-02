@@ -19,6 +19,7 @@ import org.fcitx.fcitx5.android.input.bar.KawaiiBarComponent
 import org.fcitx.fcitx5.android.input.broadcast.InputBroadcastReceiver
 import org.fcitx.fcitx5.android.input.broadcast.ReturnKeyAppearance
 import org.fcitx.fcitx5.android.input.broadcast.ReturnKeyDrawableComponent
+import org.fcitx.fcitx5.android.input.clipboard.ClipboardWindow
 import org.fcitx.fcitx5.android.input.dependency.theme
 import org.fcitx.fcitx5.android.input.editing.toEditorTraits
 import org.fcitx.fcitx5.android.input.picker.PickerWindow
@@ -75,13 +76,14 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     private val currentKeyboard: BaseKeyboard?
         get() = makers[currentKeyboardName]?.let { keyboards.getOrPut(currentKeyboardName, it) }
 
+    private val clipboardWindow by lazy { ClipboardWindow() }
+
     private val spaceKeys = SpaceKeyInputMethod()
 
     private val keyActionListener = KeyActionListener { it, source ->
-        if (it is KeyAction.LayoutSwitchAction) {
-            switchLayout(it.act)
-        } else {
-            commonKeyActionListener.listener.onKeyAction(it, source)
+        when (it) {
+            is KeyAction.LayoutSwitchAction -> switchLayout(it.act)
+            else -> commonKeyActionListener.listener.onKeyAction(it, source)
         }
     }
 
@@ -143,6 +145,35 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
                 LayoutSwitchPolicy.Target.SymbolPicker ->
                     windowManager.attachWindow(PickerWindow.Key.Symbol)
             }
+        }
+    }
+
+    fun isMainKeyboardShown(): Boolean =
+        windowManager.isAttached(this) && currentKeyboardName == TextKeyboard.Name
+
+    fun returnToMainKeyboard(onReturned: () -> Unit) {
+        ContextCompat.getMainExecutor(context).execute {
+            val outcome = lettersLayout.switchTo(
+                TextKeyboard.Name,
+                lastSymbolType,
+                currentKeyboardName,
+                remember = false
+            )
+            when (val target = outcome.target) {
+                LayoutSwitchPolicy.Target.Unchanged -> {}
+                is LayoutSwitchPolicy.Target.Keyboard -> showLayout(target.name)
+                LayoutSwitchPolicy.Target.SymbolPicker -> showLayout(TextKeyboard.Name)
+            }
+            windowManager.attachWindow(this)
+            onReturned()
+        }
+    }
+
+    fun toggleClipboard() {
+        if (windowManager.isAttached(clipboardWindow)) {
+            windowManager.attachWindow(this)
+        } else {
+            windowManager.attachWindow(clipboardWindow)
         }
     }
 

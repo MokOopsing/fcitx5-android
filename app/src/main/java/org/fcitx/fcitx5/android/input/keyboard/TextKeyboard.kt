@@ -75,21 +75,18 @@ class TextKeyboard(
                 BackspaceKey()
             ),
             listOf(
-                // Sogou's row: symbols and numbers each a key of their own, the comma and the
-                // full stop either side of the space, the language switch after them; held, 符
-                // and 123 open quick phrase and Unicode input, which have no key in this row
+                // Symbols and numbers each have their own key; punctuation to the right of space
+                // swipes from comma to full stop. Held, 符 and 123 open quick phrase and Unicode input.
                 LayoutSwitchKey("符", PickerWindow.Key.Symbol.name, 0.12f, longPress = KeyAction.QuickPhraseAction),
                 LayoutSwitchKey("123", NumberKeyboard.Name, 0.12f, longPress = KeyAction.UnicodeAction),
-                SymbolKey(",", 0.1f, KeyDef.Appearance.Variant.Alternative, viewId = R.id.button_comma),
-                // an address field's in place of the comma and the full stop (AddressKeys), hidden else
+                // an address field's in place of punctuation (AddressKeys), hidden else
                 AddressKey("/", R.id.button_slash),
                 AddressKey("@", R.id.button_at),
                 SpaceKey(),
-                SymbolKey(".", 0.1f, KeyDef.Appearance.Variant.Alternative, viewId = R.id.button_period),
+                PunctuationKey(),
                 // as it is: through the engine . would be 。
                 AddressKey(".", R.id.button_dot),
                 AddressKey(AddressKeys.DOMAINS.first(), R.id.button_domain, 0.14f, AddressKeys.DOMAINS),
-                LanguageKey(),
                 ReturnKey()
             )
         )
@@ -97,11 +94,10 @@ class TextKeyboard(
 
     val caps: ImageKeyView by lazy { findViewById(R.id.button_caps) }
     val backspace: ImageKeyView by lazy { findViewById(R.id.button_backspace) }
-    val lang: ImageKeyView by lazy { findViewById(R.id.button_lang) }
     val space: TextKeyView by lazy { findViewById(R.id.button_space) }
     val `return`: ImageKeyView by lazy { findViewById(R.id.button_return) }
 
-    /** What the bottom row has either side of the space, as the field is: see [AddressKeys]. */
+    /** What the typing row has around the space, as the field is: see [AddressKeys]. */
     var address: AddressKeys = AddressKeys.NONE
         set(value) {
             field = value
@@ -110,18 +106,10 @@ class TextKeyboard(
 
     private fun showAddressKeys() {
         findViewById<View>(R.id.button_comma).isVisible = address == AddressKeys.NONE
-        findViewById<View>(R.id.button_period).isVisible = address == AddressKeys.NONE
         findViewById<View>(R.id.button_dot).isVisible = address != AddressKeys.NONE
         findViewById<View>(R.id.button_slash).isVisible = address == AddressKeys.URL
         findViewById<View>(R.id.button_at).isVisible = address == AddressKeys.EMAIL
         findViewById<View>(R.id.button_domain).isVisible = address != AddressKeys.NONE
-    }
-
-    private val showLangSwitchKey = AppPrefs.getInstance().keyboard.showLangSwitchKey
-
-    @Keep
-    private val showLangSwitchKeyListener = ManagedPreference.OnChangeListener<Boolean> { _, v ->
-        updateLangSwitchKey(v)
     }
 
     private val keepLettersUppercase by AppPrefs.getInstance().keyboard.keepLettersUppercase
@@ -146,8 +134,6 @@ class TextKeyboard(
 
     init {
         showAddressKeys()
-        updateLangSwitchKey(showLangSwitchKey.getValue())
-        showLangSwitchKey.registerOnChangeListener(showLangSwitchKeyListener)
         popupOverridesPref.registerOnChangeListener(popupOverridesListener)
         keyLabelOverridesPref.registerOnChangeListener(keyLabelOverridesListener)
     }
@@ -309,10 +295,6 @@ class TextKeyboard(
         )
     }
 
-    private fun updateLangSwitchKey(visible: Boolean) {
-        lang.visibility = if (visible) View.VISIBLE else View.GONE
-    }
-
     private fun updateAlphabetKeys() {
         val rawKeyLabels = keyLabelOverridesPref.getValue()
         if (rawKeyLabels != parsedKeyLabelText) {
@@ -336,8 +318,13 @@ class TextKeyboard(
         textKeys.forEach {
             if (it is AltTextKeyView) {
                 it.def as KeyDef.Appearance.AltText
-                val defaultLabel = transformPunctuation(swipeOverride(it.def) ?: it.def.altText)
-                it.altText.text = defaultLabel
+                if (it.id == R.id.button_comma) {
+                    it.mainText.text = transformPunctuation(it.def.displayText)
+                    it.altText.text = transformPunctuation(it.def.altText)
+                } else {
+                    val defaultLabel = transformPunctuation(swipeOverride(it.def) ?: it.def.altText)
+                    it.altText.text = defaultLabel
+                }
             } else {
                 it.def as KeyDef.Appearance.Text
                 // an address's keys commit as they are, and say so: . not 。

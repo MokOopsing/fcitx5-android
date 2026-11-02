@@ -9,6 +9,7 @@ import android.annotation.SuppressLint
 import android.content.res.Configuration
 import android.graphics.Point
 import android.os.Build
+import android.view.RoundedCorner
 import android.view.View
 import android.view.WindowInsets
 import android.view.inputmethod.EditorInfo
@@ -23,11 +24,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
+import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.core.CapabilityFlags
 import org.fcitx.fcitx5.android.core.FcitxEvent
 import org.fcitx.fcitx5.android.daemon.FcitxConnection
 import org.fcitx.fcitx5.android.daemon.launchOnReady
 import org.fcitx.fcitx5.android.data.prefs.AppPrefs
+import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceProvider
 import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.data.theme.ThemeManager
@@ -36,11 +39,16 @@ import org.fcitx.fcitx5.android.input.broadcast.InputBroadcaster
 import org.fcitx.fcitx5.android.input.broadcast.PreeditEmptyStateComponent
 import org.fcitx.fcitx5.android.input.broadcast.PunctuationComponent
 import org.fcitx.fcitx5.android.input.broadcast.ReturnKeyDrawableComponent
+import org.fcitx.fcitx5.android.input.bar.ui.ToolButton
 import org.fcitx.fcitx5.android.input.candidates.horizontal.HorizontalCandidateComponent
+import org.fcitx.fcitx5.android.input.clipboard.ClipboardWindow
 import org.fcitx.fcitx5.android.input.keyboard.CommonKeyActionListener
+import org.fcitx.fcitx5.android.input.keyboard.KeyAction
+import org.fcitx.fcitx5.android.input.keyboard.KeyActionListener
 import org.fcitx.fcitx5.android.input.keyboard.KeyboardHeightPercentBase.DisplayMetrics
 import org.fcitx.fcitx5.android.input.keyboard.KeyboardHeightPercentBase.RealSize
 import org.fcitx.fcitx5.android.input.keyboard.KeyboardWindow
+import org.fcitx.fcitx5.android.input.keyboard.TextKeyboard
 import org.fcitx.fcitx5.android.input.picker.emojiPicker
 import org.fcitx.fcitx5.android.input.picker.emoticonPicker
 import org.fcitx.fcitx5.android.input.picker.symbolPicker
@@ -72,6 +80,7 @@ import splitties.views.dsl.core.view
 import splitties.views.dsl.core.wrapContent
 import splitties.views.imageDrawable
 import timber.log.Timber
+import kotlin.math.max
 
 @SuppressLint("ViewConstructor")
 class InputView(
@@ -148,8 +157,78 @@ class InputView(
     }
 
     private val keyboardPrefs = AppPrefs.getInstance().keyboard
+    private val showLangSwitchKey = keyboardPrefs.showLangSwitchKey
 
     private val focusChangeResetKeyboard by keyboardPrefs.focusChangeResetKeyboard
+
+    private val languageButton by lazy {
+        ToolButton(context, R.drawable.ic_baseline_language_24, theme, iconSizeDp = 32).apply {
+            contentDescription = context.getString(R.string.a11y_key_switch_language)
+            visibility = if (showLangSwitchKey.getValue()) VISIBLE else GONE
+            setOnClickListener {
+                if (!windowManager.isShowing(ClipboardWindow::class.java)) {
+                    switchLanguage()
+                }
+            }
+            doubleTapEnabled = true
+            onDoubleTapListener = {
+                if (windowManager.isShowing(ClipboardWindow::class.java)) {
+                    switchLanguage()
+                }
+            }
+            setOnLongClickListener {
+                commonKeyActionListener.listener.onKeyAction(
+                    KeyAction.ShowInputMethodPickerAction,
+                    KeyActionListener.Source.Keyboard
+                )
+                true
+            }
+        }
+    }
+
+    private fun switchLanguage() {
+        if (!keyboardWindow.isMainKeyboardShown()) {
+            keyboardWindow.returnToMainKeyboard {
+                commonKeyActionListener.listener.onKeyAction(
+                    KeyAction.LangSwitchAction,
+                    KeyActionListener.Source.Keyboard
+                )
+            }
+        } else {
+            commonKeyActionListener.listener.onKeyAction(
+                KeyAction.LangSwitchAction,
+                KeyActionListener.Source.Keyboard
+            )
+        }
+    }
+
+    private val clipboardButton by lazy {
+        ToolButton(context, R.drawable.ic_clipboard, theme, iconSizeDp = 32).apply {
+            contentDescription = context.getString(R.string.clipboard)
+            setOnClickListener { keyboardWindow.toggleClipboard() }
+        }
+    }
+
+    private val globalBottomBar by lazy {
+        constraintLayout {
+            add(languageButton, lParams(dp(48), dp(48)) {
+                startOfParent()
+                centerVertically()
+            })
+            add(clipboardButton, lParams(dp(48), dp(48)) {
+                endOfParent()
+                centerVertically()
+            })
+        }
+    }
+
+    private var bottomLeftCornerRadius = 0
+    private var bottomRightCornerRadius = 0
+
+    @Keep
+    private val showLangSwitchKeyListener = ManagedPreference.OnChangeListener<Boolean> { _, visible ->
+        languageButton.visibility = if (visible) VISIBLE else GONE
+    }
 
     private val keyboardHeightPercent = keyboardPrefs.keyboardHeightPercent
     private val keyboardHeightPercentLandscape = keyboardPrefs.keyboardHeightPercentLandscape
@@ -266,10 +345,14 @@ class InputView(
             })
             add(windowManager.view, lParams {
                 below(kawaiiBar.view)
-                above(bottomPaddingSpace)
+                above(globalBottomBar)
                 /**
                  * set start and end constrain in [updateKeyboardSize]
                  */
+            })
+            add(globalBottomBar, lParams(matchParent, dp(48)) {
+                above(bottomPaddingSpace)
+                centerHorizontally()
             })
             add(bottomPaddingSpace, lParams {
                 startToEndOf(leftPaddingSpace)
@@ -294,12 +377,13 @@ class InputView(
         })
 
         keyboardPrefs.registerOnChangeListener(onKeyboardSizeChangeListener)
+        showLangSwitchKey.registerOnChangeListener(showLangSwitchKeyListener)
         advancedPrefs.registerOnChangeListener(onKeyboardSizeChangeListener)
     }
 
     private fun updateKeyboardSize() {
         windowManager.view.updateLayoutParams {
-            height = keyboardHeightPx
+            height = max(0, keyboardHeightPx - dp(48))
         }
         bottomPaddingSpace.updateLayoutParams {
             height = keyboardBottomPaddingPx
@@ -333,9 +417,30 @@ class InputView(
         }
         preedit.ui.root.setPadding(sidePadding, 0, sidePadding, 0)
         kawaiiBar.view.setPadding(sidePadding, 0, sidePadding, 0)
+        updateBottomBarPadding(sidePadding)
+    }
+
+    private fun updateBottomBarPadding(sidePadding: Int) {
+        val fallbackInset = dp(12)
+        val extraInset = dp(4)
+        val leftInset = max(fallbackInset, bottomLeftCornerRadius + extraInset)
+        val rightInset = max(fallbackInset, bottomRightCornerRadius + extraInset)
+        globalBottomBar.setPadding(
+            max(sidePadding, leftInset),
+            0,
+            max(sidePadding, rightInset),
+            0
+        )
     }
 
     override fun onApplyWindowInsets(insets: WindowInsets): WindowInsets {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            bottomLeftCornerRadius =
+                insets.getRoundedCorner(RoundedCorner.POSITION_BOTTOM_LEFT)?.radius ?: 0
+            bottomRightCornerRadius =
+                insets.getRoundedCorner(RoundedCorner.POSITION_BOTTOM_RIGHT)?.radius ?: 0
+        }
+        updateBottomBarPadding(keyboardSidePaddingPx)
         bottomPaddingSpace.updateLayoutParams<LayoutParams> {
             bottomMargin = getNavBarBottomInset(insets)
         }
