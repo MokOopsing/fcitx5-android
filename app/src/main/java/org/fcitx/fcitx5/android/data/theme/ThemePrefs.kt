@@ -68,8 +68,8 @@ class ThemePrefs(sharedPreferences: SharedPreferences) :
             defaults(keyboard.keyboardBottomPadding, keyboard.keyboardBottomPaddingLandscape),
             listOf(
                 Level(R.string.level_none, 0, 0),
-                Level(R.string.level_little, 20, 12),
-                Level(R.string.level_more, 40, 24),
+                Level(R.string.level_little, 10, 6),
+                Level(R.string.level_more, 20, 12),
             )
         )
         section(R.string.section_keys)

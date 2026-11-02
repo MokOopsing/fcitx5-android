@@ -163,7 +163,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             hidden { switch(R.string.reset_keyboard_on_focus_change, "reset_keyboard_on_focus_change", true) }
 
         val expandToolbarByDefault =
-            hidden { switch(R.string.expand_toolbar_by_default, "expand_toolbar_by_default", false) }
+            hidden { switch(R.string.expand_toolbar_by_default, "expand_toolbar_by_default", true) }
         val inlineSuggestions = hidden { switch(R.string.inline_suggestions, "inline_suggestions", true) }
         val toolbarNumRowOnPassword =
             hidden { switch(R.string.toolbar_num_row_on_password, "toolbar_num_row_on_password", true) }
