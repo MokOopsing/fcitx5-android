@@ -307,10 +307,12 @@ class TextKeyboard(
             val letter = it.def.displayText
                 .takeIf { str -> str.length == 1 && str[0].isLetter() }
                 ?.lowercase()
-            it.mainText.text = letter?.let(customLabels::get) ?: it.def.displayText.let { str ->
+            val customLabel = letter?.let(customLabels::get)
+            it.mainText.text = customLabel ?: it.def.displayText.let { str ->
                 if (str.length != 1 || !str[0].isLetter()) return@forEach
                 if (keepLettersUppercase) str.uppercase() else transformAlphabet(str)
             }
+            (it as? AltTextKeyView)?.setAltTextScale(customAltTextScale(customLabel))
         }
     }
 
@@ -348,6 +350,17 @@ class TextKeyboard(
         return PopupOverridesCache.user.current.swipeOf(letter, transformAlphabet(letter))
     }
 
+}
+
+internal fun customAltTextScale(label: String?): Float {
+    if (label == null) return 1f
+    var offset = 0
+    while (offset < label.length) {
+        val codePoint = label.codePointAt(offset)
+        if (Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.HAN) return 0.67f
+        offset += Character.charCount(codePoint)
+    }
+    return 1f
 }
 
 internal fun keyLabelForPreview(

@@ -65,4 +65,12 @@ class TextKeyboardTest {
         assertNull(keyLabelForPreview("a", null, "a"))
         assertNull(keyLabelForPreview(null, "日", "a"))
     }
+
+    @Test
+    fun hanCustomLabelsReduceTheAltTextSize() {
+        assertEquals(0.67f, customAltTextScale("倉"), 0f)
+        assertEquals(0.67f, customAltTextScale("𠀀"), 0f)
+        assertEquals(1f, customAltTextScale("a"), 0f)
+        assertEquals(1f, customAltTextScale(null), 0f)
+    }
 }

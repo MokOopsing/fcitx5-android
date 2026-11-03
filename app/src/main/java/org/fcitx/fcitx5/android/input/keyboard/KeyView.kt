@@ -291,11 +291,14 @@ open class TextKeyView(ctx: Context, theme: Theme, def: KeyDef.Appearance.Text) 
 @SuppressLint("ViewConstructor")
 class AltTextKeyView(ctx: Context, theme: Theme, def: KeyDef.Appearance.AltText) :
     TextKeyView(ctx, theme, def) {
+    companion object {
+        private const val ALT_TEXT_SIZE = 10.666667f
+    }
+
     val altText = view(::AutoScaleTextView) {
         isClickable = false
         isFocusable = false
-        // TODO hardcoded alt text size
-        setTextSize(TypedValue.COMPLEX_UNIT_DIP, 10.666667f)
+        setTextSize(TypedValue.COMPLEX_UNIT_DIP, ALT_TEXT_SIZE)
         setTypeface(typeface, Typeface.BOLD)
         text = def.altText
         textDirection = View.TEXT_DIRECTION_FIRST_STRONG_LTR
@@ -312,6 +315,10 @@ class AltTextKeyView(ctx: Context, theme: Theme, def: KeyDef.Appearance.AltText)
             add(altText, lParams(wrapContent, wrapContent))
         }
         applyLayout(resources.configuration.orientation)
+    }
+
+    fun setAltTextScale(scale: Float) {
+        altText.setTextSize(TypedValue.COMPLEX_UNIT_DIP, ALT_TEXT_SIZE * scale)
     }
 
     private fun applyTopRightAltTextPosition() {
