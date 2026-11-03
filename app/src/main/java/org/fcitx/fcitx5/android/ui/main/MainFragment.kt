@@ -37,6 +37,7 @@ import org.fcitx.fcitx5.android.utils.openUrl
 import org.fcitx.fcitx5.android.utils.setup
 import org.fcitx.fcitx5.android.utils.styledColor
 import org.fcitx.fcitx5.android.utils.toast
+import splitties.resources.drawable
 
 class MainFragment : PaddingPreferenceFragment() {
 
@@ -44,7 +45,8 @@ class MainFragment : PaddingPreferenceFragment() {
     private var inputMethodEntry: InputMethodEntry? = null
     private var inputMethodPreference: Preference? = null
     private var inputMethodIcon: Drawable? = null
-    private var inputMethodIconText = "⏳"
+    private var inputMethodPlaceholderIcon: Drawable? = null
+    private var inputMethodIconText = ""
 
     override fun onViewCreated(
         view: View, savedInstanceState: Bundle?
@@ -71,8 +73,12 @@ class MainFragment : PaddingPreferenceFragment() {
     }
 
     private fun updateInputMethodIcon(ime: InputMethodEntry) {
-        inputMethodIconText =
-            if (ime.uniqueName.isEmpty()) "⏳" else ime.displayName.take(1)
+        if (ime.uniqueName.isEmpty()) {
+            inputMethodPreference?.icon = inputMethodPlaceholderIcon
+            return
+        }
+        inputMethodIconText = ime.displayName.take(1)
+        inputMethodPreference?.icon = inputMethodIcon
         inputMethodIcon?.invalidateSelf()
     }
 
@@ -132,13 +138,17 @@ class MainFragment : PaddingPreferenceFragment() {
                             }
                         }
                     }
+                    inputMethodPlaceholderIcon =
+                        context.drawable(R.drawable.ic_baseline_hourglass_empty_24)!!.apply {
+                            setTint(context.styledColor(android.R.attr.colorControlNormal))
+                        }
                     val iconSize = (24 * resources.displayMetrics.density).toInt()
                     val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         color = context.styledColor(android.R.attr.colorControlNormal)
                         textAlign = Paint.Align.CENTER
                         textSize = 20 * resources.displayMetrics.scaledDensity
                     }
-                    icon = object : Drawable() {
+                    inputMethodIcon = object : Drawable() {
                         override fun draw(canvas: Canvas) {
                             val metrics = textPaint.fontMetrics
                             canvas.drawText(
@@ -163,8 +173,8 @@ class MainFragment : PaddingPreferenceFragment() {
                         override fun getIntrinsicWidth() = iconSize
                         override fun getIntrinsicHeight() = iconSize
                     }
+                    icon = inputMethodPlaceholderIcon
                     isIconSpaceReserved = true
-                    inputMethodIcon = icon
                 }.also(::addPreference)
             }
             addCategory(R.string.home_section_keyboard_look) {
