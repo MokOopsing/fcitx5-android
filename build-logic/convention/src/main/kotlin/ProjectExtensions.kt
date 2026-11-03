@@ -46,10 +46,18 @@ val Project.buildToolsVersion
 
 val Project.buildVersionName
     get() = ep("BUILD_VERSION_NAME", "buildVersionName") {
-        // the app's releases are tagged v<version>; the data releases' tags (engine-data-*, words-* ...)
-        // and upstream fcitx5-android's bare ones (0.1.3), which a clone that fetched it has, are not
-        val described = runCmd("git describe --tags --long --match v[0-9]*", "")
-        appVersionName(described, Versions.baseVersionName)
+        buildVersionBuildNumber?.let(Versions::versionNameForBuildNumber) ?: run {
+            // the app's releases are tagged v<version>; the data releases' tags (engine-data-*, words-* ...)
+            // and upstream fcitx5-android's bare ones (0.1.3), which a clone that fetched it has, are not
+            val described = runCmd("git describe --tags --long --match v[0-9]*", "")
+            appVersionName(described, Versions.baseVersionName)
+        }
+    }
+
+val Project.buildVersionBuildNumber: Int?
+    get() = epn("BUILD_VERSION_BUILD_NUMBER", "buildVersionBuildNumber")?.let {
+        it.toIntOrNull()?.takeIf { number -> number > 0 }
+            ?: error("BUILD_VERSION_BUILD_NUMBER must be a positive integer")
     }
 
 /**

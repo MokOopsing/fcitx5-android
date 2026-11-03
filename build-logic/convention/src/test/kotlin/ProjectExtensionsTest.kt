@@ -83,6 +83,20 @@ class ProjectExtensionsTest {
     }
 
     @Test
+    fun githubBuildNumbersIncrementPatchVersionAndVersionCode() {
+        assertEquals("0.1.1", Versions.versionNameForBuildNumber(1))
+        assertEquals("0.2.0", Versions.versionNameForBuildNumber(100))
+        assertEquals(
+            Versions.calculateVersionCode() + 1_000,
+            Versions.calculateVersionCode(buildNumber = 100),
+        )
+        assertEquals(
+            Versions.calculateVersionCode("arm64-v8a") + 1_000,
+            Versions.calculateVersionCode("arm64-v8a", 100),
+        )
+    }
+
+    @Test
     fun aWrappedKeyIsDecodedIntoAFileOnlyItsOwnerReads() {
         assumeUnset("SIGN_KEY_FILE", "SIGN_KEY_BASE64")
         val key = ByteArray(200) { it.toByte() }

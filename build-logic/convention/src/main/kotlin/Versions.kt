@@ -24,9 +24,24 @@ object Versions {
     val supportedABIs = abiIds.keys
     const val fallbackABI = "arm64-v8a"
 
-    fun calculateVersionCode(abi: String = fallbackABI): Int {
+    fun calculateVersionCode(abi: String = fallbackABI, buildNumber: Int? = null): Int {
         val abiId = abiIds[abi] ?: 0
-        return baseVersionCode * 10 + abiId
+        val versionCode = buildNumber?.let { versionCodeOf(versionNameForBuildNumber(it)) } ?: baseVersionCode
+        return versionCode * 10 + abiId
+    }
+
+    /**
+     * Bump the patch version once per GitHub Actions run, carrying into minor and major as needed.
+     */
+    fun versionNameForBuildNumber(buildNumber: Int): String {
+        require(buildNumber > 0) { "build number $buildNumber: must be positive" }
+        val (major, minor, patch) = requireNotNull(
+            Regex("(\\d+)\\.(\\d{1,2})\\.(\\d{1,2})").matchEntire(baseVersionName)
+        ).destructured.toList().map(String::toInt)
+        val nextPatch = patch.toLong() + buildNumber
+        val nextMinor = minor.toLong() + nextPatch / 100
+        val nextMajor = major.toLong() + nextMinor / 100
+        return "$nextMajor.${nextMinor % 100}.${nextPatch % 100}"
     }
 
     /**

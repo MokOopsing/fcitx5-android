@@ -45,6 +45,9 @@ language corpora or speech models.
 ## Versions and releases
 
 - Version name comes from annotated `v*` tags, falling back to `Versions.baseVersionName`.
+- The manual GitHub Actions build uses `GITHUB_RUN_NUMBER` (as `BUILD_VERSION_BUILD_NUMBER`) to increment the patch component from
+  `Versions.baseVersionName`; the Android `versionCode` advances with it. Local builds keep the
+  existing tag-based version name and base version code.
 - `versionCode` includes an ABI suffix; raise `Versions.baseVersionCode` for a release.
 - Release APKs are built for the supported release ABI, signed outside the repository, installed
   over the previous version, and uploaded with `SHA256SUMS.txt`.
