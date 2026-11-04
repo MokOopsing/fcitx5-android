@@ -41,7 +41,6 @@ import org.fcitx.fcitx5.android.input.broadcast.PunctuationComponent
 import org.fcitx.fcitx5.android.input.broadcast.ReturnKeyDrawableComponent
 import org.fcitx.fcitx5.android.input.bar.ui.ToolButton
 import org.fcitx.fcitx5.android.input.candidates.horizontal.HorizontalCandidateComponent
-import org.fcitx.fcitx5.android.input.clipboard.ClipboardWindow
 import org.fcitx.fcitx5.android.input.keyboard.CommonKeyActionListener
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyActionListener
@@ -166,14 +165,10 @@ class InputView(
             contentDescription = context.getString(R.string.a11y_key_switch_language)
             visibility = if (showLangSwitchKey.getValue()) VISIBLE else GONE
             setOnClickListener {
-                if (!windowManager.isShowing(ClipboardWindow::class.java)) {
+                if (keyboardWindow.isMainKeyboardShown()) {
                     switchLanguage()
-                }
-            }
-            doubleTapEnabled = true
-            onDoubleTapListener = {
-                if (windowManager.isShowing(ClipboardWindow::class.java)) {
-                    switchLanguage()
+                } else {
+                    keyboardWindow.returnToMainKeyboard {}
                 }
             }
             setOnLongClickListener {
@@ -187,19 +182,10 @@ class InputView(
     }
 
     private fun switchLanguage() {
-        if (!keyboardWindow.isMainKeyboardShown()) {
-            keyboardWindow.returnToMainKeyboard {
-                commonKeyActionListener.listener.onKeyAction(
-                    KeyAction.LangSwitchAction,
-                    KeyActionListener.Source.Keyboard
-                )
-            }
-        } else {
-            commonKeyActionListener.listener.onKeyAction(
-                KeyAction.LangSwitchAction,
-                KeyActionListener.Source.Keyboard
-            )
-        }
+        commonKeyActionListener.listener.onKeyAction(
+            KeyAction.LangSwitchAction,
+            KeyActionListener.Source.Keyboard
+        )
     }
 
     private val clipboardButton by lazy {
