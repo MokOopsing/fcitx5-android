@@ -115,6 +115,9 @@ class CommonKeyActionListener :
                         }
                     }
                 }
+                is KeyAction.RimeSchemaAction -> {
+                    service.activateRimeSchema(action.actionId)
+                }
                 is ShowInputMethodPickerAction -> showInputMethodPicker()
                 is BeginSelectionSwipeAction -> backspaceSwipe.onTouchDown()
                 is MoveSelectionAction -> {

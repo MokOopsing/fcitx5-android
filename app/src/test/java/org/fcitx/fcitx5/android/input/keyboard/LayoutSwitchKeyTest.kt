@@ -38,4 +38,5 @@ class LayoutSwitchKeyTest {
         assertEquals(KeyAction.LayoutSwitchAction(TextKeyboard.Name), key.tapped())
         assertNull(key.held())
     }
+
 }

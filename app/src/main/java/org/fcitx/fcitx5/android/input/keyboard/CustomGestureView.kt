@@ -69,6 +69,9 @@ open class CustomGestureView(ctx: Context) : FrameLayout(ctx) {
     @Volatile
     var longPressFeedbackEnabled = true
 
+    // Keep popup swipe events while preventing its long press from also becoming a key click.
+    var suppressClickAfterUnconsumedLongPress = false
+
     @Volatile
     private var repeatStarted = false
     var repeatEnabled
@@ -178,6 +181,9 @@ open class CustomGestureView(ctx: Context) : FrameLayout(ctx) {
                             InputFeedbacks.hapticFeedback(this@CustomGestureView, true)
                         }
                         longPressTriggered = performLongClick()
+                        if (suppressClickAfterUnconsumedLongPress && !longPressTriggered) {
+                            recognizer.markGestureConsumed()
+                        }
                     }
                 }
                 if (repeatEnabled) {

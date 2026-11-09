@@ -50,4 +50,6 @@ sealed class KeyAction {
 
     /** The symbol panel's lock: it stays after a symbol is picked, for a run of them. */
     data object PanelLockAction : KeyAction()
+
+    data class RimeSchemaAction(val actionId: Int) : KeyAction()
 }

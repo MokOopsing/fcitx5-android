@@ -8,17 +8,22 @@ import android.graphics.Rect
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.fcitx.fcitx5.android.data.theme.ThemeManager
 import org.fcitx.fcitx5.android.input.broadcast.PunctuationComponent
 import org.fcitx.fcitx5.android.input.dependency.context
+import org.fcitx.fcitx5.android.input.dependency.fcitx
 import org.fcitx.fcitx5.android.input.dependency.imeScope
+import org.fcitx.fcitx5.android.input.dependency.inputMethodService
 import org.fcitx.fcitx5.android.input.dependency.theme
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyDef
+import org.fcitx.fcitx5.android.input.keyboard.activateRimeSchema
 import org.fcitx.fcitx5.android.input.keyboard.longPressOf
+import org.fcitx.fcitx5.android.input.keyboard.rimeSchemaChoices
 import org.mechdancer.dependency.Dependent
 import org.mechdancer.dependency.UniqueComponent
 import org.mechdancer.dependency.manager.ManagedHandler
@@ -37,6 +42,8 @@ class PopupComponent :
 
     private val imeScope by manager.imeScope()
     private val context by manager.context()
+    private val fcitx by manager.fcitx()
+    private val service by manager.inputMethodService()
     private val theme by manager.theme()
     private val punctuation: PunctuationComponent by manager.must()
 
@@ -45,6 +52,15 @@ class PopupComponent :
     private val freeEntryUi = LinkedList<PopupEntryUi>()
 
     private val showingContainerUi = HashMap<Int, PopupContainerUi>()
+    private val schemaMenuShields = HashMap<Int, View>()
+    private class PendingSchemaMenu(val bounds: Rect) {
+        var focus: Pair<Float, Float>? = null
+        var released = false
+        var job: Job? = null
+    }
+
+    private val pendingSchemaMenus = HashMap<Int, PendingSchemaMenu>()
+    private val schemaMenuJobs = HashMap<Int, Job>()
 
     private val keyBottomMargin by lazy {
         context.dp(ThemeManager.prefs.keyVerticalMargin.getValue())
@@ -208,9 +224,80 @@ class PopupComponent :
         showPopupContainer(viewId, menuUi)
     }
 
+    private fun showRimeSchemaMenu(viewId: Int, bounds: Rect) {
+        dismissPopup(viewId)
+        val pending = PendingSchemaMenu(Rect(bounds))
+        pendingSchemaMenus[viewId] = pending
+        // This full-screen clickable sibling consumes the outside touch stream before it can reach
+        // the keyboard underneath; removing it on click does not re-dispatch that touch.
+        val shield = View(context).apply {
+            isClickable = true
+            setOnClickListener {
+                dismissPopup(viewId)
+            }
+        }
+        root.addView(
+            shield,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        )
+        schemaMenuShields[viewId] = shield
+        val job = imeScope.launch(start = CoroutineStart.LAZY) {
+            try {
+                val actions = fcitx.runOnReady {
+                    statusArea()
+                        .firstOrNull { it.name == "fcitx-rime-im" }
+                        ?.menu
+                        ?.rimeSchemaChoices()
+                        .orEmpty()
+                }
+                if (pendingSchemaMenus[viewId] !== pending || !root.isAttachedToWindow || actions.isEmpty()) {
+                    return@launch
+                }
+                val selectedIndex = actions.indexOfFirst { it.isChecked }
+                val ui = RimeSchemaPopupUi(
+                    context,
+                    theme,
+                    rootBounds,
+                    pending.bounds,
+                    actions,
+                    selectedIndex
+                ) { action ->
+                    service.activateRimeSchema(action.id)
+                    dismissPopup(viewId)
+                }
+                showPopupContainer(viewId, ui)
+                pending.focus?.let { (x, y) -> ui.changeFocus(x, y) }
+                if (pending.released) {
+                    (ui.onTrigger() as? KeyAction.RimeSchemaAction)?.let {
+                        service.activateRimeSchema(it.actionId)
+                        dismissPopup(viewId)
+                    }
+                }
+            } finally {
+                if (pendingSchemaMenus[viewId] === pending) {
+                    pendingSchemaMenus.remove(viewId)
+                    if (showingContainerUi[viewId] == null) {
+                        schemaMenuShields.remove(viewId)?.let(root::removeView)
+                    }
+                }
+                if (schemaMenuJobs[viewId] === pending.job) schemaMenuJobs.remove(viewId)
+            }
+        }
+        pending.job = job
+        schemaMenuJobs[viewId] = job
+        job.start()
+    }
+
     private fun showPopupContainer(viewId: Int, ui: PopupContainerUi) {
         root.apply {
-            add(ui.root, lParams {
+            val params = ui.root.layoutParams
+            add(ui.root, lParams(
+                params?.width ?: ViewGroup.LayoutParams.WRAP_CONTENT,
+                params?.height ?: ViewGroup.LayoutParams.WRAP_CONTENT
+            ) {
                 leftMargin = ui.triggerBounds.left + ui.offsetX - rootBounds.left
                 topMargin = ui.triggerBounds.top + ui.offsetY - rootBounds.top
             })
@@ -219,14 +306,21 @@ class PopupComponent :
     }
 
     private fun changeFocus(viewId: Int, x: Float, y: Float): Boolean {
-        return showingContainerUi[viewId]?.changeFocus(x, y) ?: false
+        val container = showingContainerUi[viewId]
+        if (container != null) return container.changeFocus(x, y)
+        pendingSchemaMenus[viewId]?.focus = x to y
+        return false
     }
 
     private fun triggerFocused(viewId: Int): KeyAction? {
-        return showingContainerUi[viewId]?.onTrigger()
+        showingContainerUi[viewId]?.let { return it.onTrigger() }
+        pendingSchemaMenus[viewId]?.released = true
+        return null
     }
 
     private fun dismissPopup(viewId: Int) {
+        pendingSchemaMenus.remove(viewId)
+        schemaMenuJobs.remove(viewId)?.cancel()
         dismissPopupContainer(viewId)
         showingEntryUi[viewId]?.also {
             val timeLeft = it.lastShowTime + hideThreshold - System.currentTimeMillis()
@@ -243,6 +337,7 @@ class PopupComponent :
     }
 
     private fun dismissPopupContainer(viewId: Int) {
+        schemaMenuShields.remove(viewId)?.let(root::removeView)
         showingContainerUi[viewId]?.also {
             showingContainerUi.remove(viewId)
             root.removeView(it.root)
@@ -256,6 +351,9 @@ class PopupComponent :
     }
 
     fun dismissAll() {
+        schemaMenuJobs.values.forEach { it.cancel() }
+        schemaMenuJobs.clear()
+        pendingSchemaMenus.clear()
         // avoid modifying collection while iterating
         dismissJobs.forEach { (_, job) ->
             job.cancel()
@@ -266,6 +364,8 @@ class PopupComponent :
             root.removeView(container.root)
         }
         showingContainerUi.clear()
+        schemaMenuShields.values.forEach(root::removeView)
+        schemaMenuShields.clear()
         // too too
         showingEntryUi.forEach { (_, entry) ->
             root.removeView(entry.root)
@@ -283,6 +383,7 @@ class PopupComponent :
                 is PopupAction.PreviewUpdateAction -> updatePopup(viewId, content)
                 is PopupAction.ShowKeyboardAction -> showKeyboard(viewId, keyboard, bounds)
                 is PopupAction.ShowMenuAction -> showMenu(viewId, menu, bounds)
+                is PopupAction.ShowRimeSchemaMenuAction -> showRimeSchemaMenu(viewId, bounds)
                 is PopupAction.TriggerAction -> outAction = triggerFocused(viewId)
             }
         }

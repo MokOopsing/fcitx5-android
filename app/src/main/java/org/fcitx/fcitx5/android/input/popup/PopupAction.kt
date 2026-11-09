@@ -39,6 +39,11 @@ sealed class PopupAction {
         val bounds: Rect
     ) : PopupAction()
 
+    data class ShowRimeSchemaMenuAction(
+        override val viewId: Int,
+        val bounds: Rect
+    ) : PopupAction()
+
     data class ChangeFocusAction(
         override val viewId: Int,
         val x: Float,

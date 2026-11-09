@@ -8,6 +8,7 @@ package org.fcitx.fcitx5.android.input
 import android.annotation.SuppressLint
 import android.content.res.Configuration
 import android.graphics.Point
+import android.graphics.Rect
 import android.os.Build
 import android.view.RoundedCorner
 import android.view.View
@@ -35,13 +36,15 @@ import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceProvider
 import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.data.theme.ThemeManager
 import org.fcitx.fcitx5.android.input.bar.KawaiiBarComponent
+import org.fcitx.fcitx5.android.input.bar.ui.ToolButton
 import org.fcitx.fcitx5.android.input.broadcast.InputBroadcaster
 import org.fcitx.fcitx5.android.input.broadcast.PreeditEmptyStateComponent
 import org.fcitx.fcitx5.android.input.broadcast.PunctuationComponent
 import org.fcitx.fcitx5.android.input.broadcast.ReturnKeyDrawableComponent
-import org.fcitx.fcitx5.android.input.bar.ui.ToolButton
 import org.fcitx.fcitx5.android.input.candidates.horizontal.HorizontalCandidateComponent
 import org.fcitx.fcitx5.android.input.keyboard.CommonKeyActionListener
+import org.fcitx.fcitx5.android.input.keyboard.CustomGestureView
+import org.fcitx.fcitx5.android.input.keyboard.CustomGestureView.GestureType
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction
 import org.fcitx.fcitx5.android.input.keyboard.KeyActionListener
 import org.fcitx.fcitx5.android.input.keyboard.KeyboardHeightPercentBase.DisplayMetrics
@@ -51,6 +54,7 @@ import org.fcitx.fcitx5.android.input.keyboard.TextKeyboard
 import org.fcitx.fcitx5.android.input.picker.emojiPicker
 import org.fcitx.fcitx5.android.input.picker.emoticonPicker
 import org.fcitx.fcitx5.android.input.picker.symbolPicker
+import org.fcitx.fcitx5.android.input.popup.PopupAction
 import org.fcitx.fcitx5.android.input.popup.PopupComponent
 import org.fcitx.fcitx5.android.input.preedit.PreeditComponent
 import org.fcitx.fcitx5.android.input.wm.InputWindowManager
@@ -160,10 +164,20 @@ class InputView(
 
     private val focusChangeResetKeyboard by keyboardPrefs.focusChangeResetKeyboard
 
+    private fun View.boundsInWindow(): Rect {
+        val location = IntArray(2)
+        getLocationInWindow(location)
+        return Rect(location[0], location[1], location[0] + width, location[1] + height)
+    }
+
     private val languageButton by lazy {
         ToolButton(context, R.drawable.ic_baseline_language_24, theme, iconSizeDp = 32).apply {
+            id = R.id.button_lang
             contentDescription = context.getString(R.string.a11y_key_switch_language)
             visibility = if (showLangSwitchKey.getValue()) VISIBLE else GONE
+            longPressEnabled = true
+            swipeEnabled = true
+            suppressClickAfterUnconsumedLongPress = true
             setOnClickListener {
                 if (keyboardWindow.isMainKeyboardShown()) {
                     switchLanguage()
@@ -171,12 +185,45 @@ class InputView(
                     keyboardWindow.returnToMainKeyboard {}
                 }
             }
-            setOnLongClickListener {
-                commonKeyActionListener.listener.onKeyAction(
-                    KeyAction.ShowInputMethodPickerAction,
-                    KeyActionListener.Source.Keyboard
+            var schemaMenuLongPress = false
+            onGestureListener = CustomGestureView.OnGestureListener { view, event ->
+                when (event.type) {
+                    GestureType.Move -> {
+                        if (!schemaMenuLongPress) return@OnGestureListener false
+                        val action = PopupAction.ChangeFocusAction(view.id, event.x, event.y)
+                        popup.listener.onPopupAction(action)
+                        action.outResult
+                    }
+                    GestureType.Up -> {
+                        if (!schemaMenuLongPress) return@OnGestureListener false
+                        schemaMenuLongPress = false
+                        if (event.cancelled) {
+                            popup.listener.onPopupAction(PopupAction.DismissAction(view.id))
+                        } else {
+                            val action = PopupAction.TriggerAction(view.id)
+                            popup.listener.onPopupAction(action)
+                            action.outAction?.let {
+                                commonKeyActionListener.listener.onKeyAction(
+                                    it,
+                                    KeyActionListener.Source.Popup
+                                )
+                                popup.listener.onPopupAction(PopupAction.DismissAction(view.id))
+                            }
+                        }
+                        true
+                    }
+                    GestureType.Down -> {
+                        schemaMenuLongPress = false
+                        false
+                    }
+                }
+            }
+            setOnLongClickListener { view ->
+                schemaMenuLongPress = true
+                popup.listener.onPopupAction(
+                    PopupAction.ShowRimeSchemaMenuAction(view.id, view.boundsInWindow())
                 )
-                true
+                false
             }
         }
     }
