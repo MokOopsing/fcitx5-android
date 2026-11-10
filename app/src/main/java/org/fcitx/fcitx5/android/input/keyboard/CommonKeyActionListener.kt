@@ -117,6 +117,8 @@ class CommonKeyActionListener :
                 }
                 is KeyAction.RimeSchemaAction -> {
                     service.activateRimeSchema(action.actionId)
+                    (windowManager.getEssentialWindow(KeyboardWindow) as KeyboardWindow)
+                        .returnToMainKeyboard {}
                 }
                 is ShowInputMethodPickerAction -> showInputMethodPicker()
                 is BeginSelectionSwipeAction -> backspaceSwipe.onTouchDown()
