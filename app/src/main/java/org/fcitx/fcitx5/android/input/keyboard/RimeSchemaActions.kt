@@ -7,7 +7,7 @@ package org.fcitx.fcitx5.android.input.keyboard
 import org.fcitx.fcitx5.android.core.Action
 import org.fcitx.fcitx5.android.input.FcitxInputMethodService
 
-internal fun Array<Action>.rimeSchemaChoices(): List<Action> {
+internal fun Array<Action>.rimeSchemaChoices(currentSchemaName: String?): List<Action> {
     val excludedNames = setOf(
         "fcitx-rime-separator",
         "fcitx-rime-next-schema",
@@ -16,8 +16,10 @@ internal fun Array<Action>.rimeSchemaChoices(): List<Action> {
         "fcitx_rime_latin"
     )
     val choices = drop(1).filterNot { it.isSeparator || it.name in excludedNames }
-    val current = choices.firstOrNull { it.isChecked } ?: return choices
-    return listOf(current) + choices.filterNot { it.isChecked }
+    val matches = choices.withIndex().filter { it.value.shortText == currentSchemaName }
+    if (matches.size != 1) return choices
+    val currentIndex = matches.single().index
+    return listOf(choices[currentIndex]) + choices.filterIndexed { index, _ -> index != currentIndex }
 }
 
 internal fun FcitxInputMethodService.activateRimeSchema(actionId: Int) {

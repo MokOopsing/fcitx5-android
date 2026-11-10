@@ -249,21 +249,21 @@ class PopupComponent :
                 val actions = fcitx.runOnReady {
                     statusArea()
                         .firstOrNull { it.name == "fcitx-rime-im" }
-                        ?.menu
-                        ?.rimeSchemaChoices()
+                        ?.let { rimeAction ->
+                            rimeAction.menu?.rimeSchemaChoices(rimeAction.longText)
+                        }
                         .orEmpty()
                 }
                 if (pendingSchemaMenus[viewId] !== pending || !root.isAttachedToWindow || actions.isEmpty()) {
                     return@launch
                 }
-                val selectedIndex = actions.indexOfFirst { it.isChecked }
                 val ui = RimeSchemaPopupUi(
                     context,
                     theme,
                     rootBounds,
                     pending.bounds,
                     actions,
-                    selectedIndex
+                    selectedIndex = 0
                 ) { action ->
                     service.activateRimeSchema(action.id)
                     dismissPopup(viewId)

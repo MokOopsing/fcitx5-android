@@ -14,37 +14,48 @@ class RimeSchemaActionsTest {
     fun choicesExcludeFirstActionSeparatorsAndRimeManagementActions() {
         val choices = arrayOf(
             action("unknown-ascii-toggle"),
-            action("luna_pinyin", id = 1),
+            action("luna_pinyin", id = 1, shortText = "Luna"),
             action("fcitx-rime-separator"),
             action("another-separator", isSeparator = true),
             action("fcitx-rime-next-schema"),
             action("fcitx-rime-deploy"),
             action("fcitx-rime-sync"),
-            action("terra_pinyin", id = 2)
-        ).rimeSchemaChoices()
+            action("terra_pinyin", id = 2, shortText = "Terra")
+        ).rimeSchemaChoices(currentSchemaName = null)
 
         assertEquals(listOf("luna_pinyin", "terra_pinyin"), choices.map { it.name })
     }
 
     @Test
-    fun currentChoiceIsMovedToFirstAndOtherChoicesKeepTheirOrder() {
+    fun uniquelyMatchingDisplayNameMovesCurrentChoiceToFirstAndKeepsOtherOrder() {
         val choices = arrayOf(
             action("ascii", id = 1),
-            action("schema-a", id = 2),
-            action("schema-current", id = 3, checked = true),
-            action("schema-b", id = 4)
-        ).rimeSchemaChoices()
+            action("schema-a", id = 2, shortText = "Schema A"),
+            action("schema-current", id = 3, shortText = "Current Schema"),
+            action("schema-b", id = 4, shortText = "Schema B")
+        ).rimeSchemaChoices(currentSchemaName = "Current Schema")
 
         assertEquals(listOf("schema-current", "schema-a", "schema-b"), choices.map { it.name })
     }
 
     @Test
-    fun keepsRemainingOrderIfNoCurrentChoiceIsChecked() {
+    fun keepsRemainingOrderIfCurrentSchemaNameDoesNotMatch() {
         val choices = arrayOf(
             action("ascii", id = 1),
-            action("schema-a", id = 2),
-            action("schema-b", id = 3)
-        ).rimeSchemaChoices()
+            action("schema-a", id = 2, shortText = "Schema A"),
+            action("schema-b", id = 3, shortText = "Schema B")
+        ).rimeSchemaChoices(currentSchemaName = "Unknown")
+
+        assertEquals(listOf("schema-a", "schema-b"), choices.map { it.name })
+    }
+
+    @Test
+    fun keepsRemainingOrderIfCurrentSchemaNameIsNotUnique() {
+        val choices = arrayOf(
+            action("ascii", id = 1),
+            action("schema-a", id = 2, shortText = "Same"),
+            action("schema-b", id = 3, shortText = "Same")
+        ).rimeSchemaChoices(currentSchemaName = "Same")
 
         assertEquals(listOf("schema-a", "schema-b"), choices.map { it.name })
     }
@@ -53,16 +64,16 @@ class RimeSchemaActionsTest {
         name: String,
         id: Int = 0,
         isSeparator: Boolean = false,
-        checked: Boolean = false
+        shortText: String = name
     ) = Action(
         id = id,
         isSeparator = isSeparator,
-        isCheckable = checked,
-        isChecked = checked,
+        isCheckable = false,
+        isChecked = false,
         name = name,
         icon = "",
-        shortText = name,
-        longText = name,
+        shortText = shortText,
+        longText = "",
         menu = null
     )
 }
