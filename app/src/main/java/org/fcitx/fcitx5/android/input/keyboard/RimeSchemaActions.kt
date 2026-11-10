@@ -15,7 +15,9 @@ internal fun Array<Action>.rimeSchemaChoices(): List<Action> {
         "fcitx-rime-sync",
         "fcitx_rime_latin"
     )
-    return filterNot { it.isSeparator || it.name in excludedNames }
+    val choices = drop(1).filterNot { it.isSeparator || it.name in excludedNames }
+    val current = choices.firstOrNull { it.isChecked } ?: return choices
+    return listOf(current) + choices.filterNot { it.isChecked }
 }
 
 internal fun FcitxInputMethodService.activateRimeSchema(actionId: Int) {
