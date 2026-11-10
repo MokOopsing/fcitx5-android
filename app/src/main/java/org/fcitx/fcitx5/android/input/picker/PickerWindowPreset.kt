@@ -25,7 +25,7 @@ fun emojiPicker(): PickerWindow = PickerWindow(
     key = PickerWindow.Key.Emoji,
     data = PickerData.Emoji,
     density = PickerGridView.Density.Medium,
-    switchKey = TextPickerSwitchKey(":-)", PickerWindow.Key.Emoticon),
+    switchKey = TextPickerSwitchKey(":-)", PickerWindow.Key.Emoticon, percentWidth = 0.15f),
     popupPreview = false,
     followKeyBorder = false,
     policy = EmojiPickerPolicy()
@@ -37,6 +37,7 @@ fun emoticonPicker(): PickerWindow = PickerWindow(
     density = PickerGridView.Density.Low,
     switchKey = ImagePickerSwitchKey(
         R.drawable.ic_baseline_tag_faces_24, PickerWindow.Key.Emoji,
+        percentWidth = 0.15f,
         contentDescription = R.string.a11y_key_emoji
     ),
     popupPreview = false,

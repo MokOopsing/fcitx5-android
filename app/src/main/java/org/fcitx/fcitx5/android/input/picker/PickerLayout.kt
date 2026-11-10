@@ -33,18 +33,6 @@ class PickerLayout(context: Context, theme: Theme, switchKey: KeyDef, density: P
 
     class Keyboard(context: Context, theme: Theme, keys: List<KeyDef>) : BaseKeyboard(context, theme, listOf(keys)) {
 
-        class PunctuationKey(val symbol: String) : KeyDef(
-            Appearance.Text(
-                displayText = symbol,
-                textSize = 23f,
-                percentWidth = 0.1f,
-                variant = Appearance.Variant.Alternative
-            ),
-            setOf(
-                Behavior.Press(KeyAction.FcitxKeyAction(symbol))
-            )
-        )
-
         val `return`: ImageKeyView by lazy { findViewById(R.id.button_return) }
 
         /** the symbol panel's lock, none in the emoji's */
@@ -102,11 +90,9 @@ class PickerLayout(context: Context, theme: Theme, switchKey: KeyDef, density: P
         private const val SIDE_WIDTH = 0.18f
 
         private fun listKeys(switchKey: KeyDef) = listOf(
-            LayoutSwitchKey("ABC", TextKeyboard.Name),
-            Keyboard.PunctuationKey(","),
             switchKey,
+            PunctuationKey(),
             SpaceKey(),
-            Keyboard.PunctuationKey("."),
             // here, not in the list: it stays put while the list scrolls
             BackspaceKey(),
             ReturnKey()
