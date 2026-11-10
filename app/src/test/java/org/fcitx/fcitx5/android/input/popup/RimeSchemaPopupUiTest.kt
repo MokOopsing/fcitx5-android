@@ -7,9 +7,9 @@ package org.fcitx.fcitx5.android.input.popup
 import android.graphics.Rect
 import android.view.ViewGroup
 import android.widget.TextView
-import org.fcitx.fcitx5.android.core.Action
 import org.fcitx.fcitx5.android.data.theme.ThemePreset
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction
+import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -23,15 +23,20 @@ import kotlin.math.ceil
 @RunWith(RobolectricTestRunner::class)
 class RimeSchemaPopupUiTest {
 
-    private val actions = listOf(action(10, "luna_pinyin"), action(11, "terra_pinyin", checked = true))
+    private val emojiPickerAction = KeyAction.PickerSwitchAction(PickerWindow.Key.Emoji)
+    private val items = listOf(
+        item(10, "luna_pinyin"),
+        item(11, "terra_pinyin"),
+        RimeSchemaPopupItem("Emoji", emojiPickerAction)
+    )
 
-    private fun popup(onSelect: (Action) -> Unit = {}): RimeSchemaPopupUi =
+    private fun popup(onSelect: (KeyAction) -> Unit = {}): RimeSchemaPopupUi =
         RimeSchemaPopupUi(
             ctx = RuntimeEnvironment.getApplication(),
             theme = ThemePreset.MaterialLight,
             outerBounds = Rect(0, 0, 500, 700),
             triggerBounds = Rect(230, 640, 270, 690),
-            actions = actions,
+            items = items,
             selectedIndex = 1,
             onSelect = onSelect
         )
@@ -52,12 +57,26 @@ class RimeSchemaPopupUiTest {
 
     @Test
     fun tappingAListItemSelectsIt() {
-        var selected: Action? = null
+        var selected: KeyAction? = null
         val ui = popup { selected = it }
         val rows = ui.root.getChildAt(0) as ViewGroup
 
         assertTrue((rows.getChildAt(0) as TextView).performClick())
-        assertEquals(10, selected?.id)
+        assertEquals(KeyAction.RimeSchemaAction(10), selected)
+    }
+
+    @Test
+    fun emojiPickerIsLastAndCanBeClickedOrSwipeSelected() {
+        var clicked: KeyAction? = null
+        val ui = popup { clicked = it }
+        val rows = ui.root.getChildAt(0) as ViewGroup
+
+        assertEquals("Emoji", (rows.getChildAt(rows.childCount - 1) as TextView).text)
+        assertTrue((rows.getChildAt(rows.childCount - 1) as TextView).performClick())
+        assertEquals(emojiPickerAction, clicked)
+
+        ui.onChangeFocus(10f, 2 * RuntimeEnvironment.getApplication().dp(48) + 10f)
+        assertEquals(emojiPickerAction, ui.onTrigger())
     }
 
     @Test
@@ -87,7 +106,7 @@ class RimeSchemaPopupUiTest {
     @Test
     fun adaptiveWidthKeepsSpaceAtBothScreenEdges() {
         val context = RuntimeEnvironment.getApplication()
-        val longActions = listOf(action(12, "a".repeat(100)))
+        val longItems = listOf(item(12, "a".repeat(100)))
         listOf(
             Rect(0, 640, 40, 690),
             Rect(460, 640, 500, 690)
@@ -97,7 +116,7 @@ class RimeSchemaPopupUiTest {
                 ThemePreset.MaterialLight,
                 Rect(0, 0, 500, 700),
                 trigger,
-                longActions,
+                longItems,
                 0
             ) {}
             val left = ui.triggerBounds.left + ui.offsetX
@@ -108,15 +127,6 @@ class RimeSchemaPopupUiTest {
         }
     }
 
-    private fun action(id: Int, name: String, checked: Boolean = false) = Action(
-        id = id,
-        isSeparator = false,
-        isCheckable = true,
-        isChecked = checked,
-        name = name,
-        icon = "",
-        shortText = name,
-        longText = name,
-        menu = null
-    )
+    private fun item(id: Int, label: String) =
+        RimeSchemaPopupItem(label, KeyAction.RimeSchemaAction(id))
 }

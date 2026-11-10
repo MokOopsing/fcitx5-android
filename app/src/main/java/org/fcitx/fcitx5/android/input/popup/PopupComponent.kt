@@ -12,18 +12,20 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.theme.ThemeManager
 import org.fcitx.fcitx5.android.input.broadcast.PunctuationComponent
 import org.fcitx.fcitx5.android.input.dependency.context
 import org.fcitx.fcitx5.android.input.dependency.fcitx
 import org.fcitx.fcitx5.android.input.dependency.imeScope
-import org.fcitx.fcitx5.android.input.dependency.inputMethodService
 import org.fcitx.fcitx5.android.input.dependency.theme
+import org.fcitx.fcitx5.android.input.keyboard.CommonKeyActionListener
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction
+import org.fcitx.fcitx5.android.input.keyboard.KeyActionListener
 import org.fcitx.fcitx5.android.input.keyboard.KeyDef
-import org.fcitx.fcitx5.android.input.keyboard.activateRimeSchema
 import org.fcitx.fcitx5.android.input.keyboard.longPressOf
 import org.fcitx.fcitx5.android.input.keyboard.rimeSchemaChoices
+import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.mechdancer.dependency.Dependent
 import org.mechdancer.dependency.UniqueComponent
 import org.mechdancer.dependency.manager.ManagedHandler
@@ -43,7 +45,7 @@ class PopupComponent :
     private val imeScope by manager.imeScope()
     private val context by manager.context()
     private val fcitx by manager.fcitx()
-    private val service by manager.inputMethodService()
+    private val commonKeyActionListener: CommonKeyActionListener by manager.must()
     private val theme by manager.theme()
     private val punctuation: PunctuationComponent by manager.must()
 
@@ -257,22 +259,31 @@ class PopupComponent :
                 if (pendingSchemaMenus[viewId] !== pending || !root.isAttachedToWindow || actions.isEmpty()) {
                     return@launch
                 }
+                val items = actions.map { action ->
+                    RimeSchemaPopupItem(
+                        action.shortText.ifBlank { action.longText },
+                        KeyAction.RimeSchemaAction(action.id)
+                    )
+                } + RimeSchemaPopupItem(
+                    context.getString(R.string.a11y_key_emoji),
+                    KeyAction.PickerSwitchAction(PickerWindow.Key.Emoji)
+                )
                 val ui = RimeSchemaPopupUi(
                     context,
                     theme,
                     rootBounds,
                     pending.bounds,
-                    actions,
+                    items,
                     selectedIndex = 0
                 ) { action ->
-                    service.activateRimeSchema(action.id)
+                    commonKeyActionListener.listener.onKeyAction(action, KeyActionListener.Source.Popup)
                     dismissPopup(viewId)
                 }
                 showPopupContainer(viewId, ui)
                 pending.focus?.let { (x, y) -> ui.changeFocus(x, y) }
                 if (pending.released) {
-                    (ui.onTrigger() as? KeyAction.RimeSchemaAction)?.let {
-                        service.activateRimeSchema(it.actionId)
+                    ui.onTrigger()?.let {
+                        commonKeyActionListener.listener.onKeyAction(it, KeyActionListener.Source.Popup)
                         dismissPopup(viewId)
                     }
                 }

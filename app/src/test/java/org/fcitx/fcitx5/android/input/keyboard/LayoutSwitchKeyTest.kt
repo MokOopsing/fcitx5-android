@@ -39,4 +39,9 @@ class LayoutSwitchKeyTest {
         assertNull(key.held())
     }
 
+    @Test
+    fun returnKeyHasNoEmojiLongPressPopup() {
+        assertNull(ReturnKey().popup)
+    }
+
 }

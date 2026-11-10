@@ -13,21 +13,22 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import org.fcitx.fcitx5.android.core.Action
 import org.fcitx.fcitx5.android.data.theme.Theme
 import org.fcitx.fcitx5.android.input.keyboard.KeyAction
 import splitties.dimensions.dp
 import kotlin.math.ceil
 import kotlin.math.max
 
+data class RimeSchemaPopupItem(val label: String, val action: KeyAction)
+
 class RimeSchemaPopupUi(
     override val ctx: Context,
     theme: Theme,
     outerBounds: Rect,
     triggerBounds: Rect,
-    private val actions: List<Action>,
+    private val items: List<RimeSchemaPopupItem>,
     selectedIndex: Int,
-    private val onSelect: (Action) -> Unit
+    private val onSelect: (KeyAction) -> Unit
 ) : PopupContainerUi(ctx, theme, outerBounds, triggerBounds, {}) {
 
     private val rowHeight = ctx.dp(48)
@@ -39,18 +40,18 @@ class RimeSchemaPopupUi(
         (outerBounds.width().takeIf { it > 0 } ?: ctx.resources.displayMetrics.widthPixels) -
             2 * edgePadding
         ).coerceAtLeast(1)
-    private val contentWidth = actions.maxOfOrNull {
-        textPaint.measureText(it.shortText.ifBlank { it.longText })
+    private val contentWidth = items.maxOfOrNull {
+        textPaint.measureText(it.label)
     }?.let(::ceil)?.toInt() ?: 0
     private val popupWidth = max(
         ctx.dp(MIN_WIDTH),
         contentWidth + 2 * horizontalPadding
     ).coerceAtMost(availableWidth)
     private val popupHeight = minOf(
-        actions.size * rowHeight,
+        items.size * rowHeight,
         (triggerBounds.top - outerBounds.top - gap).coerceAtLeast(rowHeight)
     )
-    private val selected = selectedIndex.takeIf { it in actions.indices } ?: 0
+    private val selected = selectedIndex.takeIf { it in items.indices } ?: 0
     private var focusedIndex = selected
     private var dragged = false
 
@@ -65,10 +66,10 @@ class RimeSchemaPopupUi(
 
     private val rows = LinearLayout(ctx).apply {
         orientation = LinearLayout.VERTICAL
-        actions.forEachIndexed { index, action ->
+        items.forEachIndexed { index, item ->
             addView(
                 TextView(ctx).apply {
-                    text = action.shortText.ifBlank { action.longText }
+                    text = item.label
                     textSize = 16f
                     setTextColor(theme.popupTextColor)
                     gravity = Gravity.CENTER_VERTICAL
@@ -79,7 +80,7 @@ class RimeSchemaPopupUi(
                     isFocusable = true
                     setOnClickListener {
                         focusedIndex = index
-                        onSelect(action)
+                        onSelect(item.action)
                     }
                     layoutParams = LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -92,14 +93,14 @@ class RimeSchemaPopupUi(
 
     override val root = ScrollView(ctx).apply {
         isFillViewport = false
-        isVerticalScrollBarEnabled = actions.size * rowHeight > popupHeight
+        isVerticalScrollBarEnabled = items.size * rowHeight > popupHeight
         background = GradientDrawable().apply {
             cornerRadius = ctx.dp(12).toFloat()
             setColor(theme.popupBackgroundColor)
         }
         clipToOutline = true
         elevation = ctx.dp(2).toFloat()
-        addView(rows, ViewGroup.LayoutParams(popupWidth, actions.size * rowHeight))
+        addView(rows, ViewGroup.LayoutParams(popupWidth, items.size * rowHeight))
         layoutParams = ViewGroup.LayoutParams(popupWidth, popupHeight)
         updateFocus()
     }
@@ -135,12 +136,12 @@ class RimeSchemaPopupUi(
                 root.scrollY / rowHeight
             } else {
                 (root.scrollY + popupHeight - 1) / rowHeight
-            }.coerceIn(actions.indices)
+            }.coerceIn(items.indices)
             updateFocus()
             return false
         }
         dragged = true
-        val index = ((y + root.scrollY) / rowHeight).toInt().coerceIn(actions.indices)
+        val index = ((y + root.scrollY) / rowHeight).toInt().coerceIn(items.indices)
         if (index != focusedIndex) {
             focusedIndex = index
             updateFocus()
@@ -149,7 +150,7 @@ class RimeSchemaPopupUi(
     }
 
     override fun onTrigger(): KeyAction? =
-        if (dragged) KeyAction.RimeSchemaAction(actions[focusedIndex].id) else null
+        if (dragged) items[focusedIndex].action else null
 
     private companion object {
         const val TEXT_SIZE = 16f
