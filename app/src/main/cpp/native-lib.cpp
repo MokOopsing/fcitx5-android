@@ -83,6 +83,14 @@ public:
         p_dispatcher = std::make_unique<fcitx::EventDispatcher>();
         p_dispatcher->attach(&p_instance->eventLoop());
         p_instance->initialize();
+        const auto *rimeEntry = p_instance->inputMethodManager().entry("rime");
+        if (!rimeEntry) {
+            FCITX_ERROR() << "Rime input method entry 'rime' is unavailable";
+        } else if (!p_instance->inputMethodEngine("rime")) {
+            FCITX_ERROR() << "Failed to load Rime input method engine";
+        } else {
+            FCITX_INFO() << "Rime input method engine loaded";
+        }
         auto &addonMgr = p_instance->addonManager();
         p_frontend = addonMgr.addon("androidfrontend");
         p_quickphrase = addonMgr.addon("quickphrase");

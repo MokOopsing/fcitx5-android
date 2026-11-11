@@ -10,7 +10,9 @@ shuangpin, T9, code-table, English, dictionary, or sentence-ranking engines.
 the engine under the unique name `rime` (`RIME_INPUT_METHOD`).
 
 The app builds only the Rime input engine, so available and enabled methods are reported directly by
-Fcitx without an app-side allowlist. Once Fcitx is ready, `Fcitx` enables Rime so an upgraded
+Fcitx without an app-side allowlist. During Fcitx initialization, the native host explicitly requests
+the `rime` engine and checks that its input-method entry and engine instance are available. A failure
+is logged, while Fcitx startup continues. Once Fcitx is ready, `Fcitx` enables Rime so an upgraded
 installation with an old engine list remains usable. Do not reintroduce an internal Fcitx
 engine-cycling action: there is only one application engine.
 
