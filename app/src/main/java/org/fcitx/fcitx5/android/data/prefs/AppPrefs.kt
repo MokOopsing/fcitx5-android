@@ -121,7 +121,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             "swipe_symbol_behavior",
             SwipeSymbolDirection.Down
         )
-        val longPressDelay = hidden(setByLevels = true) {
+        val longPressDelay = hidden(preservedByUi = true) {
             int(
                 R.string.keyboard_long_press_delay,
                 "keyboard_long_press_delay",
@@ -209,7 +209,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val keyboardHeightPercentLandscape: ManagedPreference.PInt
 
         init {
-            val (primary, secondary) = hidden(setByLevels = true) {
+            val (primary, secondary) = hidden(preservedByUi = true) {
                 twinInt(
                     R.string.keyboard_height,
                     R.string.portrait,
@@ -231,7 +231,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val keyboardSidePaddingLandscape: ManagedPreference.PInt
 
         init {
-            val (primary, secondary) = hidden(setByLevels = true) {
+            val (primary, secondary) = hidden(preservedByUi = true) {
                 twinInt(
                     R.string.keyboard_side_padding,
                     R.string.portrait,
@@ -253,7 +253,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val keyboardBottomPaddingLandscape: ManagedPreference.PInt
 
         init {
-            val (primary, secondary) = hidden(setByLevels = true) {
+            val (primary, secondary) = hidden(preservedByUi = true) {
                 twinInt(
                     R.string.keyboard_bottom_padding,
                     R.string.portrait,
@@ -294,7 +294,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val buttonLongPressVibrationMilliseconds: ManagedPreference.PInt
 
         init {
-            val (primary, secondary) = hidden(setByLevels = true) {
+            val (primary, secondary) = hidden(preservedByUi = true) {
                 twinInt(
                     R.string.button_vibration_milliseconds,
                     R.string.button_press,
@@ -317,7 +317,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
         val buttonLongPressVibrationAmplitude: ManagedPreference.PInt
 
         init {
-            val (primary, secondary) = hidden(setByLevels = true) {
+            val (primary, secondary) = hidden(preservedByUi = true) {
                 twinInt(
                     R.string.button_vibration_amplitude,
                     R.string.button_press,
@@ -359,7 +359,7 @@ class AppPrefs(private val sharedPreferences: SharedPreferences) {
             "sound_on_keypress",
             InputFeedbackMode.FollowingSystem
         )
-        val soundOnKeyPressVolume = hidden(setByLevels = true) {
+        val soundOnKeyPressVolume = hidden(preservedByUi = true) {
             int(
                 R.string.button_sound_volume,
                 "button_sound_volume",

@@ -50,6 +50,7 @@
     <string name="delete">Delete</string>
     <string name="clipboard">Clipboard</string>
     <string name="keyboard_height">Keyboard height</string>
+    <string name="switch_panel_side">Switch panel to the other side</string>
     <string name="virtual_keyboard">Keys and feedback</string>
     <string name="clipboard_suggestion_timeout">Clipboard suggestion timeout</string>
     <string name="version">Version</string>

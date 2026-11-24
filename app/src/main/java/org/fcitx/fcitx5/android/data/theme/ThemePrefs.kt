@@ -15,6 +15,7 @@ import org.fcitx.fcitx5.android.data.prefs.AppPrefs
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreference
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceCategory
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceEnum
+import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceUi
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceUi.Levels.Level
 
 class ThemePrefs(sharedPreferences: SharedPreferences) :
@@ -44,34 +45,42 @@ class ThemePrefs(sharedPreferences: SharedPreferences) :
     init {
         val keyboard = AppPrefs.getInstance().keyboard
         section(R.string.section_size)
-        levels(
-            R.string.keyboard_height, "keyboard_height_level",
-            defaults(keyboard.keyboardHeightPercent, keyboard.keyboardHeightPercentLandscape),
-            listOf(
-                Level(R.string.level_low, 26, 42),
-                Level(R.string.level_standard, 30, 49),
-                Level(R.string.level_tall, 34, 55),
-                Level(R.string.level_taller, 38, 60),
-            )
-        )
-        levels(
-            R.string.keyboard_side_padding, "keyboard_side_padding_level",
-            defaults(keyboard.keyboardSidePadding, keyboard.keyboardSidePaddingLandscape),
-            listOf(
-                Level(R.string.level_none, 0, 0),
-                Level(R.string.level_narrow, 8, 48),
-                Level(R.string.level_wide, 24, 120),
-            )
-        )
-        levels(
-            R.string.keyboard_bottom_padding, "keyboard_bottom_padding_level",
-            defaults(keyboard.keyboardBottomPadding, keyboard.keyboardBottomPaddingLandscape),
-            listOf(
-                Level(R.string.level_none, 0, 0),
-                Level(R.string.level_little, 10, 6),
-                Level(R.string.level_more, 20, 12),
-            )
-        )
+        ManagedPreferenceUi.TwinSeekBarInt(
+            R.string.keyboard_height,
+            R.string.portrait,
+            keyboard.keyboardHeightPercent.key,
+            keyboard.keyboardHeightPercent.defaultValue,
+            R.string.landscape,
+            keyboard.keyboardHeightPercentLandscape.key,
+            keyboard.keyboardHeightPercentLandscape.defaultValue,
+            10,
+            90,
+            "%"
+        ).registerUi()
+        ManagedPreferenceUi.TwinSeekBarInt(
+            R.string.keyboard_side_padding,
+            R.string.portrait,
+            keyboard.keyboardSidePadding.key,
+            keyboard.keyboardSidePadding.defaultValue,
+            R.string.landscape,
+            keyboard.keyboardSidePaddingLandscape.key,
+            keyboard.keyboardSidePaddingLandscape.defaultValue,
+            0,
+            300,
+            "dp"
+        ).registerUi()
+        ManagedPreferenceUi.TwinSeekBarInt(
+            R.string.keyboard_bottom_padding,
+            R.string.portrait,
+            keyboard.keyboardBottomPadding.key,
+            keyboard.keyboardBottomPadding.defaultValue,
+            R.string.landscape,
+            keyboard.keyboardBottomPaddingLandscape.key,
+            keyboard.keyboardBottomPaddingLandscape.defaultValue,
+            0,
+            100,
+            "dp"
+        ).registerUi()
         section(R.string.section_keys)
     }
 

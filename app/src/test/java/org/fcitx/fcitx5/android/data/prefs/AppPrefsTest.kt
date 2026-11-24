@@ -22,7 +22,7 @@ import org.robolectric.annotation.Config
 
 /**
  * A setting moved out of the settings page kept what an older version or a backup set, with
- * nothing left to change it back; one a level still sets must keep it.
+ * nothing left to change it back; one still controlled by another settings page must keep it.
  */
 @RunWith(RobolectricTestRunner::class)
 class AppPrefsTest {
@@ -53,7 +53,7 @@ class AppPrefsTest {
         assertFalse(prefs.advanced.ignoreSystemCursor.getValue())
     }
 
-    // the real application: ThemePrefs, which has the keyboard's size levels, is read through ThemeManager
+    // ThemePrefs, which exposes the keyboard's orientation controls, is read through ThemeManager
     @Test
     @Config(application = FcitxApplication::class)
     fun whatTheSettingsPageStillSetsIsKept() {
@@ -62,20 +62,31 @@ class AppPrefsTest {
         // AppPrefs' keys alone: ThemeManager.prefs is registered with the application's AppPrefs, not this one.
         // ThemePrefsTest and aVisibleThemePreferenceKeepsItsValueAcrossHiddenResets check that theme controls survive resets
         val own = categories.flatMapTo(HashSet()) { it.managedPreferences.keys }
-        // what every level sets, one off its default: the keyboard's size on the theme page, the long press, the vibration, the sound
+        // what every level sets, one off its default: the long press, the vibration, the sound
         val levels = (categories + ThemeManager.prefs)
             .flatMap { it.managedPreferencesUi }
             .filterIsInstance<ManagedPreferenceUi.Levels>()
             .flatMap { it.keys }
             .filter { it.first in own }
             .associate { (key, default) -> key to default + 1 }
-        assertTrue(levels.keys.containsAll(listOf("keyboard_height_percent", "keyboard_long_press_delay")))
+        assertTrue(levels.keys.contains("keyboard_long_press_delay"))
+        assertFalse(levels.containsKey("keyboard_height_percent"))
+        val orientationSpecificSize = mapOf(
+            "keyboard_height_percent" to 61,
+            "keyboard_height_percent_landscape" to 67,
+            "keyboard_side_padding" to 13,
+            "keyboard_side_padding_landscape" to 37,
+            "keyboard_bottom_padding" to 17,
+            "keyboard_bottom_padding_landscape" to 9,
+        )
         sp.edit {
             levels.forEach { (key, value) -> putInt(key, value) }
+            orientationSpecificSize.forEach { (key, value) -> putInt(key, value) }
             putBoolean("popup_on_key_press", false)
         }
         prefs.resetHiddenSettings()
         assertEquals(levels, levels.mapValues { sp.getInt(it.key, -1) })
+        assertEquals(orientationSpecificSize, orientationSpecificSize.mapValues { sp.getInt(it.key, -1) })
         assertFalse("shown", prefs.keyboard.popupOnKeyPress.getValue())
     }
 

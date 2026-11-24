@@ -7,6 +7,7 @@ package org.fcitx.fcitx5.android.input.keyboard
 import android.graphics.Rect
 import android.view.MotionEvent
 import android.view.View
+import androidx.core.view.allViews
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.setViewTreeLifecycleOwner
@@ -161,6 +162,44 @@ class BaseKeyboardTest {
         } finally {
             workaround.setValue(was)
         }
+    }
+
+    @Test
+    @Config(application = FcitxApplication::class, qualifiers = "land")
+    fun landscapeTextRowsDuplicateGAndVAcrossTheSplit() {
+        val actions = mutableListOf<KeyAction>()
+        val keyboard = keyboard(actions).apply {
+            measure(exactly(1080), exactly(800))
+            layout(0, 0, 1080, 800)
+        }
+        val keys = keyboard.allViews.filterIsInstance<AltTextKeyView>()
+        val gs = keys.filter { it.mainText.text.toString() == "G" }.sortedBy { it.left }
+        val vs = keys.filter { it.mainText.text.toString() == "V" }.sortedBy { it.left }
+        val qWidth = keys.first { it.mainText.text.toString() == "Q" }.width
+
+        assertEquals(2, gs.size)
+        assertEquals(2, vs.size)
+        assertTrue("the two G keys are separated by the center gap", gs[0].right < gs[1].left)
+        assertTrue("the two V keys are separated by the center gap", vs[0].right < vs[1].left)
+        assertTrue("the first V is on the left of the center gap", vs[0].right < keyboard.width / 2)
+        assertTrue("the second V is on the right of the center gap", vs[1].left > keyboard.width / 2)
+        assertTrue("the bottom-row space is longer than a letter key", keyboard.space.width > qWidth)
+        assertEquals("the bottom row occupies the full keyboard width", keyboard.width, (keyboard.space.parent as View).width)
+
+        (gs + vs).forEach { key ->
+            val point = middleOf(key)
+            keyboard.onTouchEvent(touch(MotionEvent.ACTION_DOWN, listOf(0), listOf(point)))
+            keyboard.onTouchEvent(touch(MotionEvent.ACTION_UP, listOf(0), listOf(point)))
+        }
+        assertEquals(
+            listOf(
+                KeyAction.FcitxKeyAction("g"),
+                KeyAction.FcitxKeyAction("g"),
+                KeyAction.FcitxKeyAction("v"),
+                KeyAction.FcitxKeyAction("v")
+            ),
+            actions
+        )
     }
 
     @Test

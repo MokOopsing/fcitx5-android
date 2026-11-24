@@ -18,7 +18,7 @@ abstract class ManagedPreferenceCategory(
     /** index of the first preference in a section -> the section's title */
     private val sections = mutableMapOf<Int, Int>()
 
-    /** Keys of what [hidden] declares, but for those a [levels] sets. */
+    /** Hidden keys reset once or after importing user data. */
     private val resettableKeys = mutableListOf<String>()
 
     /** Preferences registered after this call, up to the next [section], are grouped under [title]. */
@@ -34,21 +34,21 @@ abstract class ManagedPreferenceCategory(
      * The preferences [block] declares, kept without a UI: a phone's user is not shown every knob
      * the code has. Those of [AppPrefs] go back to their defaults once, and after an import of the
      * user's data ([AppPrefs.resetHiddenSettings]), for what an older version or a backup set
-     * there could not be changed back; but not when [setByLevels], where a [levels] (in this
-     * category or another) still sets them.
+     * there could not be changed back; but not when [preservedByUi], where another preference
+     * category provides a user-facing control for them.
      */
-    protected fun <T> hidden(setByLevels: Boolean = false, block: () -> T): T {
+    protected fun <T> hidden(preservedByUi: Boolean = false, block: () -> T): T {
         val before = managedPreferences.keys.toSet()
         hidingUi = true
         try {
             return block()
         } finally {
             hidingUi = false
-            if (!setByLevels) resettableKeys += managedPreferences.keys - before
+            if (!preservedByUi) resettableKeys += managedPreferences.keys - before
         }
     }
 
-    /** Puts what [hidden] declares back to its defaults, but what a [levels] sets. */
+    /** Puts hidden preferences without another UI back to their defaults. */
     fun resetHidden(editor: SharedPreferences.Editor) {
         resettableKeys.forEach { editor.remove(it) }
     }

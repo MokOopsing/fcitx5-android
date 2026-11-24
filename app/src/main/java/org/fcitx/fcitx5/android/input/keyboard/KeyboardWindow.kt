@@ -151,6 +151,8 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     fun isMainKeyboardShown(): Boolean =
         windowManager.isAttached(this) && currentKeyboardName == TextKeyboard.Name
 
+    fun isNumberKeyboardShown(): Boolean = currentKeyboardName == NumberKeyboard.Name
+
     fun returnToMainKeyboard(onReturned: () -> Unit) {
         ContextCompat.getMainExecutor(context).execute {
             val outcome = lettersLayout.switchTo(
@@ -228,7 +230,11 @@ class KeyboardWindow : InputWindow.SimpleInputWindow<KeyboardWindow>(), Essentia
     // 1) the keyboard window was newly attached
     // 2) currently keyboard window is attached and switchLayout was used
     private fun notifyBarLayoutChanged() {
-        bar.onKeyboardLayoutSwitched(currentKeyboardName == NumberKeyboard.Name)
+        val isNumber = currentKeyboardName == NumberKeyboard.Name
+        bar.onKeyboardLayoutSwitched(isNumber)
+        if (windowManager.isAttached(this)) {
+            windowManager.notifyActiveWindowContentChanged()
+        }
     }
 }
 

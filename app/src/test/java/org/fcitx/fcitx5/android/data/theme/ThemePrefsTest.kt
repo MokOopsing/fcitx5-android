@@ -7,6 +7,7 @@ package org.fcitx.fcitx5.android.data.theme
 import android.content.Context
 import androidx.core.content.edit
 import org.fcitx.fcitx5.android.FcitxApplication
+import org.fcitx.fcitx5.android.R
 import org.fcitx.fcitx5.android.data.prefs.ManagedPreferenceUi
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -17,7 +18,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 
-/** The theme page's level lists and direct controls use the same preference values. */
+/** The theme page's controls use the keyboard and theme preferences. */
 @RunWith(RobolectricTestRunner::class)
 // the real application: the keyboard's size is AppPrefs', and a theme preference reaches the theme manager
 @Config(application = FcitxApplication::class)
@@ -34,14 +35,11 @@ class ThemePrefsTest {
         managedPreferencesUi.filterIsInstance<ManagedPreferenceUi.Levels>().single { it.key == key }.current()
 
     @Test
-    fun aLevelListShowsTheLevelOfWhatItsPreferencesHold() {
+    fun remainingLevelListsShowTheLevelOfWhatTheirPreferencesHold() {
         val prefs = ThemePrefs(sp)
-        // untouched: standard height, no padding, standard spacing, rounded keys
-        val lists = listOf(
-            "keyboard_height_level", "keyboard_side_padding_level", "keyboard_bottom_padding_level",
-            "key_spacing_level", "key_radius_level",
-        )
-        assertEquals(listOf(1, 0, 0, 1, 1), lists.map { prefs.level(it) })
+        // untouched: standard spacing and rounded keys
+        val lists = listOf("key_spacing_level", "key_radius_level")
+        assertEquals(listOf(1, 1), lists.map { prefs.level(it) })
         prefs.keyRadius.setValue(10)
         listOf(prefs.keyHorizontalMargin, prefs.keyHorizontalMarginLandscape).forEach { it.setValue(5) }
         prefs.keyVerticalMargin.setValue(9)
@@ -65,5 +63,29 @@ class ThemePrefsTest {
         otherControls.forEach { key ->
             assertTrue("$key should have a visible control", key in ui)
         }
+    }
+
+    @Test
+    fun keyboardSizeControlsHaveSeparateOrientationValues() {
+        val ui = ThemePrefs(sp).managedPreferencesUi.associateBy { it.key }
+
+        val height = ui["keyboard_height_percent"] as ManagedPreferenceUi.TwinSeekBarInt
+        assertEquals(R.string.keyboard_height, height.title)
+        assertEquals("keyboard_height_percent_landscape", height.secondaryKey)
+        assertEquals("%", height.unit)
+
+        val sidePadding = ui["keyboard_side_padding"] as ManagedPreferenceUi.TwinSeekBarInt
+        assertEquals(R.string.keyboard_side_padding, sidePadding.title)
+        assertEquals("keyboard_side_padding_landscape", sidePadding.secondaryKey)
+        assertEquals("dp", sidePadding.unit)
+
+        val bottomPadding = ui["keyboard_bottom_padding"] as ManagedPreferenceUi.TwinSeekBarInt
+        assertEquals(R.string.keyboard_bottom_padding, bottomPadding.title)
+        assertEquals("keyboard_bottom_padding_landscape", bottomPadding.secondaryKey)
+        assertEquals("dp", bottomPadding.unit)
+
+        assertTrue(ui["keyboard_height_level"] == null)
+        assertTrue(ui["keyboard_side_padding_level"] == null)
+        assertTrue(ui["keyboard_bottom_padding_level"] == null)
     }
 }

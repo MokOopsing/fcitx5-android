@@ -6,6 +6,7 @@ package org.fcitx.fcitx5.android.input.keyboard
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.res.Configuration
 import android.view.View
 import androidx.annotation.Keep
 import androidx.core.view.ViewCompat
@@ -26,11 +27,21 @@ import org.fcitx.fcitx5.android.input.popup.PopupOverridesCache
 import org.fcitx.fcitx5.android.input.popup.PopupPreset
 import splitties.views.imageResource
 
+private fun isLandscape(context: Context) =
+    context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
 @SuppressLint("ViewConstructor")
 class TextKeyboard(
     context: Context,
     theme: Theme
-) : BaseKeyboard(context, theme, Layout) {
+) : BaseKeyboard(
+    context,
+    theme,
+    if (isLandscape(context)) LandscapeLayout else Layout,
+    splitRows = if (isLandscape(context)) mapOf(0 to 5, 1 to 5, 2 to 5) else emptyMap(),
+    splitGapDp = if (isLandscape(context)) LANDSCAPE_SPLIT_GAP_DP else 0,
+    horizontalInsetRows = emptySet()
+) {
 
     enum class CapsState { None, Once, Lock }
 
@@ -74,11 +85,47 @@ class TextKeyboard(
                 AlphabetKey("M", "\\"),
                 BackspaceKey()
             ),
+            bottomRow(split = false)
+        )
+
+        private val LandscapeLayout = listOf(
+            Layout[0],
             listOf(
+                AlphabetKey("A", "@"),
+                AlphabetKey("S", "*"),
+                AlphabetKey("D", "+"),
+                AlphabetKey("F", "-"),
+                AlphabetKey("G", "="),
+                AlphabetKey("G", "="),
+                AlphabetKey("H", "/"),
+                AlphabetKey("J", "#"),
+                AlphabetKey("K", "("),
+                AlphabetKey("L", ")")
+            ),
+            listOf(
+                CapsKey(),
+                AlphabetKey("Z", "'"),
+                AlphabetKey("X", ":"),
+                AlphabetKey("C", "\""),
+                AlphabetKey("V", "?"),
+                AlphabetKey("V", "?"),
+                AlphabetKey("B", "!"),
+                AlphabetKey("N", "~"),
+                AlphabetKey("M", "\\"),
+                BackspaceKey()
+            ),
+            bottomRow(split = true)
+        )
+
+        private fun bottomRow(split: Boolean): List<KeyDef> {
+            val switchKeyWidth = if (split) 0.1f else 0.12f
+            val domainKeyWidth = if (split) 0.1f else 0.14f
+            val returnKeyWidth = if (split) 0.1f else 0.15f
+            return listOf(
                 // Symbols and numbers each have their own key; punctuation to the right of space
                 // swipes from comma to full stop. Held, 符 and 123 open quick phrase and Unicode input.
-                LayoutSwitchKey("符", PickerWindow.Key.Symbol.name, 0.12f, longPress = KeyAction.QuickPhraseAction),
-                LayoutSwitchKey("123", NumberKeyboard.Name, 0.12f, longPress = KeyAction.UnicodeAction),
+                LayoutSwitchKey("符", PickerWindow.Key.Symbol.name, switchKeyWidth, longPress = KeyAction.QuickPhraseAction),
+                LayoutSwitchKey("123", NumberKeyboard.Name, switchKeyWidth, longPress = KeyAction.UnicodeAction),
                 // an address field's in place of punctuation (AddressKeys), hidden else
                 AddressKey("/", R.id.button_slash),
                 AddressKey("@", R.id.button_at),
@@ -86,10 +133,11 @@ class TextKeyboard(
                 PunctuationKey(),
                 // as it is: through the engine . would be 。
                 AddressKey(".", R.id.button_dot),
-                AddressKey(AddressKeys.DOMAINS.first(), R.id.button_domain, 0.14f, AddressKeys.DOMAINS),
-                ReturnKey()
+                AddressKey(AddressKeys.DOMAINS.first(), R.id.button_domain, domainKeyWidth, AddressKeys.DOMAINS),
+                ReturnKey(returnKeyWidth)
             )
-        )
+        }
+
     }
 
     val caps: ImageKeyView by lazy { findViewById(R.id.button_caps) }

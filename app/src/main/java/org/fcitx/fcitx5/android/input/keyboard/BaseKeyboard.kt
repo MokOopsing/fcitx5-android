@@ -8,6 +8,7 @@ import android.content.Context
 import android.graphics.Rect
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.View
 import androidx.annotation.CallSuper
 import androidx.annotation.Keep
 import androidx.constraintlayout.widget.ConstraintLayout
@@ -46,10 +47,15 @@ import splitties.views.dsl.constraintlayout.rightToLeftOf
 import splitties.views.dsl.constraintlayout.topOfParent
 import splitties.views.dsl.core.add
 
+internal const val LANDSCAPE_SPLIT_GAP_DP = 240
+
 abstract class BaseKeyboard(
     context: Context,
     protected val theme: Theme,
-    private val keyLayout: List<List<KeyDef>>
+    private val keyLayout: List<List<KeyDef>>,
+    private val splitRows: Map<Int, Int> = emptyMap(),
+    private val splitGapDp: Int = 0,
+    private val horizontalInsetRows: Set<Int> = emptySet()
 ) : ConstraintLayout(context) {
 
     var keyActionListener: KeyActionListener? = null
@@ -85,62 +91,93 @@ abstract class BaseKeyboard(
 
     init {
         isMotionEventSplittingEnabled = true
-        keyRows = keyLayout.map { row ->
-            val keyViews = row.map(::createKeyView)
-            constraintLayout Row@{
-                isMotionEventSplittingEnabled = true
-                var totalWidth = 0f
-                keyViews.forEachIndexed { index, view ->
-                    add(view, lParams {
-                        centerVertically()
-                        if (index == 0) {
-                            leftOfParent()
-                            horizontalChainStyle = LayoutParams.CHAIN_PACKED
-                        } else {
-                            leftToRightOf(keyViews[index - 1])
-                        }
-                        if (index == keyViews.size - 1) {
-                            rightOfParent()
-                            // for RTL
-                            horizontalChainStyle = LayoutParams.CHAIN_PACKED
-                        } else {
-                            rightToLeftOf(keyViews[index + 1])
-                        }
-                        val def = row[index]
-                        matchConstraintPercentWidth = def.appearance.percentWidth
-                    })
-                    row[index].appearance.percentWidth.let {
-                        // 0f means fill remaining space, thus does not need expanding
-                        totalWidth += if (it != 0f) it else 1f
-                    }
-                }
-                if (expandKeypressArea && totalWidth < 1f) {
-                    val free = (1f - totalWidth) / 2f
-                    keyViews.first().apply {
-                        updateLayoutParams<LayoutParams> {
-                            matchConstraintPercentWidth += free
-                        }
-                        layoutMarginLeft = free / (row.first().appearance.percentWidth + free)
-                    }
-                    keyViews.last().apply {
-                        updateLayoutParams<LayoutParams> {
-                            matchConstraintPercentWidth += free
-                        }
-                        layoutMarginRight = free / (row.last().appearance.percentWidth + free)
-                    }
-                }
-            }
-        }
+        keyRows = keyLayout.mapIndexed(::createKeyRow)
         keyRows.forEachIndexed { index, row ->
             add(row, lParams {
                 if (index == 0) topOfParent()
                 else below(keyRows[index - 1])
                 if (index == keyRows.size - 1) bottomOfParent()
                 else above(keyRows[index + 1])
-                centerHorizontally()
+                if (index in horizontalInsetRows) {
+                    leftOfParent()
+                    rightOfParent()
+                    leftMargin = dp(splitGapDp / 2)
+                    rightMargin = dp(splitGapDp / 2)
+                } else {
+                    centerHorizontally()
+                }
             })
         }
         spaceSwipeMoveCursor.registerOnChangeListener(spaceSwipeChangeListener)
+    }
+
+    private fun createKeyRow(rowIndex: Int, row: List<KeyDef>): ConstraintLayout {
+        val keyViews = row.map(::createKeyView)
+        val splitAfter = splitRows[rowIndex]
+        val gapView = splitAfter?.let {
+            View(context).apply {
+                id = View.generateViewId()
+                isFocusable = false
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }
+        }
+        val rowChildren = keyViews.toMutableList<View>()
+        splitAfter?.let { gapIndex -> gapView?.let { rowChildren.add(gapIndex, it) } }
+        return constraintLayout {
+            isMotionEventSplittingEnabled = true
+            var totalWidth = 0f
+            var keyIndex = 0
+            rowChildren.forEachIndexed { index, view ->
+                val previous = rowChildren.getOrNull(index - 1)
+                val next = rowChildren.getOrNull(index + 1)
+                val params: ConstraintLayout.LayoutParams.() -> Unit = {
+                    centerVertically()
+                    if (previous == null) {
+                        leftOfParent()
+                        horizontalChainStyle = LayoutParams.CHAIN_PACKED
+                    } else {
+                        leftToRightOf(previous)
+                    }
+                    if (next == null) {
+                        rightOfParent()
+                        // for RTL
+                        horizontalChainStyle = LayoutParams.CHAIN_PACKED
+                    } else {
+                        rightToLeftOf(next)
+                    }
+                }
+                if (view === gapView) {
+                    add(view, lParams(dp(splitGapDp), 0) { params(this) })
+                } else {
+                    add(view, lParams {
+                        params(this)
+                        if (splitAfter == null) {
+                            matchConstraintPercentWidth = row[keyIndex].appearance.percentWidth
+                        }
+                    })
+                    row[keyIndex].appearance.percentWidth.let {
+                        // 0f means fill remaining space, thus does not need expanding
+                        totalWidth += if (it != 0f) it else 1f
+                    }
+                    keyIndex++
+                }
+            }
+            if (splitAfter == null && expandKeypressArea && totalWidth < 1f) {
+                val free = (1f - totalWidth) / 2f
+                keyViews.first().apply {
+                    updateLayoutParams<LayoutParams> {
+                        matchConstraintPercentWidth += free
+                    }
+                    layoutMarginLeft = free / (row.first().appearance.percentWidth + free)
+                }
+                keyViews.last().apply {
+                    updateLayoutParams<LayoutParams> {
+                        matchConstraintPercentWidth += free
+                    }
+                    layoutMarginRight = free / (row.last().appearance.percentWidth + free)
+                }
+            }
+        }
     }
 
     /** What swiping a key types: its own swipe, nothing, or what the user chose ([swipeText]). */

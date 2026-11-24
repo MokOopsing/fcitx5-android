@@ -18,6 +18,8 @@ import android.view.inputmethod.InlineSuggestionsResponse
 import android.widget.ImageView
 import androidx.annotation.Keep
 import androidx.annotation.RequiresApi
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.constraintlayout.widget.Guideline
 import androidx.core.view.updateLayoutParams
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.CoroutineScope
@@ -42,6 +44,7 @@ import org.fcitx.fcitx5.android.input.broadcast.PreeditEmptyStateComponent
 import org.fcitx.fcitx5.android.input.broadcast.PunctuationComponent
 import org.fcitx.fcitx5.android.input.broadcast.ReturnKeyDrawableComponent
 import org.fcitx.fcitx5.android.input.candidates.horizontal.HorizontalCandidateComponent
+import org.fcitx.fcitx5.android.input.clipboard.ClipboardWindow
 import org.fcitx.fcitx5.android.input.keyboard.CommonKeyActionListener
 import org.fcitx.fcitx5.android.input.keyboard.CustomGestureView
 import org.fcitx.fcitx5.android.input.keyboard.CustomGestureView.GestureType
@@ -50,7 +53,9 @@ import org.fcitx.fcitx5.android.input.keyboard.KeyActionListener
 import org.fcitx.fcitx5.android.input.keyboard.KeyboardHeightPercentBase.DisplayMetrics
 import org.fcitx.fcitx5.android.input.keyboard.KeyboardHeightPercentBase.RealSize
 import org.fcitx.fcitx5.android.input.keyboard.KeyboardWindow
+import org.fcitx.fcitx5.android.input.keyboard.LANDSCAPE_SPLIT_GAP_DP
 import org.fcitx.fcitx5.android.input.keyboard.TextKeyboard
+import org.fcitx.fcitx5.android.input.picker.PickerWindow
 import org.fcitx.fcitx5.android.input.picker.emojiPicker
 import org.fcitx.fcitx5.android.input.picker.emoticonPicker
 import org.fcitx.fcitx5.android.input.picker.symbolPicker
@@ -125,6 +130,22 @@ class InputView(
     private val kawaiiBar = KawaiiBarComponent()
     private val horizontalCandidate = HorizontalCandidateComponent()
     private val keyboardWindow = KeyboardWindow()
+    private var splitPanelOnEnd = false
+
+    private val splitGuideline = Guideline(service).apply {
+        id = View.generateViewId()
+    }
+
+    private val sideSwitchButton by lazy {
+        ToolButton(context, R.drawable.ic_baseline_arrow_forward_24, theme, iconSizeDp = 32).apply {
+            contentDescription = context.getString(R.string.switch_panel_side)
+            visibility = GONE
+            setOnClickListener {
+                splitPanelOnEnd = !splitPanelOnEnd
+                updateLandscapePanelLayout()
+            }
+        }
+    }
     private val symbolPicker = symbolPicker()
     private val emojiPicker = emojiPicker()
     private val emoticonPicker = emoticonPicker()
@@ -358,13 +379,18 @@ class InputView(
             // although it should be default for apps targeting Honeycomb (3.0, API 11) and higher,
             // but it's not the case on some devices ... just set it here
             isMotionEventSplittingEnabled = true
+            add(splitGuideline, ConstraintLayout.LayoutParams(0, 0).apply {
+                orientation = ConstraintLayout.LayoutParams.VERTICAL
+                guidePercent = 0.5f
+            })
             add(customBackground, lParams {
                 centerVertically()
                 centerHorizontally()
             })
-            add(kawaiiBar.view, lParams(matchParent, dp(KawaiiBarComponent.HEIGHT)) {
+            add(kawaiiBar.view, lParams(0, dp(KawaiiBarComponent.HEIGHT)) {
                 topOfParent()
-                centerHorizontally()
+                startOfParent()
+                endOfParent()
             })
             add(leftPaddingSpace, lParams {
                 below(kawaiiBar.view)
@@ -379,9 +405,10 @@ class InputView(
             add(windowManager.view, lParams {
                 below(kawaiiBar.view)
                 above(globalBottomBar)
-                /**
-                 * set start and end constrain in [updateKeyboardSize]
-                 */
+            })
+            add(sideSwitchButton, lParams {
+                below(kawaiiBar.view)
+                above(globalBottomBar)
             })
             add(globalBottomBar, lParams(matchParent, dp(48)) {
                 above(bottomPaddingSpace)
@@ -404,6 +431,7 @@ class InputView(
             centerHorizontally()
             bottomOfParent()
         })
+        windowManager.onActiveWindowChanged = ::updateLandscapePanelLayout
         add(popup.root, lParams(matchParent, matchParent) {
             centerVertically()
             centerHorizontally()
@@ -426,12 +454,6 @@ class InputView(
             // hide side padding space views when unnecessary
             leftPaddingSpace.visibility = GONE
             rightPaddingSpace.visibility = GONE
-            windowManager.view.updateLayoutParams<LayoutParams> {
-                startToEnd = unset
-                endToStart = unset
-                startOfParent()
-                endOfParent()
-            }
         } else {
             leftPaddingSpace.visibility = VISIBLE
             rightPaddingSpace.visibility = VISIBLE
@@ -441,16 +463,104 @@ class InputView(
             rightPaddingSpace.updateLayoutParams {
                 width = sidePadding
             }
-            windowManager.view.updateLayoutParams<LayoutParams> {
-                startToStart = unset
-                endToEnd = unset
-                startToEndOf(leftPaddingSpace)
-                endToStartOf(rightPaddingSpace)
-            }
         }
         preedit.ui.root.setPadding(sidePadding, 0, sidePadding, 0)
-        kawaiiBar.view.setPadding(sidePadding, 0, sidePadding, 0)
         updateBottomBarPadding(sidePadding)
+        updateLandscapePanelLayout()
+    }
+
+    private fun updateLandscapePanelLayout() {
+        val split = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE &&
+                (windowManager.isShowing(ClipboardWindow::class.java) ||
+                        windowManager.isShowing(PickerWindow::class.java) ||
+                        (windowManager.isShowing(KeyboardWindow::class.java) &&
+                                keyboardWindow.isNumberKeyboardShown()))
+
+        if (split) {
+            updatePanelPaneConstraints(windowManager.view, splitPanelOnEnd)
+            updatePanelPaneConstraints(sideSwitchButton, !splitPanelOnEnd)
+            updateBarPaneConstraints(splitPanelOnEnd)
+            sideSwitchButton.visibility = VISIBLE
+            val rtl = layoutDirection == LAYOUT_DIRECTION_RTL
+            val pointsRight = splitPanelOnEnd == rtl
+            sideSwitchButton.setIcon(
+                if (pointsRight) R.drawable.ic_baseline_arrow_forward_24
+                else R.drawable.ic_baseline_arrow_back_24
+            )
+        } else {
+            windowManager.view.updateLayoutParams<LayoutParams> {
+                clearHorizontalConstraints()
+                if (keyboardSidePaddingPx == 0) {
+                    startOfParent()
+                    endOfParent()
+                } else {
+                    startToEndOf(leftPaddingSpace)
+                    endToStartOf(rightPaddingSpace)
+                }
+            }
+            sideSwitchButton.visibility = GONE
+            sideSwitchButton.updateLayoutParams<LayoutParams> {
+                clearHorizontalConstraints()
+                startOfParent()
+                endOfParent()
+            }
+            kawaiiBar.view.updateLayoutParams<LayoutParams> {
+                clearHorizontalConstraints()
+                startOfParent()
+                endOfParent()
+            }
+        }
+
+        val sidePadding = keyboardSidePaddingPx
+        val panelOnPhysicalLeft = splitPanelOnEnd == (layoutDirection == LAYOUT_DIRECTION_RTL)
+        kawaiiBar.view.setPadding(
+            if (!split || panelOnPhysicalLeft) sidePadding else 0,
+            0,
+            if (!split || !panelOnPhysicalLeft) sidePadding else 0,
+            0
+        )
+    }
+
+    private fun updatePanelPaneConstraints(view: View, onEnd: Boolean) {
+        val gap = dp(LANDSCAPE_SPLIT_GAP_DP) / 2
+        val sidePadding = keyboardSidePaddingPx > 0
+        view.updateLayoutParams<LayoutParams> {
+            clearHorizontalConstraints()
+            if (onEnd) {
+                startToEndOf(splitGuideline)
+                if (sidePadding) endToStartOf(rightPaddingSpace) else endOfParent()
+                marginStart = gap
+            } else {
+                if (sidePadding) startToEndOf(leftPaddingSpace) else startOfParent()
+                endToStartOf(splitGuideline)
+                marginEnd = gap
+            }
+        }
+    }
+
+    private fun updateBarPaneConstraints(onEnd: Boolean) {
+        val gap = dp(LANDSCAPE_SPLIT_GAP_DP) / 2
+        kawaiiBar.view.updateLayoutParams<LayoutParams> {
+            clearHorizontalConstraints()
+            if (onEnd) {
+                startToEndOf(splitGuideline)
+                endOfParent()
+                marginStart = gap
+            } else {
+                startOfParent()
+                endToStartOf(splitGuideline)
+                marginEnd = gap
+            }
+        }
+    }
+
+    private fun LayoutParams.clearHorizontalConstraints() {
+        startToStart = unset
+        startToEnd = unset
+        endToStart = unset
+        endToEnd = unset
+        marginStart = 0
+        marginEnd = 0
     }
 
     private fun updateBottomBarPadding(sidePadding: Int) {
@@ -478,6 +588,11 @@ class InputView(
             bottomMargin = getNavBarBottomInset(insets)
         }
         return insets
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        updateKeyboardSize()
     }
 
     /**
@@ -549,6 +664,7 @@ class InputView(
     }
 
     override fun onDetachedFromWindow() {
+        windowManager.onActiveWindowChanged = null
         advancedPrefs.unregisterOnChangeListener(onKeyboardSizeChangeListener)
         keyboardPrefs.unregisterOnChangeListener(onKeyboardSizeChangeListener)
         // replaced (a rotation, a theme) its windows are never detached: what they had going,
