@@ -477,6 +477,22 @@ class InputView(
                                 keyboardWindow.isNumberKeyboardShown()))
 
         if (split) {
+            val metrics = resources.displayMetrics
+            val viewWidth = keyboardView.width.takeIf { it > 0 } ?: metrics.widthPixels
+            val portraitWidth = viewWidth.toLong() * metrics.heightPixels / metrics.widthPixels
+            val portraitSidePadding = dp(keyboardSidePadding.getValue())
+            val panelWidth = (portraitWidth - 2L * portraitSidePadding).coerceAtLeast(0).toInt()
+            val gap = dp(LANDSCAPE_SPLIT_GAP_DP) / 2
+            val panelOnPhysicalLeft = splitPanelOnEnd == (layoutDirection == LAYOUT_DIRECTION_RTL)
+            val guidelinePosition = (if (panelOnPhysicalLeft) {
+                panelWidth + keyboardSidePaddingPx + gap
+            } else {
+                viewWidth - panelWidth - keyboardSidePaddingPx - gap
+            }).coerceIn(0, viewWidth)
+            splitGuideline.updateLayoutParams<ConstraintLayout.LayoutParams> {
+                guidePercent = -1f
+                guideBegin = guidelinePosition
+            }
             updatePanelPaneConstraints(windowManager.view, splitPanelOnEnd)
             updatePanelPaneConstraints(sideSwitchButton, !splitPanelOnEnd)
             updateBarPaneConstraints(splitPanelOnEnd)
